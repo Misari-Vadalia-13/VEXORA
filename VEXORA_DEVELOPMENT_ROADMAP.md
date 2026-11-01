@@ -5,7 +5,7 @@
 **Developer:** B.Tech CSE Student  
 **Primary Goal:** Build a functional project while understanding its implementation.
 
----
+----
 
 # 1. Project Development Instructions
 
