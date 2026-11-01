@@ -743,27 +743,47 @@ async function initBackendSync() {
         console.warn('[VEXORA API] Stats fetch failed:', e);
       }
 
-      // 2. Fetch active cases and populate upload case selector
+      // 2. Fetch active cases and populate upload case selector & dossier case selector
       const targetCaseSelect = document.getElementById('targetCaseSelect');
-      if (targetCaseSelect) {
+      const dossierCaseSelect = document.getElementById('dossierCaseSelector');
+      if (targetCaseSelect || dossierCaseSelect) {
         try {
           const casesRes = await fetch(`${apiBase}/cases`);
           if (casesRes.ok) {
             const casesJson = await casesRes.json();
             if (casesJson.success && casesJson.data && casesJson.data.length > 0) {
-              targetCaseSelect.innerHTML = '';
-              casesJson.data.forEach((c) => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = `${c.id}: ${c.title}`;
-                targetCaseSelect.appendChild(opt);
-              });
+              if (targetCaseSelect) {
+                targetCaseSelect.innerHTML = '';
+                casesJson.data.forEach((c) => {
+                  const opt = document.createElement('option');
+                  opt.value = c.id;
+                  opt.textContent = `${c.id}: ${c.title}`;
+                  targetCaseSelect.appendChild(opt);
+                });
+              }
+
+              // Phase 8: Populate Dossier Case Selector
+              if (dossierCaseSelect) {
+                dossierCaseSelect.innerHTML = '<option value="">Select Investigation Case...</option>';
+                casesJson.data.forEach((c) => {
+                  const opt = document.createElement('option');
+                  opt.value = c.id;
+                  opt.textContent = `${c.id}: ${c.title}`;
+                  dossierCaseSelect.appendChild(opt);
+                });
+                // Auto load the first active case
+                dossierCaseSelect.selectedIndex = 1;
+                loadCaseDossierPreview(casesJson.data[0].id);
+              }
             }
           }
         } catch (e) {
           console.warn('[VEXORA API] Cases sync failed:', e);
         }
       }
+
+      // Phase 8: Load generated reports list
+      loadGeneratedReportsList();
 
       // 3. Fetch live documents and populate Document Library cards & Inspector selector
       const docLibraryGrid = document.getElementById('docLibraryGrid');
@@ -1158,5 +1178,222 @@ window.loadEvidenceProvenanceGraph = async function() {
     console.warn('[VEXORA Evidence Graph Sync Failed]', err);
   }
 };
+
+/**
+ * ============================================================================
+ * Phase 8: Investigation Dossier & Report Generation
+ * ============================================================================
+ */
+
+/**
+ * Loads dynamic dossier preview for a selected case
+ */
+window.loadCaseDossierPreview = async function(caseId) {
+  if (!caseId) return;
+
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/cases/${caseId}/dossier`);
+    if (!res.ok) {
+      showToast(`Could not load dossier data for case ${caseId}.`, 'warning');
+      return;
+    }
+
+    const data = await res.json();
+    if (!data.success || !data.data) return;
+
+    const d = data.data;
+    const c = d.case || {};
+    const sum = d.executive_summary || {};
+
+    // Header & Meta
+    const refEl = document.getElementById('dossierCaseRef');
+    const titleEl = document.getElementById('dossierCaseTitle');
+    const metaEl = document.getElementById('dossierCaseMeta');
+    const badgeEl = document.getElementById('dossierRiskBadge');
+    const narrativeEl = document.getElementById('dossierNarrative');
+    const verifyEl = document.getElementById('dossierVerificationCode');
+    const signoffUser = document.getElementById('dossierSignoffUser');
+
+    if (refEl) refEl.textContent = `VEXORA OFFICIAL FORENSIC DOSSIER • CASE ${c.id}`;
+    if (titleEl) titleEl.textContent = `${c.title} Audit Report`;
+    if (metaEl) metaEl.textContent = `Lead Investigator: ${c.investigator || 'Misari Vadalia'} • Priority: ${c.priority} • Status: ${c.status}`;
+    if (signoffUser) signoffUser.textContent = c.investigator || 'Misari Vadalia';
+    if (verifyEl) verifyEl.textContent = sum.dossier_verification_code || `VX-${c.id}-SEC-OK`;
+
+    if (badgeEl) {
+      badgeEl.textContent = sum.risk_level || 'Assessment Pending';
+      badgeEl.className = 'pill-tag ' + (sum.risk_score >= 50 ? 'pill-high' : sum.risk_score >= 20 ? 'pill-medium' : 'pill-low');
+    }
+
+    if (narrativeEl) {
+      narrativeEl.textContent = sum.narrative || 'No summary narrative available.';
+    }
+
+    // Evidence Inventory
+    const invEl = document.getElementById('dossierEvidenceInventory');
+    if (invEl) {
+      invEl.innerHTML = '';
+      if (!d.documents || d.documents.length === 0) {
+        invEl.innerHTML = '<li><em>No documents uploaded to this case yet.</em></li>';
+      } else {
+        d.documents.forEach((doc) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<code>${escapeHtml(doc.filename)}</code> (${escapeHtml(doc.file_type)}) — SHA-256: <code>${escapeHtml(doc.file_hash.substring(0, 16))}...</code> • <strong>${escapeHtml(doc.file_size_formatted)}</strong> • Status: <span style="font-weight:700;">${escapeHtml(doc.status)}</span>`;
+          invEl.appendChild(li);
+        });
+      }
+    }
+
+    // Findings List
+    const findingsEl = document.getElementById('dossierFindingsList');
+    if (findingsEl) {
+      findingsEl.innerHTML = '';
+      if (!d.findings || d.findings.length === 0) {
+        findingsEl.innerHTML = `
+          <div class="finding-detail-card" style="border-left-color:var(--status-verified);">
+            <strong>✓ Verified Baseline — No Anomalies Documented</strong>
+            <p style="font-size:0.8rem; margin:0; color:var(--text-secondary);">No typographic overwrites, baseline breaks, or chronology discrepancies recorded for this case.</p>
+          </div>
+        `;
+      } else {
+        d.findings.forEach((f) => {
+          const sev = (f.severity || 'Medium').toLowerCase();
+          const card = document.createElement('div');
+          card.className = `finding-detail-card ${sev === 'critical' || sev === 'high' ? 'critical' : ''}`;
+          const coordText = f.coordinates ? ` • Box [${escapeHtml(f.coordinates)}]` : '';
+
+          card.innerHTML = `
+            <strong>[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</strong> (${escapeHtml(f.severity)})
+            <p style="font-size:0.8rem; margin:3px 0 0 0; color:var(--text-secondary);">
+              Page ${f.page_number || 1}${coordText}: ${escapeHtml(f.description)}
+            </p>
+            ${f.evidence ? `<small style="color:var(--text-muted);">Evidence: ${escapeHtml(f.evidence)}</small>` : ''}
+          `;
+          findingsEl.appendChild(card);
+        });
+      }
+    }
+
+    // Discrepancy Matrix
+    const discEl = document.getElementById('dossierDiscrepancyList');
+    if (discEl) {
+      discEl.innerHTML = '';
+      const discrepancies = d.cross_document_comparison?.discrepancies || [];
+      if (discrepancies.length === 0) {
+        discEl.innerHTML = `<p style="font-size:0.85rem; color:var(--status-verified); margin:0;">✓ Full cross-document factual alignment verified across all assigned case files.</p>`;
+      } else {
+        discrepancies.forEach((disc) => {
+          const card = document.createElement('div');
+          card.style = 'background:var(--status-danger-dim); border:1px solid var(--status-danger-border); border-radius:4px; padding:10px 14px;';
+          card.innerHTML = `
+            <strong style="color:var(--status-danger);">⚠️ ${escapeHtml(disc.field || 'Discrepancy')}</strong>
+            <p style="font-size:0.85rem; color:var(--text-primary); margin:4px 0 0 0;">${escapeHtml(disc.message || '')}</p>
+          `;
+          discEl.appendChild(card);
+        });
+      }
+    }
+
+  } catch (err) {
+    console.error('[VEXORA Dossier Preview Error]', err);
+  }
+};
+
+/**
+ * Triggers export of a publication-ready PDF or HTML dossier for current selected case
+ */
+window.exportCurrentCaseDossier = async function(format) {
+  const caseSelect = document.getElementById('dossierCaseSelector');
+  const caseId = caseSelect ? caseSelect.value : null;
+
+  if (!caseId) {
+    showToast('Please select an investigation case to generate a dossier report.', 'warning');
+    return;
+  }
+
+  const apiBase = getApiBase();
+  showToast(`Generating audit-ready ${format.toUpperCase()} dossier for case ${caseId}...`, 'info');
+
+  try {
+    const res = await fetch(`${apiBase}/cases/${caseId}/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: format })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`Dossier Generated! File size: ${data.file_size_formatted}. Opening file...`, 'success');
+
+      // Refresh reports history table
+      loadGeneratedReportsList();
+
+      // Open download / preview in new tab
+      if (data.view_url) {
+        window.open(data.view_url, '_blank');
+      } else if (data.download_url) {
+        window.open(data.download_url, '_blank');
+      }
+    } else {
+      showToast(`Dossier export failed: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    console.error('[VEXORA Dossier Export Error]', err);
+    showToast('Failed to connect to report generation service.', 'danger');
+  }
+};
+
+/**
+ * Loads the history of generated reports from backend repository into table
+ */
+window.loadGeneratedReportsList = async function() {
+  const tableBody = document.getElementById('generatedReportsTableBody');
+  if (!tableBody) return;
+
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/reports`);
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (data.success && data.data && data.data.length > 0) {
+      tableBody.innerHTML = '';
+      data.data.forEach((r) => {
+        const sizeFormatted = (r.file_size / 1024).toFixed(1) + ' KB';
+        const isPdf = (r.file_format || '').toLowerCase() === 'pdf';
+        const formatBadge = isPdf
+          ? '<span class="pill-tag pill-high">PDF</span>'
+          : '<span class="pill-tag pill-medium">HTML</span>';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><code style="font-size:0.8rem;">${escapeHtml(r.id)}</code></td>
+          <td><strong>${escapeHtml(r.case_id)}</strong></td>
+          <td>${escapeHtml(r.title)}</td>
+          <td>${formatBadge}</td>
+          <td>${escapeHtml(sizeFormatted)}</td>
+          <td><small style="color:var(--text-muted);">${escapeHtml(r.created_at || '')}</small></td>
+          <td>
+            <a href="${apiBase}/reports/${r.id}/view" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">👁️ View</a>
+            <a href="${apiBase}/reports/${r.id}/download" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">⬇️ Download</a>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    } else {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center; color:var(--text-muted); padding:16px;">
+            No reports generated yet. Click "Export PDF Dossier" or "Export HTML" above to generate your first audit dossier.
+          </td>
+        </tr>
+      `;
+    }
+  } catch (err) {
+    console.warn('[VEXORA Reports History Sync Failed]', err);
+  }
+};
+
 
 

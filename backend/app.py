@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from flask import Flask, jsonify, request, send_from_directory, session
+from flask import Flask, jsonify, request, send_from_directory, send_file, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend.config import Config, FRONTEND_DIR, DATABASE_PATH
@@ -40,7 +40,11 @@ from backend.models import (
     update_finding,
     get_system_stats,
     get_audit_logs,
-    log_audit
+    log_audit,
+    create_report_record,
+    get_report_by_id,
+    get_reports_by_case,
+    get_all_reports
 )
 from backend.uploader import process_single_upload, allowed_file
 from backend.extractor import extract_document_content, ExtractionError
@@ -49,6 +53,11 @@ from backend.comparator import (
     compare_two_documents,
     compare_case_documents,
     get_evidence_provenance_nodes
+)
+from backend.reporter import (
+    generate_case_dossier_data,
+    generate_dossier_pdf,
+    generate_dossier_html
 )
 
 def create_app(config_class=Config):
@@ -542,6 +551,126 @@ def create_app(config_class=Config):
             }), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    # ==========================================
+    # Investigation Dossier & Report Routes (Phase 8)
+    # ==========================================
+    @app.route('/api/cases/<case_id>/dossier', methods=['GET'])
+    def api_get_case_dossier(case_id):
+        """
+        Retrieves complete structured JSON investigation dossier:
+        case metadata, evidence inventory, extracted entities, visual & contextual findings,
+        cross-document discrepancies, provenance nodes, risk scores, and mandatory disclaimer.
+        """
+        try:
+            dossier = generate_case_dossier_data(case_id)
+            return jsonify({
+                'success': True,
+                'case_id': case_id,
+                'data': dossier
+            }), 200
+        except ValueError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 404
+        except Exception as e:
+            app.logger.error(f"Failed to generate dossier data for case {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to generate dossier data: {str(e)}"}), 500
+
+    @app.route('/api/cases/<case_id>/report', methods=['POST'])
+    def api_generate_case_report(case_id):
+        """
+        Generates a publication-ready investigation dossier report (PDF or HTML).
+        Accepts JSON: { "format": "pdf" | "html" } (defaults to 'pdf').
+        Stores file in reports directory, registers record in database, and returns metadata.
+        """
+        case = get_case_by_id(case_id)
+        if not case:
+            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+        report_format = payload.get('format', 'pdf').lower().strip()
+        user = session.get('username', 'Lead Investigator')
+
+        if report_format not in ('pdf', 'html'):
+            return jsonify({'success': False, 'error': "Invalid report format. Supported formats are 'pdf' and 'html'."}), 400
+
+        try:
+            if report_format == 'pdf':
+                result = generate_dossier_pdf(case_id, user=user)
+            else:
+                result = generate_dossier_html(case_id, user=user)
+
+            result['download_url'] = f"/api/reports/{result['report_id']}/download"
+            result['view_url'] = f"/api/reports/{result['report_id']}/view"
+            return jsonify(result), 201
+        except Exception as e:
+            app.logger.error(f"Report generation failed for case {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Report generation failed: {str(e)}"}), 500
+
+    @app.route('/api/reports', methods=['GET'])
+    def api_list_reports():
+        """Lists generated investigation reports, optionally filtered by case_id."""
+        case_id = request.args.get('case_id')
+        if case_id:
+            reports = get_reports_by_case(case_id)
+        else:
+            limit = request.args.get('limit', 50, type=int)
+            reports = get_all_reports(limit=limit)
+
+        return jsonify({
+            'success': True,
+            'count': len(reports),
+            'data': reports
+        }), 200
+
+    @app.route('/api/reports/<report_id>', methods=['GET'])
+    def api_get_report_metadata(report_id):
+        """Retrieves metadata for a specific generated report."""
+        report = get_report_by_id(report_id)
+        if not report:
+            return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+
+        return jsonify({
+            'success': True,
+            'data': report,
+            'download_url': f"/api/reports/{report_id}/download",
+            'view_url': f"/api/reports/{report_id}/view"
+        }), 200
+
+    @app.route('/api/reports/<report_id>/download', methods=['GET'])
+    def api_download_report(report_id):
+        """Streams and downloads a generated report file."""
+        report = get_report_by_id(report_id)
+        if not report:
+            return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+
+        file_path = Path(report['file_path'])
+        if not file_path.exists():
+            return jsonify({'success': False, 'error': "Report file was not found on local storage."}), 404
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=file_path.name
+        )
+
+    @app.route('/api/reports/<report_id>/view', methods=['GET'])
+    def api_view_report(report_id):
+        """Serves a generated report inline for in-browser preview."""
+        report = get_report_by_id(report_id)
+        if not report:
+            return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+
+        file_path = Path(report['file_path'])
+        if not file_path.exists():
+            return jsonify({'success': False, 'error': "Report file was not found on local storage."}), 404
+
+        mime_type = 'application/pdf' if report['file_format'] == 'pdf' else 'text/html'
+        return send_file(
+            file_path,
+            as_attachment=False,
+            mimetype=mime_type
+        )
+
 
     # ==========================================
     # Audit Trail API Route

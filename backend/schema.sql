@@ -90,6 +90,19 @@ CREATE TABLE IF NOT EXISTS comparisons (
     FOREIGN KEY (doc_b_id) REFERENCES documents(id) ON DELETE CASCADE
 );
 
+-- 7. Investigation Reports & Dossiers Table
+CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_format TEXT NOT NULL DEFAULT 'pdf',
+    file_size INTEGER DEFAULT 0,
+    generated_by TEXT DEFAULT 'Lead Investigator',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+);
+
 -- Indexes for optimal querying performance
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_priority ON cases(priority);
@@ -97,4 +110,6 @@ CREATE INDEX IF NOT EXISTS idx_documents_case_id ON documents(case_id);
 CREATE INDEX IF NOT EXISTS idx_findings_case_id ON findings(case_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_comparisons_case_id ON comparisons(case_id);
+CREATE INDEX IF NOT EXISTS idx_reports_case_id ON reports(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
+

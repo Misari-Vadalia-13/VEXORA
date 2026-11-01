@@ -752,8 +752,153 @@ class VexoraBackendTestCase(unittest.TestCase):
         self.assertEqual(res2.status_code, 400)
         self.assertIn('itself', res2.get_json()['error'])
 
+    # ==========================================
+    # Phase 8: Investigation Dossier & Report Tests
+    # ==========================================
+
+
+    def test_generate_case_dossier_data(self):
+        """Verifies structured dossier data aggregation for an active case."""
+        from backend.reporter import generate_case_dossier_data
+
+        cases = self.client.get('/api/cases').get_json()['data']
+        self.assertTrue(len(cases) > 0)
+        target_case_id = cases[0]['id']
+
+        dossier = generate_case_dossier_data(target_case_id)
+        self.assertEqual(dossier['case']['id'], target_case_id)
+        self.assertIn('executive_summary', dossier)
+        self.assertIn('risk_score', dossier['executive_summary'])
+        self.assertIn('dossier_verification_code', dossier['executive_summary'])
+        self.assertIn('documents', dossier)
+        self.assertIn('findings', dossier)
+        self.assertIn('cross_document_comparison', dossier)
+        self.assertIn('mandatory_disclaimer', dossier)
+        self.assertIn('MANDATORY INVESTIGATION DISCLAIMER', dossier['mandatory_disclaimer'])
+
+    def test_generate_case_dossier_not_found(self):
+        """Verifies error handling when generating dossier for nonexistent case."""
+        from backend.reporter import generate_case_dossier_data
+        with self.assertRaises(ValueError):
+            generate_case_dossier_data('NONEXISTENT-CASE-9999')
+
+    def test_generate_dossier_pdf(self):
+        """Verifies publication-ready PDF dossier generation with PyMuPDF."""
+        from backend.reporter import generate_dossier_pdf
+
+        cases = self.client.get('/api/cases').get_json()['data']
+        target_case_id = cases[0]['id']
+
+        result = generate_dossier_pdf(target_case_id, user="Test Lead Analyst")
+        self.assertTrue(result['success'])
+        self.assertEqual(result['file_format'], 'pdf')
+        self.assertTrue(os.path.exists(result['file_path']))
+        self.assertGreater(result['file_size'], 0)
+
+        # Inspect file header for valid PDF magic bytes
+        with open(result['file_path'], 'rb') as f:
+            header = f.read(5)
+            self.assertEqual(header, b'%PDF-')
+
+        # Clean up generated file
+        if os.path.exists(result['file_path']):
+            os.remove(result['file_path'])
+
+    def test_generate_dossier_html(self):
+        """Verifies responsive print-optimized HTML dossier generation."""
+        from backend.reporter import generate_dossier_html
+
+        cases = self.client.get('/api/cases').get_json()['data']
+        target_case_id = cases[0]['id']
+
+        result = generate_dossier_html(target_case_id, user="Test Lead Analyst")
+        self.assertTrue(result['success'])
+        self.assertEqual(result['file_format'], 'html')
+        self.assertTrue(os.path.exists(result['file_path']))
+        self.assertGreater(result['file_size'], 0)
+
+        # Verify HTML text content
+        with open(result['file_path'], 'r', encoding='utf-8') as f:
+            html = f.read()
+            self.assertIn('VEXORA FORENSIC DOSSIER', html)
+            self.assertIn('MANDATORY INVESTIGATION DISCLAIMER', html)
+            self.assertIn(target_case_id, html)
+
+        # Clean up generated file
+        if os.path.exists(result['file_path']):
+            os.remove(result['file_path'])
+
+    def test_api_generate_report_endpoints(self):
+        """Verifies REST API endpoints for generating PDF and HTML dossiers."""
+        cases = self.client.get('/api/cases').get_json()['data']
+        target_case_id = cases[0]['id']
+
+        # 1. Generate PDF Report via API
+        pdf_res = self.client.post(
+            f'/api/cases/{target_case_id}/report',
+            json={'format': 'pdf'}
+        )
+        self.assertEqual(pdf_res.status_code, 201)
+        pdf_data = pdf_res.get_json()
+        self.assertTrue(pdf_data['success'])
+        self.assertEqual(pdf_data['file_format'], 'pdf')
+        self.assertIn('download_url', pdf_data)
+        pdf_rpt_id = pdf_data['report_id']
+
+        # 2. Generate HTML Report via API
+        html_res = self.client.post(
+            f'/api/cases/{target_case_id}/report',
+            json={'format': 'html'}
+        )
+        self.assertEqual(html_res.status_code, 201)
+        html_data = html_res.get_json()
+        self.assertTrue(html_data['success'])
+        self.assertEqual(html_data['file_format'], 'html')
+
+        # 3. Invalid Format returns 400
+        bad_res = self.client.post(
+            f'/api/cases/{target_case_id}/report',
+            json={'format': 'docx'}
+        )
+        self.assertEqual(bad_res.status_code, 400)
+
+        # 4. GET /api/reports lists the generated reports
+        list_res = self.client.get(f'/api/reports?case_id={target_case_id}')
+        self.assertEqual(list_res.status_code, 200)
+        self.assertGreaterEqual(list_res.get_json()['count'], 2)
+
+        # 5. GET single report metadata
+        one_res = self.client.get(f'/api/reports/{pdf_rpt_id}')
+        self.assertEqual(one_res.status_code, 200)
+        self.assertEqual(one_res.get_json()['data']['id'], pdf_rpt_id)
+
+        # 6. GET /api/reports/<id>/download streams the file
+        dl_res = self.client.get(f'/api/reports/{pdf_rpt_id}/download')
+        self.assertEqual(dl_res.status_code, 200)
+        self.assertEqual(dl_res.data[:5], b'%PDF-')
+        dl_res.close()
+
+        # 7. GET /api/reports/<id>/view serves the file inline
+        view_res = self.client.get(f'/api/reports/{pdf_rpt_id}/view')
+        self.assertEqual(view_res.status_code, 200)
+        self.assertEqual(view_res.mimetype, 'application/pdf')
+        view_res.close()
+
+        # Clean up files
+        if os.path.exists(pdf_data['file_path']):
+            try:
+                os.remove(pdf_data['file_path'])
+            except Exception:
+                pass
+        if os.path.exists(html_data['file_path']):
+            try:
+                os.remove(html_data['file_path'])
+            except Exception:
+                pass
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

@@ -511,7 +511,110 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 `feat(phase-7): implement cross-document comparison, discrepancy matrix, and evidence provenance mapping`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 8.
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `7d9f44c`).
+
+---
+
+## Phase 8 — Investigation Dossier & Report Generation Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Dossier Data Aggregation Engine (`backend/reporter.py`):**
+   - Implemented `generate_case_dossier_data(case_id)`:
+     - Aggregates comprehensive case metadata (ID, title, description, priority, status, investigator, timestamps).
+     - Compiles an Ingested Evidence Inventory with document filenames, formats, file sizes, SHA-256 cryptographic hashes, and classification statuses.
+     - Gathers and deduplicates Extracted Intelligence across all assigned case files (organizations, persons, dates, monetary totals, and identifiers).
+     - Structures localized Forensic Observations & Visual Anomalies with rule IDs (`RULE-VIS-*`, `RULE-CTX-*`), severity levels, page numbers, 2D bounding box coordinates (`bbox`), and evidence quotes.
+     - Integrates case-wide Cross-Document Discrepancies (monetary disparities, chronological timeline collisions, counterparty changes, duplicate reference IDs).
+     - Computes quantitative case-level Risk Assessment (0-100 score, categorized into `Critical Risk`, `High Risk`, `Moderate Variance`, or `Clean / Verified Alignment`).
+     - Produces an automated, context-aware Executive Summary Narrative based on findings count and variance severity.
+     - Generates a unique Dossier Verification Hash (`VX-{case_id}-{hash}`) for audit authenticity.
+     - Embeds the official Mandatory Human-Review Disclaimer:
+       `"MANDATORY INVESTIGATION DISCLAIMER: All findings, metrics, and anomaly flags presented in this dossier are algorithmic observations produced by VEXORA for investigative assistance only. They do not constitute definitive legal proof of fraud or intentional tampering. Human investigator interpretation, physical document examination, and institutional validation remain mandatory before taking any administrative, disciplinary, or legal action."`
+
+2. **Publication-Ready Vector PDF Dossier Generator (`backend/reporter.py`):**
+   - Implemented `generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator")`:
+     - Built using PyMuPDF (`fitz` / `pymupdf`) vector primitives for zero-dependency, high-speed PDF generation.
+     - Multi-page Letter document (612 x 792 pt) with clean layout and balanced margins.
+     - Dark slate (`#0f172a`) header banner with VEXORA brand badge, case title, ID, generation date, and investigator name.
+     - Prominent Amber Disclaimer Box (`#fffbeb` with `#f59e0b` border) at the top of the executive summary.
+     - 4-metric executive telemetry summary cards (Risk Score, Document Count, Anomalies Flagged, Discrepancies Found).
+     - Structured Ingested Evidence Inventory table with truncated SHA-256 hashes and page metrics.
+     - Forensic findings cards with color-coded severity indicator bars (Critical/High in red, Medium in amber, Low in slate), page numbers, and bounding coordinates.
+     - Cross-document discrepancy matrix cards with variance figures.
+     - Formal Investigator Sign-off block with verification code, analyst name, and signature line.
+     - Running footers on every page with confidentiality notice, page numbering ("Page X of Y"), and timestamp.
+     - Dynamic pagination with automated page creation when content flows beyond margins.
+     - Saves generated PDF to `reports/DOSSIER_{case_id}_{timestamp}.pdf`.
+
+3. **Print-Optimized HTML Dossier Generator (`backend/reporter.py`):**
+   - Implemented `generate_dossier_html(case_id, output_path=None, user="Lead Investigator")`:
+     - Builds a standalone, responsive HTML report matching VEXORA's design system.
+     - Features print media rules (`@media print`) allowing seamless browser printing (Ctrl+P).
+     - Saves generated HTML to `reports/DOSSIER_{case_id}_{timestamp}.html`.
+
+4. **Database & Schema Updates (`backend/schema.sql`, `backend/models.py`):**
+   - Created `reports` table in SQLite with index `idx_reports_case_id`:
+     - Columns: `id`, `case_id`, `title`, `file_path`, `file_format`, `file_size`, `generated_by`, `created_at`.
+   - Added models in `backend/models.py`:
+     - `create_report_record`: Persists report metadata and logs an audit trail event (`REPORT_GENERATED`).
+     - `get_report_by_id`: Retrieves single report record.
+     - `get_reports_by_case`: Retrieves all reports for a specific case.
+     - `get_all_reports`: Retrieves recent reports across the repository.
+
+5. **REST API Endpoints (`backend/app.py`):**
+   - `GET /api/cases/<case_id>/dossier`: Returns complete structured JSON dossier data.
+   - `POST /api/cases/<case_id>/report`: Accepts `{ format: 'pdf' | 'html' }`, compiles the dossier, records it in the database, and returns download and preview URLs.
+   - `GET /api/reports`: Lists generated investigation reports (supports `?case_id=`).
+   - `GET /api/reports/<report_id>`: Returns metadata for a specific report.
+   - `GET /api/reports/<report_id>/download`: Streams the file as an attachment.
+   - `GET /api/reports/<report_id>/view`: Serves the file inline with appropriate MIME type (`application/pdf` or `text/html`).
+
+6. **Interactive Frontend Integration (`frontend/index.html`, `frontend/js/app.js`):**
+   - Updated hero banner pill to Phase 8 Active: `⚡ VEXORA Intelligence Engine • Phase 8 Active (Investigation Dossier & Report Generation)`.
+   - Populated dynamic Case Selector (`#dossierCaseSelector`) in `#view-dossier`.
+   - Added action buttons: `🖨️ Print`, `🌐 Export HTML`, and `📄 Export PDF Dossier`.
+   - Implemented `window.loadCaseDossierPreview(caseId)`: Dynamically renders live case title, risk badge, executive narrative, evidence inventory, localized findings with bounding box tags, and cross-document discrepancy cards into the printable dossier canvas.
+   - Implemented `window.exportCurrentCaseDossier(format)`: Sends generation request to the backend, displays progress toast, updates the repository table, and opens the generated file in a new tab.
+   - Added Generated Dossier Repository table (`#generatedReportsTableBody`) showing report ID, case ID, title, format badge, file size, and direct View/Download buttons via `window.loadGeneratedReportsList()`.
+
+7. **Automated Backend Test Suite (`tests/test_backend.py`):**
+   - Expanded unit test suite from 29 to 34 tests (+5 comprehensive tests):
+     - `test_generate_case_dossier_data`: Validates full dossier dictionary structure, mandatory disclaimer, risk scores, and verification code.
+     - `test_generate_case_dossier_not_found`: Validates 404/ValueError on missing cases.
+     - `test_generate_dossier_pdf`: Validates PDF generation, file existence, and `%PDF` magic bytes.
+     - `test_generate_dossier_html`: Validates HTML generation, file existence, and text markup.
+     - `test_api_generate_report_endpoints`: Validates PDF/HTML generation endpoints, invalid format rejection, download streaming, and inline viewing.
+   - All 34 tests pass in 11.26s (`OK`).
+
+### Technologies Introduced
+- **PyMuPDF Document Synthesis:** Using PyMuPDF (`fitz` / `pymupdf`) vector primitives (`draw_rect`, `draw_line`, `insert_textbox`) to construct publication-quality PDF reports without heavyweight C dependencies.
+- **Automated Narrative Synthesis:** Generating contextual executive narratives from quantitative findings and cross-check signals.
+- **Audit-Ready Report Persistence:** Tracking generated reports in SQLite with immutable audit logging and cryptographic verification hashes.
+- **Multi-Format Export Engine:** Simultaneous support for vector PDF, standalone print-optimized HTML, and structured JSON APIs.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 34 unit tests via `python -m unittest tests/test_backend.py` — 34/34 passed in 11.26s (`OK`).
+- **Frontend Syntax Check:** `node -c frontend/js/app.js` passed with exit code 0.
+- **Live PDF Generation Test:** Generated genuine multi-page vector PDF for `CAS-2026-0891` (18.7 KB) with verified `%PDF-` header and 2 styled pages.
+- **Live HTML Generation Test:** Generated print-optimized HTML report for `CAS-2026-0891` (13.0 KB) with complete evidence inventory and disclaimer.
+
+### Known Limitations
+- Comprehensive audit trail export, system-wide hardening, and final demonstration preparation are scheduled for Phase 9.
+
+### Concepts Learned
+1. **Dossier Compilation Architecture:** An investigation dossier is more than a list of findings; it is an aggregated synthesis of evidence inventory, extracted facts, localized visual observations, cross-document discrepancies, and source traceability.
+2. **Defensive Disclaimers in Forensic AI:** Automated forensic systems must never present findings as judicial fact. Including clear, mandatory disclaimers ("observations requiring human validation") is legally and ethically essential.
+3. **Reproducible Vector PDF Generation:** Using PyMuPDF for PDF synthesis produces lightweight, pixel-perfect documents with zero external font dependencies or browser headless rendering overhead.
+
+### Suggested Git Commit Message
+`feat(phase-8): implement investigation dossier data aggregation, publication-ready PDF and HTML report generation, and reports repository`
+
+### Approval Status
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 9.
+
 
 
 

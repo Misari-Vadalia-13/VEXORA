@@ -590,3 +590,35 @@ def log_audit(action, entity_type, entity_id, details, user="System"):
 def get_audit_logs(limit=50):
     """Retrieves recent audit logs in descending chronological order."""
     return query_db("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+
+# ==========================================
+# 7. Investigation Reports & Dossiers
+# ==========================================
+
+def create_report_record(report_id, case_id, title, file_path, file_format='pdf', file_size=0, user="Lead Investigator"):
+    """
+    Persists an investigation dossier record in the reports table
+    and creates an immutable audit trail entry.
+    """
+    execute_db(
+        """
+        INSERT INTO reports (id, case_id, title, file_path, file_format, file_size, generated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (report_id, case_id, title, file_path, file_format, file_size, user)
+    )
+    log_audit("REPORT_GENERATED", "report", report_id, f"Generated {file_format.upper()} dossier for case '{case_id}': {title}", user)
+    return get_report_by_id(report_id)
+
+def get_report_by_id(report_id):
+    """Retrieves a single report by its ID."""
+    return query_db("SELECT * FROM reports WHERE id = ?", (report_id,), one=True)
+
+def get_reports_by_case(case_id):
+    """Retrieves all reports generated for a specific case."""
+    return query_db("SELECT * FROM reports WHERE case_id = ? ORDER BY created_at DESC", (case_id,))
+
+def get_all_reports(limit=50):
+    """Retrieves all generated reports across cases in descending order."""
+    return query_db("SELECT * FROM reports ORDER BY created_at DESC LIMIT ?", (limit,))
+
