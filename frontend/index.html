@@ -9,7 +9,7 @@
   <!-- Typography: Google Fonts (Outfit & Plus Jakarta Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Core Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
@@ -29,7 +29,7 @@
           <div class="brand-icon" aria-hidden="true">V</div>
           <div class="brand-details">
             <span class="brand-name">VEXORA</span>
-            <span class="brand-badge">Forensics AI • v0.1</span>
+            <span class="brand-badge">Forensics AI • v0.2</span>
           </div>
         </div>
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle Sidebar" title="Collapse/Expand">
@@ -49,7 +49,7 @@
         <a href="#cases" class="nav-item" id="navCases" data-view="cases">
           <span class="nav-icon" aria-hidden="true">📁</span>
           <span class="nav-label">Case Management</span>
-          <span class="nav-pill">8</span>
+          <span class="nav-pill" id="sidebarCaseBadge">8</span>
         </a>
 
         <a href="#upload" class="nav-item" id="navUpload" data-view="upload">
@@ -60,6 +60,7 @@
         <a href="#library" class="nav-item" id="navLibrary" data-view="library">
           <span class="nav-icon" aria-hidden="true">📚</span>
           <span class="nav-label">Document Library</span>
+          <span class="nav-pill">24</span>
         </a>
 
         <span class="nav-section-label">Forensic Intelligence</span>
@@ -167,269 +168,1147 @@
         </div>
       </header>
 
-      <!-- Main Dashboard Content -->
-      <main class="content-body" id="mainDashboardView">
+      <!-- Main Multi-View Body -->
+      <main class="content-body" id="mainContentView">
 
-        <!-- Welcome Banner -->
-        <section class="hero-banner">
-          <div class="banner-content">
-            <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 1 Active</span>
-            <h1 class="banner-title">Document Forensics & Contextual Investigation</h1>
-            <p class="banner-desc">
-              Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
-            </p>
-          </div>
-        </section>
-
-        <!-- Metric Statistics Cards -->
-        <section class="stats-grid" aria-label="System Metrics">
+        <!-- ==================================================================
+             VIEW 1: INVESTIGATION DASHBOARD
+             ================================================================== -->
+        <section class="view-section active" id="view-dashboard" data-view-title="Investigation Dashboard">
           
-          <div class="stat-card cyan">
-            <div class="stat-info">
-              <span class="stat-label">Active Cases</span>
-              <span class="stat-value" id="activeCasesCount">8</span>
-              <span class="stat-meta meta-positive">↑ 2 ongoing reviews</span>
-            </div>
-            <div class="stat-icon-wrapper" aria-hidden="true">📁</div>
-          </div>
-
-          <div class="stat-card indigo">
-            <div class="stat-info">
-              <span class="stat-label">Documents Indexed</span>
-              <span class="stat-value" id="totalDocsCount">24</span>
-              <span class="stat-meta meta-neutral">PDFs, JPGs & PNGs</span>
-            </div>
-            <div class="stat-icon-wrapper" aria-hidden="true">📄</div>
-          </div>
-
-          <div class="stat-card amber">
-            <div class="stat-info">
-              <span class="stat-label">Flagged Inconsistencies</span>
-              <span class="stat-value" id="flaggedAnomaliesCount">14</span>
-              <span class="stat-meta meta-warning">⚠ 4 requiring human review</span>
-            </div>
-            <div class="stat-icon-wrapper" aria-hidden="true">⚠️</div>
-          </div>
-
-          <div class="stat-card emerald">
-            <div class="stat-info">
-              <span class="stat-label">Evidence Correlated</span>
-              <span class="stat-value" id="evidenceNodesCount">52</span>
-              <span class="stat-meta meta-positive">✓ Mapped to source pages</span>
-            </div>
-            <div class="stat-icon-wrapper" aria-hidden="true">🔗</div>
-          </div>
-
-        </section>
-
-        <!-- Investigation Workflow Pipeline Visualizer -->
-        <section class="pipeline-section" aria-label="Investigation Workflow Pipeline">
-          <div class="section-header">
-            <div class="section-title-group">
-              <h2 class="section-title">Forensic Processing Pipeline</h2>
-              <span class="section-subtitle">VEXORA 7-stage evidence extraction and contextual correlation architecture</span>
+          <!-- Hero Banner -->
+          <div class="hero-banner">
+            <div class="banner-content">
+              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 2 Active</span>
+              <h1 class="banner-title">Document Forensics & Contextual Intelligence</h1>
+              <p class="banner-desc">
+                Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
+              </p>
             </div>
           </div>
 
-          <div class="pipeline-stepper">
-            <div class="pipeline-step active">
-              <span class="step-num">Stage 01</span>
-              <span class="step-name">Document Ingest</span>
-              <span class="step-status">PDF / Images</span>
+          <!-- Metric Statistics Cards -->
+          <div class="stats-grid" aria-label="System Metrics">
+            <div class="stat-card cyan">
+              <div class="stat-info">
+                <span class="stat-label">Active Cases</span>
+                <span class="stat-value" id="activeCasesCount">8</span>
+                <span class="stat-meta meta-positive">↑ 2 ongoing reviews</span>
+              </div>
+              <div class="stat-icon-wrapper" aria-hidden="true">📁</div>
             </div>
 
-            <div class="pipeline-step">
-              <span class="step-num">Stage 02</span>
-              <span class="step-name">Classification</span>
-              <span class="step-status">Doc Type ID</span>
+            <div class="stat-card indigo">
+              <div class="stat-info">
+                <span class="stat-label">Documents Indexed</span>
+                <span class="stat-value" id="totalDocsCount">24</span>
+                <span class="stat-meta meta-neutral">PDFs, JPGs & PNGs</span>
+              </div>
+              <div class="stat-icon-wrapper" aria-hidden="true">📄</div>
             </div>
 
-            <div class="pipeline-step">
-              <span class="step-num">Stage 03</span>
-              <span class="step-name">Text & OCR</span>
-              <span class="step-status">PyMuPDF / OCR</span>
+            <div class="stat-card amber">
+              <div class="stat-info">
+                <span class="stat-label">Flagged Inconsistencies</span>
+                <span class="stat-value" id="flaggedAnomaliesCount">14</span>
+                <span class="stat-meta meta-warning">⚠ 4 requiring human review</span>
+              </div>
+              <div class="stat-icon-wrapper" aria-hidden="true">⚠️</div>
             </div>
 
-            <div class="pipeline-step">
-              <span class="step-num">Stage 04</span>
-              <span class="step-name">Entity Extraction</span>
-              <span class="step-status">spaCy NER</span>
-            </div>
-
-            <div class="pipeline-step">
-              <span class="step-num">Stage 05</span>
-              <span class="step-name">Forensic Analysis</span>
-              <span class="step-status">Visual & Font</span>
-            </div>
-
-            <div class="pipeline-step">
-              <span class="step-num">Stage 06</span>
-              <span class="step-name">Cross-Doc Match</span>
-              <span class="step-status">Discrepancy Check</span>
-            </div>
-
-            <div class="pipeline-step">
-              <span class="step-num">Stage 07</span>
-              <span class="step-name">Case Dossier</span>
-              <span class="step-status">Export Report</span>
+            <div class="stat-card emerald">
+              <div class="stat-info">
+                <span class="stat-label">Evidence Correlated</span>
+                <span class="stat-value" id="evidenceNodesCount">52</span>
+                <span class="stat-meta meta-positive">✓ Mapped to source pages</span>
+              </div>
+              <div class="stat-icon-wrapper" aria-hidden="true">🔗</div>
             </div>
           </div>
-        </section>
 
-        <!-- Dual Column: Recent Cases Table & Live Forensic Feed -->
-        <div class="dashboard-grid-dual">
-          
-          <!-- Recent Investigation Cases Table -->
-          <section class="card-panel" aria-label="Recent Investigation Cases">
+          <!-- Investigation Workflow Pipeline Visualizer -->
+          <div class="pipeline-section" aria-label="Investigation Workflow Pipeline">
             <div class="section-header">
               <div class="section-title-group">
-                <h2 class="section-title">Active Investigation Cases</h2>
-                <span class="section-subtitle">Live cases requiring forensic analysis and contextual validation</span>
+                <h2 class="section-title">Forensic Processing Pipeline</h2>
+                <span class="section-subtitle">VEXORA 7-stage evidence extraction and contextual correlation architecture</span>
               </div>
-              <button class="btn-secondary" data-action="open-new-case" style="padding: 6px 12px; font-size: 0.8rem;">
-                + Add Case
-              </button>
+            </div>
+
+            <div class="pipeline-stepper">
+              <div class="pipeline-step active" onclick="navigateToView('upload')">
+                <span class="step-num">Stage 01</span>
+                <span class="step-name">Document Ingest</span>
+                <span class="step-status">PDF / Images</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('library')">
+                <span class="step-num">Stage 02</span>
+                <span class="step-name">Classification</span>
+                <span class="step-status">Doc Type ID</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('forensics')">
+                <span class="step-num">Stage 03</span>
+                <span class="step-name">Text & OCR</span>
+                <span class="step-status">PyMuPDF / OCR</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('evidence')">
+                <span class="step-num">Stage 04</span>
+                <span class="step-name">Entity Extraction</span>
+                <span class="step-status">spaCy NER</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('forensics')">
+                <span class="step-num">Stage 05</span>
+                <span class="step-name">Forensic Analysis</span>
+                <span class="step-status">Visual & Font</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('comparison')">
+                <span class="step-num">Stage 06</span>
+                <span class="step-name">Cross-Doc Match</span>
+                <span class="step-status">Discrepancy Check</span>
+              </div>
+
+              <div class="pipeline-step" onclick="navigateToView('dossier')">
+                <span class="step-num">Stage 07</span>
+                <span class="step-name">Case Dossier</span>
+                <span class="step-status">Export Report</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual Column: Recent Cases Table & Live Forensic Feed -->
+          <div class="dashboard-grid-dual">
+            <!-- Recent Cases -->
+            <div class="card-panel" aria-label="Recent Investigation Cases">
+              <div class="section-header">
+                <div class="section-title-group">
+                  <h2 class="section-title">Active Investigation Cases</h2>
+                  <span class="section-subtitle">Live cases requiring forensic analysis and contextual validation</span>
+                </div>
+                <button class="btn-secondary" data-action="open-new-case" style="padding: 6px 12px; font-size: 0.8rem;">
+                  + Add Case
+                </button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="data-table" id="recentCasesTable">
+                  <thead>
+                    <tr>
+                      <th>Case Ref</th>
+                      <th>Case Details</th>
+                      <th>Documents</th>
+                      <th>Risk Level</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="case-id-cell">VX-2041</td>
+                      <td>
+                        <span class="case-title-cell">Loan Application #8841-B</span>
+                        <span class="case-subtitle">Lead: Misari Vadalia • Inconsistency in salary slips</span>
+                      </td>
+                      <td>4 docs</td>
+                      <td><span class="pill-tag pill-high">High Risk</span></td>
+                      <td><span class="pill-tag pill-status">In Review</span></td>
+                      <td>
+                        <div class="action-btn-group">
+                          <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                          <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td class="case-id-cell">VX-2039</td>
+                      <td>
+                        <span class="case-title-cell">Identity Verification Dossier</span>
+                        <span class="case-subtitle">Lead: Misari Vadalia • Cross-referencing Aadhaar & Passport</span>
+                      </td>
+                      <td>2 docs</td>
+                      <td><span class="pill-tag pill-medium">Medium</span></td>
+                      <td><span class="pill-tag pill-status">Processing</span></td>
+                      <td>
+                        <div class="action-btn-group">
+                          <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
+                          <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td class="case-id-cell">VX-2038</td>
+                      <td>
+                        <span class="case-title-cell">Procurement Invoice Discrepancy</span>
+                        <span class="case-subtitle">Lead: Forensic Desk • Tax ID mismatch detected</span>
+                      </td>
+                      <td>6 docs</td>
+                      <td><span class="pill-tag pill-high">High Risk</span></td>
+                      <td><span class="pill-tag pill-status">Under Analysis</span></td>
+                      <td>
+                        <div class="action-btn-group">
+                          <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                          <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td class="case-id-cell">VX-2035</td>
+                      <td>
+                        <span class="case-title-cell">Employment Declaration Check</span>
+                        <span class="case-subtitle">Lead: Misari Vadalia • Verification complete</span>
+                      </td>
+                      <td>3 docs</td>
+                      <td><span class="pill-tag pill-low">Low</span></td>
+                      <td><span class="pill-tag pill-status">Verified</span></td>
+                      <td>
+                        <div class="action-btn-group">
+                          <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Forensic Feed -->
+            <div class="card-panel" aria-label="Forensic Anomaly Alerts">
+              <div class="section-header">
+                <div class="section-title-group">
+                  <h2 class="section-title">Forensic Anomaly Feed</h2>
+                  <span class="section-subtitle">Real-time alerts flagged for investigator inspection</span>
+                </div>
+              </div>
+
+              <div class="anomaly-feed">
+                <div class="anomaly-item critical" onclick="navigateToView('comparison')">
+                  <div class="anomaly-top">
+                    <span class="anomaly-type">Cross-Doc Mismatch</span>
+                    <span class="anomaly-time">14m ago</span>
+                  </div>
+                  <span class="anomaly-title">Date of Birth Conflict</span>
+                  <p class="anomaly-desc">Document "ID_Card.png" states DOB 14/08/1996 while "Tax_Return.pdf" states 14/08/1998.</p>
+                </div>
+
+                <div class="anomaly-item warning" onclick="navigateToView('forensics')">
+                  <div class="anomaly-top">
+                    <span class="anomaly-type">Visual Forensics</span>
+                    <span class="anomaly-time">1h ago</span>
+                  </div>
+                  <span class="anomaly-title">Font Typographic Variation</span>
+                  <p class="anomaly-desc">Salary field on Page 2 exhibits altered kerning and mismatched Helvetica Neue weight.</p>
+                </div>
+
+                <div class="anomaly-item warning" onclick="navigateToView('forensics')">
+                  <div class="anomaly-top">
+                    <span class="anomaly-type">Contextual Anomaly</span>
+                    <span class="anomaly-time">2h ago</span>
+                  </div>
+                  <span class="anomaly-title">Invoice Date Precedes PO Date</span>
+                  <p class="anomaly-desc">Invoice date (02-Jan-2025) appears 18 days prior to Purchase Order approval date.</p>
+                </div>
+
+                <div class="anomaly-item verified" onclick="navigateToView('evidence')">
+                  <div class="anomaly-top">
+                    <span class="anomaly-type">Entity Correlated</span>
+                    <span class="anomaly-time">4h ago</span>
+                  </div>
+                  <span class="anomaly-title">Organization Name Verified</span>
+                  <p class="anomaly-desc">Corporate registry ID matches across bank declaration and legal deed.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 2: CASE MANAGEMENT
+             ================================================================== -->
+        <section class="view-section" id="view-cases" data-view-title="Investigation Case Management">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Investigation Case Management</h1>
+              <p class="page-subtitle">Create, monitor, and manage active forensic investigations across your enterprise.</p>
+            </div>
+            <button class="btn-primary" data-action="open-new-case">
+              <span>+</span>
+              <span>New Investigation Case</span>
+            </button>
+          </div>
+
+          <!-- Case Filter Toolbar -->
+          <div class="filter-toolbar">
+            <span style="font-size:0.78rem; font-weight:700; color:var(--text-muted); margin-right:6px;">Filter Priority:</span>
+            <button class="filter-pill active" data-filter="all">All Cases (8)</button>
+            <button class="filter-pill" data-filter="high">High Risk (3)</button>
+            <button class="filter-pill" data-filter="medium">Medium Priority (3)</button>
+            <button class="filter-pill" data-filter="low">Low Risk (2)</button>
+          </div>
+
+          <!-- Case Cards Grid -->
+          <div class="cases-grid" id="caseManagementGrid">
+            
+            <div class="case-card" data-priority="high">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2041</span>
+                <span class="pill-tag pill-high">High Risk</span>
+              </div>
+              <h3 class="case-card-title">Loan Application #8841-B Audit</h3>
+              <p class="case-card-desc">Forensic investigation into suspicious discrepancies found across submitted salary statements and credit declarations.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">4</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-danger);">3</span>
+                  <span class="case-metric-lbl">Anomalies</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--primary-accent);">In Review</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Misari Vadalia</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="case-card" data-priority="medium">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2039</span>
+                <span class="pill-tag pill-medium">Medium</span>
+              </div>
+              <h3 class="case-card-title">Identity Verification Dossier</h3>
+              <p class="case-card-desc">Cross-referencing government ID proofs against tax registry files to identify date-of-birth and address inconsistencies.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">2</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-anomaly);">1</span>
+                  <span class="case-metric-lbl">Anomaly</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--secondary-accent);">Processing</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Misari Vadalia</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
+                  <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="case-card" data-priority="high">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2038</span>
+                <span class="pill-tag pill-high">High Risk</span>
+              </div>
+              <h3 class="case-card-title">Procurement Invoice Discrepancy</h3>
+              <p class="case-card-desc">Verification of commercial vendor invoices against purchase orders. Tax identification number conflicts identified on page 1.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">6</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-danger);">4</span>
+                  <span class="case-metric-lbl">Anomalies</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--primary-accent);">Analyzing</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Forensic Desk</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="case-card" data-priority="low">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2035</span>
+                <span class="pill-tag pill-low">Low Risk</span>
+              </div>
+              <h3 class="case-card-title">Employment Declaration Check</h3>
+              <p class="case-card-desc">Routine background verification of executive employment contracts and statutory self-declarations.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">3</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-verified);">0</span>
+                  <span class="case-metric-lbl">Anomalies</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-verified);">Verified</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Misari Vadalia</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="case-card" data-priority="high">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2031</span>
+                <span class="pill-tag pill-high">High Risk</span>
+              </div>
+              <h3 class="case-card-title">Corporate Tax Filing Audit</h3>
+              <p class="case-card-desc">Examination of corporate income declarations, balance sheets, and statutory audit certificates for typographical alterations.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">8</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-danger);">5</span>
+                  <span class="case-metric-lbl">Anomalies</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--primary-accent);">In Review</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Misari Vadalia</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="case-card" data-priority="medium">
+              <div class="case-card-header">
+                <span class="case-card-id">VX-2028</span>
+                <span class="pill-tag pill-medium">Medium</span>
+              </div>
+              <h3 class="case-card-title">Vendor Bank Account Verification</h3>
+              <p class="case-card-desc">Verification of cancelled cheques and bank mandate letters against corporate registry filings.</p>
+              <div class="case-card-metrics">
+                <div class="case-metric-item">
+                  <span class="case-metric-val">2</span>
+                  <span class="case-metric-lbl">Documents</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--status-anomaly);">2</span>
+                  <span class="case-metric-lbl">Anomalies</span>
+                </div>
+                <div class="case-metric-item">
+                  <span class="case-metric-val" style="color:var(--secondary-accent);">In Review</span>
+                  <span class="case-metric-lbl">Status</span>
+                </div>
+              </div>
+              <div class="case-card-footer">
+                <span class="case-author-note">Lead: Forensic Desk</span>
+                <div class="action-btn-group">
+                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                  <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 3: DOCUMENT INGESTION & UPLOAD
+             ================================================================== -->
+        <section class="view-section" id="view-upload" data-view-title="Document Ingestion Pipeline">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Document Ingestion Pipeline</h1>
+              <p class="page-subtitle">Submit scanned or digital documents into cases for OCR extraction, layout analysis, and forensics.</p>
+            </div>
+            <button class="btn-secondary" onclick="navigateToView('library')">
+              <span>📚 View Document Library</span>
+            </button>
+          </div>
+
+          <div class="upload-grid-container">
+            <!-- Left: Dropzone & Upload Configuration -->
+            <div class="card-panel">
+              <div class="section-header">
+                <div class="section-title-group">
+                  <h2 class="section-title">Upload Artifacts</h2>
+                  <span class="section-subtitle">Supported formats: PDF, JPG, PNG (Max 25MB per file)</span>
+                </div>
+              </div>
+
+              <!-- Drag & Drop Zone -->
+              <div class="upload-dropzone" id="documentDropzone">
+                <div class="dropzone-icon">📤</div>
+                <h3 class="dropzone-title">Drag & Drop Documents Here</h3>
+                <p class="dropzone-hint">Or click to select files from your computer. Files are assigned unique cryptographic hashes on ingest.</p>
+                <input type="file" id="fileUploadInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
+                <button type="button" class="btn-primary" onclick="document.getElementById('fileUploadInput').click();">
+                  Browse Files
+                </button>
+              </div>
+
+              <!-- Upload Case Assignment Form -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;">
+                <div class="form-group">
+                  <label class="form-label" for="targetCaseSelect">Target Investigation Case *</label>
+                  <select id="targetCaseSelect" class="form-control">
+                    <option value="VX-2041">VX-2041: Loan Application #8841-B</option>
+                    <option value="VX-2039">VX-2039: Identity Verification Dossier</option>
+                    <option value="VX-2038">VX-2038: Procurement Invoice Discrepancy</option>
+                    <option value="VX-2035">VX-2035: Employment Declaration Check</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="targetDocType">Document Classification *</label>
+                  <select id="targetDocType" class="form-control">
+                    <option value="Salary Slip">Financial / Salary Statement</option>
+                    <option value="Tax Return">Tax Return / ITR</option>
+                    <option value="ID Proof">Government ID / Passport</option>
+                    <option value="Invoice">Commercial Invoice / PO</option>
+                    <option value="Contract">Legal Contract / Agreement</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Staged Files Queue -->
+            <div class="card-panel">
+              <div class="section-header">
+                <div class="section-title-group">
+                  <h2 class="section-title">Staged Ingestion Queue</h2>
+                  <span class="section-subtitle">Documents ready for OCR & text extraction</span>
+                </div>
+                <button class="btn-primary" id="processQueueBtn" style="padding:6px 14px; font-size:0.8rem;">
+                  Process All
+                </button>
+              </div>
+
+              <div class="staged-queue" id="stagedQueueContainer">
+                <div class="staged-item">
+                  <div class="staged-item-top">
+                    <span class="staged-name">📄 Salary_Slip_June2025.pdf</span>
+                    <span class="staged-size">2.4 MB</span>
+                  </div>
+                  <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width:100%;"></div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted);">
+                    <span>Status: Verified & Staged</span>
+                    <span style="color:var(--status-verified); font-weight:700;">✓ Ready</span>
+                  </div>
+                </div>
+
+                <div class="staged-item">
+                  <div class="staged-item-top">
+                    <span class="staged-name">🖼️ Identity_Card_Misari.png</span>
+                    <span class="staged-size">1.1 MB</span>
+                  </div>
+                  <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width:100%;"></div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted);">
+                    <span>Status: High-Res OCR Prepped</span>
+                    <span style="color:var(--status-verified); font-weight:700;">✓ Ready</span>
+                  </div>
+                </div>
+
+                <div class="staged-item">
+                  <div class="staged-item-top">
+                    <span class="staged-name">📄 Tax_Return_FY24.pdf</span>
+                    <span class="staged-size">4.8 MB</span>
+                  </div>
+                  <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width:100%;"></div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted);">
+                    <span>Status: Multi-Page Indexing</span>
+                    <span style="color:var(--status-verified); font-weight:700;">✓ Ready</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 4: DOCUMENT LIBRARY & ARCHIVE
+             ================================================================== -->
+        <section class="view-section" id="view-library" data-view-title="Document Library & Archive">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Document Library & Evidence Vault</h1>
+              <p class="page-subtitle">Search, inspect, and organize all ingested forensic evidence artifacts across cases.</p>
+            </div>
+            <button class="btn-primary" onclick="navigateToView('upload')">
+              <span>+ Ingest New Document</span>
+            </button>
+          </div>
+
+          <!-- Document Filter Toolbar -->
+          <div class="filter-toolbar">
+            <span style="font-size:0.78rem; font-weight:700; color:var(--text-muted); margin-right:6px;">Category:</span>
+            <button class="filter-pill active" data-doc-filter="all">All Documents (24)</button>
+            <button class="filter-pill" data-doc-filter="financial">Financial (10)</button>
+            <button class="filter-pill" data-doc-filter="identity">Identity Proofs (6)</button>
+            <button class="filter-pill" data-doc-filter="tax">Tax Returns (5)</button>
+            <button class="filter-pill" data-doc-filter="legal">Legal Contracts (3)</button>
+          </div>
+
+          <!-- Document Cards Grid -->
+          <div class="doc-library-grid" id="docLibraryGrid">
+            
+            <div class="doc-card" data-category="financial">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-high">2 Anomalies</span>
+              </div>
+              <h3 class="doc-card-title" title="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>2.4 MB</span> • <span>3 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2041</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="identity">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">🖼️</div>
+                <span class="pill-tag pill-low">Verified Match</span>
+              </div>
+              <h3 class="doc-card-title" title="Passport_Front_Scan.png">Passport_Front_Scan.png</h3>
+              <div class="doc-card-meta">
+                <span>PNG</span> • <span>1.1 MB</span> • <span>1 Page</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="tax">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-medium">1 Mismatch</span>
+              </div>
+              <h3 class="doc-card-title" title="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>4.8 MB</span> • <span>6 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="identity">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">🖼️</div>
+                <span class="pill-tag pill-high">DOB Conflict</span>
+              </div>
+              <h3 class="doc-card-title" title="Identity_Card_Misari.png">Identity_Card_Misari.png</h3>
+              <div class="doc-card-meta">
+                <span>PNG</span> • <span>820 KB</span> • <span>1 Page</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="financial">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-high">Font Altered</span>
+              </div>
+              <h3 class="doc-card-title" title="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>1.9 MB</span> • <span>2 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="legal">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-low">Consistent</span>
+              </div>
+              <h3 class="doc-card-title" title="Employment_Contract_Final.pdf">Employment_Contract_Final.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>3.2 MB</span> • <span>5 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2035</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('evidence')">View Graph</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 5: FORENSIC INSPECTION & BOUNDING BOXES
+             ================================================================== -->
+        <section class="view-section" id="view-forensics" data-view-title="Forensic Document Inspection">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Forensic Document Inspector</h1>
+              <p class="page-subtitle">Visual inspection workspace highlighting font kerning variations, digital modifications, and overwritten fields.</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <select class="form-control" style="width:260px;" id="forensicDocSelector">
+                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Page 2)</option>
+                <option value="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf (Page 1)</option>
+                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Page 3)</option>
+              </select>
+              <button class="btn-primary" onclick="showToast('Running re-scan with forensic filters', 'info')">Re-Scan</button>
+            </div>
+          </div>
+
+          <!-- Split-View: Document Canvas vs Forensic Findings Log -->
+          <div class="forensic-split-view">
+            
+            <!-- Left: Simulated Document Page with Bounding Boxes -->
+            <div class="document-inspection-pane">
+              <div class="section-header" style="margin-bottom:10px;">
+                <span style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">📄 Document Viewer • Page 2 of 3</span>
+                <span class="pill-tag pill-high">2 Visual Anomalies Flagged</span>
+              </div>
+
+              <!-- Paper Canvas -->
+              <div class="simulated-doc-page">
+                <div class="doc-page-header">
+                  <span class="doc-page-title">EMPLOYEE EARNINGS STATEMENT • PRIVATE & CONFIDENTIAL</span>
+                  <span style="font-family:var(--font-mono); font-size:0.75rem; color:#64748b;">DOC-REF: 9941-X</span>
+                </div>
+
+                <div class="doc-page-body">
+                  <p><strong>Employee Name:</strong> Misari Vadalia &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Designation:</strong> Lead System Architect</p>
+                  <p><strong>Department:</strong> Core Security Systems &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Pay Period:</strong> 01-Jun-2025 to 30-Jun-2025</p>
+                  
+                  <div style="margin:24px 0; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+                    <p style="margin:0 0 10px 0; font-weight:700;">Earnings Breakdown:</p>
+                    <p style="margin:4px 0;">• Basic Component: INR 65,000.00</p>
+                    <p style="margin:4px 0;">• Special Allowance: INR 22,000.00</p>
+                    
+                    <!-- Critical Highlight Bounding Box -->
+                    <p style="margin:8px 0;">
+                      • Net Disbursed Salary: 
+                      <span class="forensic-bbox bbox-critical" id="bboxSalary" onclick="showToast('Inspecting: Typographic Overwrite detected on Salary Field', 'warning')">
+                        <span class="bbox-tag">Typographic Overwrite</span>
+                        INR 95,000.00
+                      </span>
+                    </p>
+
+                    <!-- Warning Highlight Bounding Box -->
+                    <p style="margin:8px 0;">
+                      • Disbursement Date: 
+                      <span class="forensic-bbox bbox-warning" id="bboxDate" onclick="showToast('Inspecting: Baseline Kerning anomaly on Disbursement Date', 'warning')">
+                        <span class="bbox-tag">Kerning Irregularity</span>
+                        30-Jun-2025
+                      </span>
+                    </p>
+                  </div>
+
+                  <p style="font-size:0.75rem; color:#64748b; margin-top:28px;">
+                    * This computer generated statement is digitally signed by Financial Operations. Any visual alteration renders this document subject to forensic scrutiny under Section 12-B.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Forensic Findings Explanation Panel -->
+            <div class="card-panel">
+              <div class="section-header">
+                <div class="section-title-group">
+                  <h2 class="section-title">Forensic Observations</h2>
+                  <span class="section-subtitle">Evidence-backed explanations requiring human reviewer confirmation</span>
+                </div>
+              </div>
+
+              <div class="findings-feed">
+                
+                <div class="finding-detail-card critical">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Typographic Font Overwrite</span>
+                    <span class="finding-loc">Page 2 • Box [X:140, Y:320]</span>
+                  </div>
+                  <p class="finding-reason">
+                    The numerical figure <strong>"95,000.00"</strong> exhibits font characteristics consistent with Arial Bold 11pt, whereas all sibling fields in this section adhere strictly to Helvetica Neue 10pt. Digital modification overlay suspected.
+                  </p>
+                  <div class="finding-recommendation">
+                    ⚠️ Recommendation: Request direct bank statement verification from issuing depository.
+                  </div>
+                </div>
+
+                <div class="finding-detail-card">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Baseline Kerning Discontinuity</span>
+                    <span class="finding-loc">Page 2 • Box [X:140, Y:360]</span>
+                  </div>
+                  <p class="finding-reason">
+                    Letter spacing on date string deviates by <strong>24.8%</strong> compared to the document template's baseline font profile. Indicates possible insertion after document rendering.
+                  </p>
+                  <div class="finding-recommendation">
+                    ℹ️ Recommendation: Compare against canonical PDF metadata creation timestamp.
+                  </div>
+                </div>
+
+                <div class="finding-detail-card" style="border-left-color:var(--status-info);">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Metadata Consistency Check</span>
+                    <span class="finding-loc">Document Header</span>
+                  </div>
+                  <p class="finding-reason">
+                    PDF producer string matches "ReportLab 4.1.2". Digital signature hash does not match issuer's public key certificate.
+                  </p>
+                  <div class="finding-recommendation" style="color:var(--status-info); background:var(--status-info-dim); border-color:var(--status-info-border);">
+                    ✓ Verification: Certificate revocation list verified.
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 6: CROSS-DOCUMENT COMPARISON
+             ================================================================== -->
+        <section class="view-section" id="view-comparison" data-view-title="Cross-Document Discrepancy Analysis">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Cross-Document Comparison</h1>
+              <p class="page-subtitle">Correlate extracted entities across multiple documents to identify factual contradictions.</p>
+            </div>
+            <button class="btn-primary" onclick="showToast('Executing cross-document entity alignment algorithm', 'info')">
+              Run Cross-Check
+            </button>
+          </div>
+
+          <!-- Document Selector Bar -->
+          <div class="comparison-doc-select-bar">
+            <div class="compare-box">
+              <label class="form-label">Primary Source Document (Doc A)</label>
+              <select class="form-control" id="compareDocA">
+                <option value="ID_Card_Misari.png">Identity_Card_Misari.png (Government ID Proof)</option>
+                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Earnings)</option>
+              </select>
+            </div>
+
+            <div class="compare-box">
+              <label class="form-label">Comparison Reference Document (Doc B)</label>
+              <select class="form-control" id="compareDocB">
+                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Income Tax Department Filing)</option>
+                <option value="Passport_Front_Scan.png">Passport_Front_Scan.png (Passport Proof)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Cross-Check Entity Table -->
+          <div class="card-panel">
+            <div class="section-header">
+              <div class="section-title-group">
+                <h2 class="section-title">Entity Alignment & Discrepancy Matrix</h2>
+                <span class="section-subtitle">Evaluating consistency between Identity Card and Tax Return Filing</span>
+              </div>
             </div>
 
             <div class="table-responsive">
-              <table class="data-table" id="recentCasesTable">
+              <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Case Ref</th>
-                    <th>Case Details</th>
-                    <th>Documents</th>
-                    <th>Risk Level</th>
-                    <th>Status</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>Entity Attribute</th>
+                    <th>Document A (ID Card)</th>
+                    <th>Document B (Tax Return)</th>
+                    <th>Forensic Verdict</th>
+                    <th>Impact / Explanation</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td class="case-id-cell">VX-2041</td>
-                    <td>
-                      <span class="case-title-cell">Loan Application #8841-B</span>
-                      <span class="case-subtitle">Lead: Misari Vadalia • Inconsistency in salary slips</span>
-                    </td>
-                    <td>4 docs</td>
-                    <td><span class="pill-tag pill-high">High Risk</span></td>
-                    <td><span class="pill-tag pill-status">In Review</span></td>
-                    <td>10m ago</td>
-                    <td>
-                      <div class="action-btn-group">
-                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2041', 'info')">Inspect</button>
-                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2041', 'info')">Upload</button>
-                      </div>
-                    </td>
+                    <td style="font-weight:700;">Full Legal Name</td>
+                    <td>Misari Vadalia</td>
+                    <td>Misari Vadalia</td>
+                    <td><span class="pill-tag pill-low">✓ Exact Match</span></td>
+                    <td>Names match with 100% token similarity across both registries.</td>
+                  </tr>
+
+                  <tr style="background:var(--status-danger-dim);">
+                    <td style="font-weight:700; color:var(--status-danger);">Date of Birth (DOB)</td>
+                    <td style="font-weight:700;">14/08/1996</td>
+                    <td style="font-weight:700;">14/08/1998</td>
+                    <td><span class="pill-tag pill-high">⚠️ CONFLICT</span></td>
+                    <td><strong>2-Year Discrepancy Detected.</strong> One or both documents contain falsified age information.</td>
                   </tr>
 
                   <tr>
-                    <td class="case-id-cell">VX-2039</td>
-                    <td>
-                      <span class="case-title-cell">Identity Verification Dossier</span>
-                      <span class="case-subtitle">Lead: Misari Vadalia • Cross-referencing Aadhaar & Passport</span>
-                    </td>
-                    <td>2 docs</td>
-                    <td><span class="pill-tag pill-medium">Medium</span></td>
-                    <td><span class="pill-tag pill-status">Processing</span></td>
-                    <td>1h ago</td>
-                    <td>
-                      <div class="action-btn-group">
-                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2039', 'info')">Inspect</button>
-                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2039', 'info')">Upload</button>
-                      </div>
-                    </td>
+                    <td style="font-weight:700;">Tax Identification #</td>
+                    <td style="font-family:var(--font-mono);">ABCDE1234F</td>
+                    <td style="font-family:var(--font-mono);">ABCDE1234F</td>
+                    <td><span class="pill-tag pill-low">✓ Exact Match</span></td>
+                    <td>Permanent Account Number matches central tax authority database.</td>
+                  </tr>
+
+                  <tr style="background:var(--status-anomaly-dim);">
+                    <td style="font-weight:700; color:var(--status-anomaly);">Residential Address</td>
+                    <td>Sector 14, Gandhinagar</td>
+                    <td>Plot 88, Bodakdev, Ahmedabad</td>
+                    <td><span class="pill-tag pill-medium">⚠️ VARIANCE</span></td>
+                    <td>Geographical variance detected. Requires secondary address utility validation.</td>
                   </tr>
 
                   <tr>
-                    <td class="case-id-cell">VX-2038</td>
-                    <td>
-                      <span class="case-title-cell">Procurement Invoice Discrepancy</span>
-                      <span class="case-subtitle">Lead: Forensic Desk • Tax ID mismatch detected</span>
-                    </td>
-                    <td>6 docs</td>
-                    <td><span class="pill-tag pill-high">High Risk</span></td>
-                    <td><span class="pill-tag pill-status">Under Analysis</span></td>
-                    <td>3h ago</td>
-                    <td>
-                      <div class="action-btn-group">
-                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2038', 'info')">Inspect</button>
-                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2038', 'info')">Upload</button>
-                      </div>
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <td class="case-id-cell">VX-2035</td>
-                    <td>
-                      <span class="case-title-cell">Employment Declaration Check</span>
-                      <span class="case-subtitle">Lead: Misari Vadalia • Verification complete</span>
-                    </td>
-                    <td>3 docs</td>
-                    <td><span class="pill-tag pill-low">Low</span></td>
-                    <td><span class="pill-tag pill-status">Verified</span></td>
-                    <td>Yesterday</td>
-                    <td>
-                      <div class="action-btn-group">
-                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2035', 'info')">Inspect</button>
-                        <button class="table-action-btn" onclick="showToast('Dossier ready for VX-2035', 'success')">Dossier</button>
-                      </div>
-                    </td>
+                    <td style="font-weight:700;">Issuing Authority</td>
+                    <td>Govt Authority (UIDAI)</td>
+                    <td>Income Tax Dept of India</td>
+                    <td><span class="pill-tag pill-low">✓ Verified</span></td>
+                    <td>Both issuing authorities recognized in institutional trust registry.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        </section>
 
-          <!-- Live Forensic Anomaly Stream -->
-          <section class="card-panel" aria-label="Forensic Anomaly Alerts">
+        <!-- ==================================================================
+             VIEW 7: EVIDENCE GRAPH & TRACEABILITY
+             ================================================================== -->
+        <section class="view-section" id="view-evidence" data-view-title="Evidence Graph & Provenance">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Evidence Provenance Graph</h1>
+              <p class="page-subtitle">Track every detected finding and extracted entity back to its exact document page and bounding box.</p>
+            </div>
+          </div>
+
+          <div class="card-panel">
             <div class="section-header">
               <div class="section-title-group">
-                <h2 class="section-title">Forensic Anomaly Feed</h2>
-                <span class="section-subtitle">Real-time alerts flagged for human investigator inspection</span>
+                <h2 class="section-title">Evidence Provenance Tree</h2>
+                <span class="section-subtitle">Transparent traceability — zero simulated or un-sourced assertions</span>
               </div>
             </div>
 
-            <div class="anomaly-feed">
-              <div class="anomaly-item critical">
-                <div class="anomaly-top">
-                  <span class="anomaly-type">Cross-Doc Mismatch</span>
-                  <span class="anomaly-time">14m ago</span>
-                </div>
-                <span class="anomaly-title">Date of Birth Conflict</span>
-                <p class="anomaly-desc">Document "ID_Card.png" states DOB 14/08/1996 while "Tax_Return.pdf" states 14/08/1998.</p>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
+              <div class="case-card">
+                <span class="case-card-id">EV-NODE #001</span>
+                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">Salary Field Modification</h4>
+                <p style="font-size:0.8rem; color:var(--text-secondary);">Source: <code>Salary_Slip_June2025.pdf</code> • Page 2 • BBox [140, 320]</p>
+                <div class="pill-tag pill-high">Linked to Case VX-2041</div>
               </div>
 
-              <div class="anomaly-item warning">
-                <div class="anomaly-top">
-                  <span class="anomaly-type">Visual Forensics</span>
-                  <span class="anomaly-time">1h ago</span>
-                </div>
-                <span class="anomaly-title">Font Typographic Variation</span>
-                <p class="anomaly-desc">Salary field on Page 2 exhibits altered kerning and mismatched Helvetica Neue weight.</p>
+              <div class="case-card">
+                <span class="case-card-id">EV-NODE #002</span>
+                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">DOB Conflict Provenance</h4>
+                <p style="font-size:0.8rem; color:var(--text-secondary);">Sources: <code>ID_Card_Misari.png</code> (p.1) vs <code>Tax_Return_FY24.pdf</code> (p.1)</p>
+                <div class="pill-tag pill-high">Linked to Case VX-2039</div>
               </div>
 
-              <div class="anomaly-item warning">
-                <div class="anomaly-top">
-                  <span class="anomaly-type">Contextual Anomaly</span>
-                  <span class="anomaly-time">2h ago</span>
-                </div>
-                <span class="anomaly-title">Invoice Date Precedes PO Date</span>
-                <p class="anomaly-desc">Invoice date (02-Jan-2025) appears 18 days prior to Purchase Order approval date.</p>
-              </div>
-
-              <div class="anomaly-item verified">
-                <div class="anomaly-top">
-                  <span class="anomaly-type">Entity Correlated</span>
-                  <span class="anomaly-time">4h ago</span>
-                </div>
-                <span class="anomaly-title">Organization Name Verified</span>
-                <p class="anomaly-desc">Corporate registry ID matches across bank declaration and legal deed.</p>
+              <div class="case-card">
+                <span class="case-card-id">EV-NODE #003</span>
+                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">Vendor Tax ID Conflict</h4>
+                <p style="font-size:0.8rem; color:var(--text-secondary);">Source: <code>Vendor_Invoice_0944.pdf</code> • Page 1 • Line 8</p>
+                <div class="pill-tag pill-medium">Linked to Case VX-2038</div>
               </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-        </div>
+        <!-- ==================================================================
+             VIEW 8: INVESTIGATION DOSSIER & EXPORT
+             ================================================================== -->
+        <section class="view-section" id="view-dossier" data-view-title="Investigation Dossier & Report">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">Investigation Dossier & Report Export</h1>
+              <p class="page-subtitle">Generate audit-ready, evidence-backed reports with human-reviewer disclaimers.</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <button class="btn-secondary" onclick="window.print();">🖨️ Print Dossier</button>
+              <button class="btn-primary" onclick="showToast('Exporting Dossier PDF for Case VX-2041', 'success');">📄 Export PDF Dossier</button>
+            </div>
+          </div>
+
+          <!-- Printable Dossier Canvas -->
+          <div class="dossier-container">
+            <div class="dossier-header-block">
+              <div>
+                <span class="dossier-ref">VEXORA OFFICIAL FORENSIC DOSSIER • CASE VX-2041</span>
+                <h2 class="dossier-title">Loan Application #8841-B Audit Report</h2>
+                <span style="font-size:0.82rem; color:var(--text-muted);">Lead Investigator: Misari Vadalia • Generated: 01-Nov-2026</span>
+              </div>
+              <span class="pill-tag pill-high" style="font-size:0.85rem; padding:6px 14px;">High Risk / Irregular</span>
+            </div>
+
+            <!-- Human Review Disclaimer -->
+            <div class="dossier-disclaimer-box">
+              <span style="font-size:1.3rem;">⚠️</span>
+              <div>
+                <strong>MANDATORY INVESTIGATION DISCLAIMER:</strong>
+                All findings generated by VEXORA are automated forensic observations and do not by themselves constitute definitive legal proof of fraud or tampering. Human investigator interpretation and verification remain mandatory.
+              </div>
+            </div>
+
+            <!-- Section 1 -->
+            <div>
+              <h3 class="dossier-section-title">1. Executive Investigation Summary</h3>
+              <p style="font-size:0.88rem; color:var(--text-secondary); line-height:1.65;">
+                An examination of documents submitted under Case VX-2041 revealed <strong>3 high-risk forensic anomalies</strong>. Primary irregularities comprise typographic font mismatches on earnings statements and an unresolved 2-year birth year variance across submitted identity documents.
+              </p>
+            </div>
+
+            <!-- Section 2 -->
+            <div>
+              <h3 class="dossier-section-title">2. Ingested Evidence Inventory</h3>
+              <ul style="font-size:0.85rem; color:var(--text-secondary); margin-left:20px; line-height:1.8;">
+                <li><code>Salary_Slip_June2025.pdf</code> — SHA256: <code>e3b0c44298fc1c149afbf4c8996fb924...</code> (3 Pages)</li>
+                <li><code>Identity_Card_Misari.png</code> — SHA256: <code>8f434346648f6b96df89dda901c5176b...</code> (1 Page)</li>
+                <li><code>Tax_Return_FY24.pdf</code> — SHA256: <code>ca978112ca1bbdcafac231b39a23dc4d...</code> (6 Pages)</li>
+              </ul>
+            </div>
+
+            <!-- Section 3 -->
+            <div>
+              <h3 class="dossier-section-title">3. Key Forensic Findings</h3>
+              <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+                <div class="finding-detail-card critical">
+                  <strong>Finding #1: Digital Overwrite on Disbursed Earnings (Page 2)</strong>
+                  <p style="font-size:0.8rem; margin:0; color:var(--text-secondary);">Value 'INR 95,000.00' uses Arial Bold 11pt, conflicting with document's native Helvetica Neue 10pt styling.</p>
+                </div>
+                <div class="finding-detail-card critical">
+                  <strong>Finding #2: Cross-Document DOB Conflict (ID vs Tax Return)</strong>
+                  <p style="font-size:0.8rem; margin:0; color:var(--text-secondary);">DOB 14/08/1996 conflicts with 14/08/1998 in official tax filing.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Signoff Block -->
+            <div class="dossier-signoff">
+              <div>
+                <strong>Investigator Sign-off:</strong> Misari Vadalia<br>
+                <span style="font-size:0.75rem; color:var(--text-muted);">VEXORA Forensic Intelligence Engine • Verified Node</span>
+              </div>
+              <div style="font-family:var(--font-mono); font-size:0.75rem;">
+                VERIFICATION CODE: <strong>VX-8841-SEC-OK</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             VIEW 9: SETTINGS & CONFIGURATION
+             ================================================================== -->
+        <section class="view-section" id="view-settings" data-view-title="System & Investigator Settings">
+          <div class="page-header-row">
+            <div class="page-title-group">
+              <h1 class="page-title">System & Forensic Engine Settings</h1>
+              <p class="page-subtitle">Configure investigator credentials, visual anomaly sensitivity thresholds, and local node storage.</p>
+            </div>
+            <button class="btn-primary" onclick="showToast('Settings saved successfully.', 'success');">
+              Save Configuration
+            </button>
+          </div>
+
+          <div class="settings-grid">
+            <!-- Investigator Profile -->
+            <div class="settings-card">
+              <h3 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700;">Investigator Profile</h3>
+              <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-control" value="Misari Vadalia">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Designation / Role</label>
+                <input type="text" class="form-control" value="Lead Forensic Investigator">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Department / Unit</label>
+                <input type="text" class="form-control" value="Digital Security & Document Forensics">
+              </div>
+            </div>
+
+            <!-- Forensic Parameters -->
+            <div class="settings-card">
+              <h3 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700;">Forensic Sensitivity Thresholds</h3>
+              <div class="range-slider-group">
+                <div class="range-slider-header">
+                  <span>Visual Overwrite Sensitivity</span>
+                  <span id="sliderVal1">85%</span>
+                </div>
+                <input type="range" class="range-slider" min="50" max="100" value="85" oninput="document.getElementById('sliderVal1').textContent = this.value + '%';">
+              </div>
+
+              <div class="range-slider-group">
+                <div class="range-slider-header">
+                  <span>OCR Confidence Threshold</span>
+                  <span id="sliderVal2">75%</span>
+                </div>
+                <input type="range" class="range-slider" min="50" max="100" value="75" oninput="document.getElementById('sliderVal2').textContent = this.value + '%';">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Default Theme Mode</label>
+                <select class="form-control" id="settingsThemeSelector">
+                  <option value="light">Crisp High-Contrast Light Mode (Default)</option>
+                  <option value="dark">Deep Obsidian Dark Mode</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Storage & Diagnostics -->
+            <div class="settings-card">
+              <h3 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700;">Node Diagnostics</h3>
+              <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.6;">
+                • Engine Version: <strong>VEXORA Phase 2 Prototype</strong><br>
+                • Storage Vault: <code>c:\VEXORA\uploads</code><br>
+                • Reports Export: <code>c:\VEXORA\reports</code><br>
+                • Database: <strong>SQLite (Planned Phase 3)</strong><br>
+                • Core Node: <strong>Online (Localhost:8080)</strong>
+              </p>
+              <button class="btn-secondary" style="margin-top:auto;" onclick="showToast('Running system diagnostic self-test: All systems normal.', 'success')">
+                Run Diagnostics Self-Test
+              </button>
+            </div>
+          </div>
+        </section>
 
       </main>
 
@@ -444,7 +1323,7 @@
         <div class="footer-links">
           <a href="#docs" class="footer-link" onclick="showToast('Opening VEXORA Documentation', 'info')">Docs</a>
           <span>•</span>
-          <a href="#roadmap" class="footer-link" onclick="showToast('Phase 1 Active (Frontend Foundation)', 'info')">Roadmap</a>
+          <a href="#roadmap" class="footer-link" onclick="showToast('Phase 2 Active (Core Pages & UI)', 'info')">Roadmap</a>
           <span>•</span>
           <a href="#github" class="footer-link" onclick="showToast('Repository: Misari-Vadalia-13/VEXORA', 'info')">GitHub</a>
         </div>

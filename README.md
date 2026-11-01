@@ -24,16 +24,16 @@ The following features represent the planned project scope. Their implementation
 | Feature | Description | Status |
 |---|---|---|
 | Investigation Dashboard | Centralized overview of investigation activities. | Completed (UI) |
-| Case Management | Create and manage investigation cases. | Planned |
-| Document Upload | Upload PDF, JPG and PNG documents. | Planned |
-| Document Library | Organize and access uploaded documents. | Planned |
-| OCR Processing | Extract text from scanned documents and images. | Planned |
-| Information Extraction | Identify names, dates and organizations. | Planned |
-| Document Analysis | Examine unusual formatting and contextual inconsistencies. | Planned |
-| Cross-Document Comparison | Compare information across multiple documents. | Planned |
-| Evidence Mapping | Connect findings to their original documents and pages. | Planned |
-| Investigation Dossier | Generate structured investigation reports. | Planned |
-| Audit Trail | Maintain records of important investigation activities. | Planned |
+| Case Management | Create and manage investigation cases. | Completed (UI) |
+| Document Upload | Upload PDF, JPG and PNG documents. | Completed (UI) |
+| Document Library | Organize and access uploaded documents. | Completed (UI) |
+| OCR Processing | Extract text from scanned documents and images. | Planned (Phase 5) |
+| Information Extraction | Identify names, dates and organizations. | Planned (Phase 5) |
+| Document Analysis | Examine unusual formatting and contextual inconsistencies. | Completed (UI) |
+| Cross-Document Comparison | Compare information across multiple documents. | Completed (UI) |
+| Evidence Mapping | Connect findings to their original documents and pages. | Completed (UI) |
+| Investigation Dossier | Generate structured investigation reports. | Completed (UI) |
+| Audit Trail | Maintain records of important investigation activities. | Completed (UI) |
 
 ## ⚙️ Technology Stack
 
@@ -78,7 +78,7 @@ VEXORA is being developed through nine structured phases.
 | Phase | Development Area | Status |
 |---|---|---|
 | 01 | Project Setup & UI Foundation | **Completed** |
-| 02 | Core Pages & User Interface | Not Started |
+| 02 | Core Pages & User Interface | **Completed** |
 | 03 | Backend & Database Integration | Not Started |
 | 04 | Document Upload & Classification | Not Started |
 | 05 | OCR & Information Extraction | Not Started |

@@ -1,21 +1,81 @@
 /**
  * VEXORA — Document Forensics & Contextual Intelligence
- * Frontend Application Logic (Phase 1: Project Setup & UI Foundation)
+ * Frontend Application Logic (Phase 2: Core Pages & User Interface)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize all interactive modules
+  // Initialize all core subsystems
   initThemeManager();
   initSidebar();
   initNavigation();
   initLiveClock();
   initSearchFilter();
   initCaseModal();
+  initCaseFilters();
+  initDocLibraryFilters();
+  initUploadSimulator();
   initToastSystem();
   initKeyboardShortcuts();
 
-  showToast('Welcome to VEXORA — Forensic Intelligence System ready.', 'info');
+  // Handle direct URL hash navigation (e.g. #cases, #upload, #forensics)
+  handleInitialRoute();
+
+  showToast('VEXORA Phase 2 Core Systems Initialized.', 'info');
 });
+
+/**
+ * 0. Theme Manager (High-Contrast Crisp Light Default + View Transitions API)
+ */
+function initThemeManager() {
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
+  const themeIcon = document.getElementById('themeToggleIcon');
+  const themeText = document.getElementById('themeToggleText');
+
+  // Default to high-contrast crisp light theme
+  const savedTheme = localStorage.getItem('vexora-theme') || 'light';
+  applyTheme(savedTheme);
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      // Trigger icon spring rotation animation
+      themeToggleBtn.classList.add('animating');
+      setTimeout(() => themeToggleBtn.classList.remove('animating'), 500);
+
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+      // Use native View Transitions API if supported for zero-glitch GPU cross-fade
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          applyTheme(newTheme);
+        });
+      } else {
+        // Fallback: apply temporary transition class
+        document.documentElement.classList.add('theme-transitioning');
+        applyTheme(newTheme);
+        setTimeout(() => {
+          document.documentElement.classList.remove('theme-transitioning');
+        }, 400);
+      }
+
+      localStorage.setItem('vexora-theme', newTheme);
+      showToast(`Switched to ${newTheme.toUpperCase()} mode`, 'info');
+    });
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeIcon && themeText) {
+      if (theme === 'dark') {
+        themeIcon.textContent = '🌙';
+        themeText.textContent = 'Dark';
+      } else {
+        themeIcon.textContent = '☀️';
+        themeText.textContent = 'Light';
+      }
+    }
+  }
+}
 
 /**
  * 1. Sidebar Collapse and Mobile Toggle
@@ -52,30 +112,215 @@ function initSidebar() {
 }
 
 /**
- * 2. Navigation Item Click and Active State Handler
+ * 2. Multi-View Navigation Router (Phase 2 Core Feature)
  */
+function navigateToView(viewName) {
+  const targetId = 'view-' + viewName;
+  const targetSection = document.getElementById(targetId);
+  const breadcrumbActive = document.getElementById('breadcrumbActive');
+  const allSections = document.querySelectorAll('.view-section');
+  const navItems = document.querySelectorAll('.nav-item');
+
+  if (!targetSection) {
+    console.warn(`View section "${targetId}" not found. Falling back to dashboard.`);
+    return navigateToView('dashboard');
+  }
+
+  // Hide all view sections, activate target section
+  allSections.forEach((sec) => sec.classList.remove('active'));
+  targetSection.classList.add('active');
+
+  // Update active sidebar nav link
+  navItems.forEach((nav) => {
+    if (nav.getAttribute('data-view') === viewName) {
+      nav.classList.add('active');
+    } else {
+      nav.classList.remove('active');
+    }
+  });
+
+  // Update breadcrumb text
+  const title = targetSection.getAttribute('data-view-title') || viewName.toUpperCase();
+  if (breadcrumbActive) {
+    breadcrumbActive.textContent = title;
+  }
+
+  // Update browser URL hash without jump
+  if (window.location.hash !== '#' + viewName) {
+    history.pushState(null, '', '#' + viewName);
+  }
+
+  // Smooth scroll to top of content
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Close mobile sidebar if open
+  const sidebar = document.getElementById('vexoraSidebar');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+}
+
+// Make navigateToView globally accessible for inline onclick handlers
+window.navigateToView = navigateToView;
+
 function initNavigation() {
   const navItems = document.querySelectorAll('.nav-item');
-  const breadcrumbActive = document.getElementById('breadcrumbActive');
 
   navItems.forEach((item) => {
     item.addEventListener('click', (e) => {
-      // In Phase 1, we prevent default navigation and toggle active indicator
       e.preventDefault();
-      navItems.forEach((n) => n.classList.remove('active'));
-      item.classList.add('active');
-
-      const label = item.querySelector('.nav-label');
-      if (label && breadcrumbActive) {
-        breadcrumbActive.textContent = label.textContent.trim();
-        showToast(`Navigated to ${label.textContent.trim()} view.`, 'info');
+      const viewKey = item.getAttribute('data-view');
+      if (viewKey) {
+        navigateToView(viewKey);
       }
+    });
+  });
+
+  // Listen to popstate / browser back/forward buttons
+  window.addEventListener('popstate', handleInitialRoute);
+}
+
+function handleInitialRoute() {
+  const hash = window.location.hash.replace('#', '').trim();
+  if (hash) {
+    navigateToView(hash);
+  } else {
+    navigateToView('dashboard');
+  }
+}
+
+/**
+ * 3. Case Management Filter Toolbar
+ */
+function initCaseFilters() {
+  const filterPills = document.querySelectorAll('[data-filter]');
+  const caseCards = document.querySelectorAll('#caseManagementGrid .case-card');
+
+  filterPills.forEach((pill) => {
+    pill.addEventListener('click', () => {
+      filterPills.forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      const filterVal = pill.getAttribute('data-filter');
+
+      caseCards.forEach((card) => {
+        const priority = card.getAttribute('data-priority');
+        if (filterVal === 'all' || priority === filterVal) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
     });
   });
 }
 
 /**
- * 3. Header Live Clock
+ * 4. Document Library Filter Toolbar
+ */
+function initDocLibraryFilters() {
+  const docFilterPills = document.querySelectorAll('[data-doc-filter]');
+  const docCards = document.querySelectorAll('#docLibraryGrid .doc-card');
+
+  docFilterPills.forEach((pill) => {
+    pill.addEventListener('click', () => {
+      docFilterPills.forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      const category = pill.getAttribute('data-doc-filter');
+
+      docCards.forEach((card) => {
+        const cardCat = card.getAttribute('data-category');
+        if (category === 'all' || cardCat === category) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    });
+  });
+}
+
+/**
+ * 5. Drag & Drop File Upload Simulator
+ */
+function initUploadSimulator() {
+  const dropzone = document.getElementById('documentDropzone');
+  const fileInput = document.getElementById('fileUploadInput');
+  const queue = document.getElementById('stagedQueueContainer');
+  const processBtn = document.getElementById('processQueueBtn');
+
+  if (!dropzone || !fileInput) return;
+
+  // Drag over styling
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropzone.classList.add('drag-active');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-active');
+    });
+  });
+
+  // Handle dropped files
+  dropzone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    handleFiles(files);
+  });
+
+  // Handle file input selection
+  fileInput.addEventListener('change', (e) => {
+    const files = e.target.files;
+    handleFiles(files);
+  });
+
+  function handleFiles(files) {
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+      const icon = file.name.endsWith('.pdf') ? '📄' : '🖼️';
+
+      const item = document.createElement('div');
+      item.className = 'staged-item';
+      item.innerHTML = `
+        <div class="staged-item-top">
+          <span class="staged-name">${icon} ${escapeHtml(file.name)}</span>
+          <span class="staged-size">${sizeMb}</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width: 100%;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted);">
+          <span>Status: Verified & Staged</span>
+          <span style="color:var(--status-verified); font-weight:700;">✓ Ready</span>
+        </div>
+      `;
+
+      if (queue) {
+        queue.prepend(item);
+      }
+    }
+
+    showToast(`${files.length} document(s) added to ingestion queue.`, 'success');
+  }
+
+  if (processBtn) {
+    processBtn.addEventListener('click', () => {
+      showToast('Processing staged documents: OCR and entity extraction complete!', 'success');
+      setTimeout(() => {
+        navigateToView('library');
+      }, 800);
+    });
+  }
+}
+
+/**
+ * 6. Header Live Clock
  */
 function initLiveClock() {
   const clockElement = document.getElementById('headerClock');
@@ -97,31 +342,37 @@ function initLiveClock() {
 }
 
 /**
- * 4. Live Table Search Filter
+ * 7. Live Table & Global Search Filter
  */
 function initSearchFilter() {
   const searchInput = document.getElementById('globalSearchInput');
   const casesTable = document.getElementById('recentCasesTable');
 
-  if (!searchInput || !casesTable) return;
+  if (!searchInput) return;
 
   searchInput.addEventListener('input', (e) => {
     const query = e.target.value.toLowerCase().trim();
-    const rows = casesTable.querySelectorAll('tbody tr');
 
-    rows.forEach((row) => {
-      const text = row.textContent.toLowerCase();
-      if (text.includes(query)) {
-        row.style.display = '';
-      } else {
-        row.style.display = 'none';
-      }
+    // Filter table rows
+    if (casesTable) {
+      const rows = casesTable.querySelectorAll('tbody tr');
+      rows.forEach((row) => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+    }
+
+    // Filter case cards
+    const caseCards = document.querySelectorAll('#caseManagementGrid .case-card');
+    caseCards.forEach((card) => {
+      const text = card.textContent.toLowerCase();
+      card.style.display = text.includes(query) ? '' : 'none';
     });
   });
 }
 
 /**
- * 5. Case Modal Logic (Create New Investigation)
+ * 8. Case Modal Logic (Create New Investigation Case)
  */
 function initCaseModal() {
   const modal = document.getElementById('newCaseModal');
@@ -130,6 +381,7 @@ function initCaseModal() {
   const cancelBtn = document.getElementById('cancelCaseModalBtn');
   const caseForm = document.getElementById('newCaseForm');
   const tableBody = document.querySelector('#recentCasesTable tbody');
+  const casesGrid = document.getElementById('caseManagementGrid');
 
   if (!modal) return;
 
@@ -154,17 +406,19 @@ function initCaseModal() {
   });
 
   // Handle Form Submission
-  if (caseForm && tableBody) {
+  if (caseForm) {
     caseForm.addEventListener('submit', (e) => {
       e.preventDefault();
 
       const titleInput = document.getElementById('caseTitleInput');
       const priorityInput = document.getElementById('casePriorityInput');
       const investigatorInput = document.getElementById('caseInvestigatorInput');
+      const notesInput = document.getElementById('caseNotesInput');
 
       const title = titleInput.value.trim();
       const priority = priorityInput.value;
       const investigator = investigatorInput.value.trim() || 'Misari Vadalia';
+      const notes = notesInput ? notesInput.value.trim() : 'Preliminary inquiry';
 
       if (!title) {
         showToast('Please provide a valid case title.', 'warning');
@@ -172,49 +426,91 @@ function initCaseModal() {
       }
 
       // Generate random case reference number
-      const randomId = 'VX-' + Math.floor(1000 + Math.random() * 9000);
-
-      // Create new row
-      const newRow = document.createElement('tr');
+      const randomId = 'VX-' + Math.floor(2100 + Math.random() * 8000);
       const priorityClass =
         priority === 'High' ? 'pill-high' : priority === 'Medium' ? 'pill-medium' : 'pill-low';
+      const priorityDataAttr = priority.toLowerCase();
 
-      newRow.innerHTML = `
-        <td class="case-id-cell">${randomId}</td>
-        <td>
-          <span class="case-title-cell">${escapeHtml(title)}</span>
-          <span class="case-subtitle">Lead: ${escapeHtml(investigator)} • Created just now</span>
-        </td>
-        <td>0 docs</td>
-        <td><span class="pill-tag ${priorityClass}">${priority}</span></td>
-        <td><span class="pill-tag pill-status">Active</span></td>
-        <td>Just now</td>
-        <td>
-          <div class="action-btn-group">
-            <button class="table-action-btn" onclick="showToast('Opened case ${randomId}', 'info')">Inspect</button>
-            <button class="table-action-btn" onclick="showToast('Upload triggered for ${randomId}', 'info')">Upload</button>
+      // 1. Insert row in Dashboard table if present
+      if (tableBody) {
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+          <td class="case-id-cell">${randomId}</td>
+          <td>
+            <span class="case-title-cell">${escapeHtml(title)}</span>
+            <span class="case-subtitle">Lead: ${escapeHtml(investigator)} • Created just now</span>
+          </td>
+          <td>0 docs</td>
+          <td><span class="pill-tag ${priorityClass}">${priority}</span></td>
+          <td><span class="pill-tag pill-status">Active</span></td>
+          <td>
+            <div class="action-btn-group">
+              <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+              <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+            </div>
+          </td>
+        `;
+        tableBody.insertBefore(newRow, tableBody.firstChild);
+      }
+
+      // 2. Insert card in Case Management grid if present
+      if (casesGrid) {
+        const newCard = document.createElement('div');
+        newCard.className = 'case-card';
+        newCard.setAttribute('data-priority', priorityDataAttr);
+        newCard.innerHTML = `
+          <div class="case-card-header">
+            <span class="case-card-id">${randomId}</span>
+            <span class="pill-tag ${priorityClass}">${priority}</span>
           </div>
-        </td>
-      `;
+          <h3 class="case-card-title">${escapeHtml(title)}</h3>
+          <p class="case-card-desc">${escapeHtml(notes || 'Newly created investigation case ready for artifact ingestion.')}</p>
+          <div class="case-card-metrics">
+            <div class="case-metric-item">
+              <span class="case-metric-val">0</span>
+              <span class="case-metric-lbl">Documents</span>
+            </div>
+            <div class="case-metric-item">
+              <span class="case-metric-val" style="color:var(--status-verified);">0</span>
+              <span class="case-metric-lbl">Anomalies</span>
+            </div>
+            <div class="case-metric-item">
+              <span class="case-metric-val" style="color:var(--primary-accent);">Active</span>
+              <span class="case-metric-lbl">Status</span>
+            </div>
+          </div>
+          <div class="case-card-footer">
+            <span class="case-author-note">Lead: ${escapeHtml(investigator)}</span>
+            <div class="action-btn-group">
+              <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
+              <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
+            </div>
+          </div>
+        `;
+        casesGrid.prepend(newCard);
+      }
 
-      // Insert at the top of the table
-      tableBody.insertBefore(newRow, tableBody.firstChild);
-
-      // Update Active Cases Counter
+      // 3. Update Active Cases Counter & Sidebar Badge
       const activeCasesCounter = document.getElementById('activeCasesCount');
       if (activeCasesCounter) {
         let count = parseInt(activeCasesCounter.textContent) || 0;
         activeCasesCounter.textContent = count + 1;
       }
 
+      const sidebarCaseBadge = document.getElementById('sidebarCaseBadge');
+      if (sidebarCaseBadge) {
+        let badgeCount = parseInt(sidebarCaseBadge.textContent) || 0;
+        sidebarCaseBadge.textContent = badgeCount + 1;
+      }
+
       closeModal();
-      showToast(`Case ${randomId} successfully created and registered!`, 'success');
+      showToast(`Case ${randomId} registered in active inventory!`, 'success');
     });
   }
 }
 
 /**
- * 6. Toast Notification Manager
+ * 9. Toast Notification Manager
  */
 function initToastSystem() {
   let container = document.getElementById('toastContainer');
@@ -252,7 +548,7 @@ function showToast(message, type = 'info') {
 }
 
 /**
- * 7. Keyboard Shortcuts (Ctrl+K, ESC)
+ * 10. Keyboard Shortcuts (Ctrl+K, ESC, Ctrl+P)
  */
 function initKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
@@ -274,60 +570,6 @@ function initKeyboardShortcuts() {
 }
 
 /**
- * 0. Theme Manager (High-Contrast Crisp Light Default + Dark Mode Toggle)
- */
-function initThemeManager() {
-  const themeToggleBtn = document.getElementById('themeToggleBtn');
-  const themeIcon = document.getElementById('themeToggleIcon');
-  const themeText = document.getElementById('themeToggleText');
-
-  // Default to high-contrast crisp light theme
-  const savedTheme = localStorage.getItem('vexora-theme') || 'light';
-  applyTheme(savedTheme);
-
-  if (themeToggleBtn) {
-    themeToggleBtn.addEventListener('click', () => {
-      // Trigger icon spring rotation animation
-      themeToggleBtn.classList.add('animating');
-      setTimeout(() => themeToggleBtn.classList.remove('animating'), 500);
-
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-
-      // Use native View Transitions API if supported for zero-glitch GPU cross-fade
-      if (document.startViewTransition) {
-        document.startViewTransition(() => {
-          applyTheme(newTheme);
-        });
-      } else {
-        // Fallback: apply temporary transition class
-        document.documentElement.classList.add('theme-transitioning');
-        applyTheme(newTheme);
-        setTimeout(() => {
-          document.documentElement.classList.remove('theme-transitioning');
-        }, 400);
-      }
-
-      localStorage.setItem('vexora-theme', newTheme);
-      showToast(`Switched to ${newTheme.toUpperCase()} theme mode`, 'info');
-    });
-  }
-
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (themeIcon && themeText) {
-      if (theme === 'dark') {
-        themeIcon.textContent = '🌙';
-        themeText.textContent = 'Dark';
-      } else {
-        themeIcon.textContent = '☀️';
-        themeText.textContent = 'Light';
-      }
-    }
-  }
-}
-
-/**
  * Helper to prevent XSS in client-side text injection
  */
 function escapeHtml(text) {
@@ -335,4 +577,3 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
-
