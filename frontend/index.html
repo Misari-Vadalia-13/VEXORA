@@ -13,6 +13,10 @@
 
   <!-- Core Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
+
+  <!-- Brand Favicon -->
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="shortcut icon" href="favicon.ico">
 </head>
 <body>
 
@@ -26,10 +30,12 @@
       <!-- Brand Header -->
       <div class="sidebar-header">
         <div class="brand-wrapper">
-          <div class="brand-icon" aria-hidden="true">V</div>
+          <div class="brand-icon" aria-hidden="true" title="VEXORA Forensics">
+            <img src="images/logo-icon.png" alt="VEXORA Icon" class="brand-icon-img">
+          </div>
           <div class="brand-details">
             <span class="brand-name">VEXORA</span>
-            <span class="brand-badge">Forensics AI • v0.2</span>
+            <span class="brand-badge">Seeing What Others Overlook</span>
           </div>
         </div>
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle Sidebar" title="Collapse/Expand">
@@ -178,12 +184,21 @@
           
           <!-- Hero Banner -->
           <div class="hero-banner">
-            <div class="banner-content">
-              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 9 Active (System Fully Integrated & Operational)</span>
-              <h1 class="banner-title">Document Forensics & Contextual Intelligence</h1>
-              <p class="banner-desc">
-                Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
-              </p>
+            <div class="hero-banner-inner">
+              <div class="banner-content">
+                <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 9 Active (System Fully Integrated & Operational)</span>
+                <h1 class="banner-title">Document Forensics & Contextual Intelligence</h1>
+                <p class="banner-desc">
+                  Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
+                </p>
+                <div class="banner-motto-badge">
+                  <span class="motto-icon">◈</span>
+                  <strong class="motto-text">SEEING WHAT OTHERS OVERLOOK</strong>
+                </div>
+              </div>
+              <div class="hero-banner-logo" aria-hidden="true">
+                <img src="images/logo.png" alt="VEXORA — Seeing What Others Overlook" class="hero-logo-display">
+              </div>
             </div>
           </div>
 
@@ -1175,10 +1190,13 @@
           <!-- Printable Dossier Canvas -->
           <div class="dossier-container" id="dossierPrintCanvas">
             <div class="dossier-header-block">
-              <div>
-                <span class="dossier-ref" id="dossierCaseRef">VEXORA OFFICIAL FORENSIC DOSSIER • CASE SELECTOR</span>
-                <h2 class="dossier-title" id="dossierCaseTitle">Investigation Audit Report</h2>
-                <span style="font-size:0.82rem; color:var(--text-muted);" id="dossierCaseMeta">Lead Investigator: Misari Vadalia • Generated: Current Date</span>
+              <div style="display:flex; align-items:center; gap:16px;">
+                <img src="images/logo-icon.png" alt="VEXORA Emblem" class="dossier-brand-emblem">
+                <div>
+                  <span class="dossier-ref" id="dossierCaseRef">VEXORA OFFICIAL FORENSIC DOSSIER • CASE SELECTOR</span>
+                  <h2 class="dossier-title" id="dossierCaseTitle">Investigation Audit Report</h2>
+                  <span style="font-size:0.82rem; color:var(--text-muted);" id="dossierCaseMeta">Lead Investigator: Misari Vadalia • Generated: Current Date</span>
+                </div>
               </div>
               <span class="pill-tag pill-high" id="dossierRiskBadge" style="font-size:0.85rem; padding:6px 14px;">Assessment Pending</span>
             </div>
@@ -1390,7 +1408,7 @@
       <!-- Application Footer -->
       <footer class="app-footer">
         <div>
-          <span>© 2026 VEXORA — Document Forensics & Contextual Intelligence.</span>
+          <span>© 2026 VEXORA • Seeing What Others Overlook.</span>
           <span style="margin-left: 8px; color: var(--text-muted);">
             <em>Disclaimer: Findings are automated forensic observations subject to human investigator review.</em>
           </span>

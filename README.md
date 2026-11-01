@@ -1,11 +1,15 @@
-# VEXORA
-### AI-Powered Document Forensics & Contextual Intelligence System
+<p align="center">
+  <img src="frontend/images/logo.png" alt="VEXORA — Seeing What Others Overlook" width="480">
+</p>
 
-**Analyze. Investigate. Connect. Discover.**
+<p align="center">
+  <b>SEEING WHAT OTHERS OVERLOOK</b><br>
+  <i>AI-Powered Document Forensics & Contextual Intelligence System</i>
+</p>
 
 VEXORA is an AI-powered document analysis and forensic investigation platform designed to help users examine digital documents, extract meaningful information, identify potential inconsistencies, and connect findings across multiple documents.
 
-The system aims to combine document processing, OCR, entity extraction, contextual analysis, and evidence mapping into one centralized investigation workspace.
+The system combines document processing, OCR, entity extraction, contextual analysis, and evidence mapping into one centralized investigation workspace.
 
 ---
 
@@ -231,6 +235,7 @@ VEXORA is being developed as a learning-focused software project with an emphasi
 ---
 
 <p align="center">
+  <img src="frontend/images/logo-icon.png" alt="VEXORA Emblem" width="64"><br><br>
   <b>VEXORA</b><br>
-  Analyze. Investigate. Connect. Discover.
+  <i>Seeing What Others Overlook</i>
 </p>

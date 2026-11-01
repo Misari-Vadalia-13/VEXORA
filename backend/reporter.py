@@ -277,12 +277,25 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     y = 0.0
 
     # 1. Top Header Banner (Dark Slate #0f172a)
-    page.draw_rect(fitz.Rect(0, 0, PAGE_WIDTH, 72), color=None, fill=(15/255, 23/255, 42/255))
-    page.insert_text(fitz.Point(MARGIN_LEFT, 32), "VEXORA", fontname="hebo", fontsize=18, color=(1, 1, 1))
-    page.insert_text(fitz.Point(MARGIN_LEFT + 90, 32), "• FORENSIC INVESTIGATION DOSSIER", fontname="hebo", fontsize=12, color=(56/255, 189/255, 248/255))
-    page.insert_text(fitz.Point(MARGIN_LEFT, 52), f"Case ID: {case['id']} | Title: {case['title']} | Date: {data['generated_at']}", fontname="helv", fontsize=8.5, color=(148/255, 163/255, 184/255))
+    page.draw_rect(fitz.Rect(0, 0, PAGE_WIDTH, 78), color=None, fill=(15/255, 23/255, 42/255))
 
-    y = 86.0
+    # Insert official brand logo image on top-right of banner if available
+    from backend.config import FRONTEND_DIR
+    logo_path = FRONTEND_DIR / 'images' / 'logo.png'
+    if logo_path.exists():
+        try:
+            # Aspect ratio 1024x682 (~1.5:1). Target: width 84, height 56
+            logo_rect = fitz.Rect(MARGIN_RIGHT - 88, 11, MARGIN_RIGHT, 67)
+            page.insert_image(logo_rect, filename=str(logo_path))
+        except Exception:
+            pass
+
+    page.insert_text(fitz.Point(MARGIN_LEFT, 28), "VEXORA", fontname="hebo", fontsize=18, color=(1, 1, 1))
+    page.insert_text(fitz.Point(MARGIN_LEFT + 86, 28), "• FORENSIC INVESTIGATION DOSSIER", fontname="hebo", fontsize=11, color=(56/255, 189/255, 248/255))
+    page.insert_text(fitz.Point(MARGIN_LEFT, 44), "SEEING WHAT OTHERS OVERLOOK", fontname="hebo", fontsize=7.5, color=(56/255, 189/255, 248/255))
+    page.insert_text(fitz.Point(MARGIN_LEFT, 62), f"Case ID: {case['id']} | Title: {case['title']} | Date: {data['generated_at']}", fontname="helv", fontsize=8.5, color=(148/255, 163/255, 184/255))
+
+    y = 92.0
 
     # 2. Mandatory Human Review Disclaimer Box (Amber #fffbeb with #f59e0b border)
     page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 42), color=(245/255, 158/255, 11/255), fill=(255/255, 251/255, 235/255), width=1)
@@ -664,11 +677,15 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
 <body>
     <div class="dossier-paper">
         <div class="dossier-header">
-            <div>
-                <h1 class="brand-title">VEXORA FORENSIC DOSSIER</h1>
-                <div style="font-size:13px; color:#64748b;">
-                    Case ID: <strong>{case['id']}</strong> • Title: <strong>{case['title']}</strong><br>
-                    Generated: {data['generated_at']} • Lead Analyst: <strong>{user}</strong>
+            <div style="display:flex; align-items:center; gap:16px;">
+                <img src="/images/logo-icon.png" alt="VEXORA Emblem" style="width:52px; height:52px; border-radius:8px; object-fit:cover; border:1px solid #0f172a;" onerror="this.style.display='none'">
+                <div>
+                    <h1 class="brand-title">VEXORA FORENSIC DOSSIER</h1>
+                    <div style="font-size:11px; font-weight:700; color:#0284c7; letter-spacing:1px; margin-bottom:4px;">SEEING WHAT OTHERS OVERLOOK</div>
+                    <div style="font-size:13px; color:#64748b;">
+                        Case ID: <strong>{case['id']}</strong> • Title: <strong>{case['title']}</strong><br>
+                        Generated: {data['generated_at']} • Lead Analyst: <strong>{user}</strong>
+                    </div>
                 </div>
             </div>
             <div style="text-align:right;">

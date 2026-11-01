@@ -121,6 +121,19 @@ def create_app(config_class=Config):
             assets_dir.mkdir(parents=True, exist_ok=True)
         return send_from_directory(assets_dir, filename)
 
+    @app.route('/images/<path:filename>')
+    def serve_images(filename):
+        """Serves brand and logo image assets."""
+        images_dir = FRONTEND_DIR / 'images'
+        if not images_dir.exists():
+            images_dir.mkdir(parents=True, exist_ok=True)
+        return send_from_directory(images_dir, filename)
+
+    @app.route('/favicon.ico')
+    def serve_favicon():
+        """Serves root favicon."""
+        return send_from_directory(FRONTEND_DIR, 'favicon.ico')
+
     # ==========================================
     # System & Health API Routes
     # ==========================================
