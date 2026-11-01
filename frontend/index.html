@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="VEXORA — AI-Powered Document Forensics and Contextual Intelligence System. Ingest, analyze, correlate, and investigate documents with evidence-driven confidence.">
+  <title>VEXORA — Document Forensics & Contextual Intelligence</title>
+
+  <!-- Typography: Google Fonts (Outfit & Plus Jakarta Sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ======================================================================
+         1. SIDEBAR NAVIGATION
+         ====================================================================== -->
+    <aside class="sidebar" id="vexoraSidebar" aria-label="Main Navigation">
+      
+      <!-- Brand Header -->
+      <div class="sidebar-header">
+        <div class="brand-wrapper">
+          <div class="brand-icon" aria-hidden="true">V</div>
+          <div class="brand-details">
+            <span class="brand-name">VEXORA</span>
+            <span class="brand-badge">Forensics AI • v0.1</span>
+          </div>
+        </div>
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle Sidebar" title="Collapse/Expand">
+          ◂
+        </button>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="sidebar-nav">
+        <span class="nav-section-label">Investigation Ops</span>
+        
+        <a href="#dashboard" class="nav-item active" id="navDashboard" data-view="dashboard">
+          <span class="nav-icon" aria-hidden="true">📊</span>
+          <span class="nav-label">Dashboard</span>
+        </a>
+
+        <a href="#cases" class="nav-item" id="navCases" data-view="cases">
+          <span class="nav-icon" aria-hidden="true">📁</span>
+          <span class="nav-label">Case Management</span>
+          <span class="nav-pill">8</span>
+        </a>
+
+        <a href="#upload" class="nav-item" id="navUpload" data-view="upload">
+          <span class="nav-icon" aria-hidden="true">📤</span>
+          <span class="nav-label">Document Ingestion</span>
+        </a>
+
+        <a href="#library" class="nav-item" id="navLibrary" data-view="library">
+          <span class="nav-icon" aria-hidden="true">📚</span>
+          <span class="nav-label">Document Library</span>
+        </a>
+
+        <span class="nav-section-label">Forensic Intelligence</span>
+
+        <a href="#forensics" class="nav-item" id="navForensics" data-view="forensics">
+          <span class="nav-icon" aria-hidden="true">🔬</span>
+          <span class="nav-label">Forensic Inspection</span>
+        </a>
+
+        <a href="#comparison" class="nav-item" id="navComparison" data-view="comparison">
+          <span class="nav-icon" aria-hidden="true">⚖️</span>
+          <span class="nav-label">Cross-Doc Compare</span>
+        </a>
+
+        <a href="#evidence" class="nav-item" id="navEvidence" data-view="evidence">
+          <span class="nav-icon" aria-hidden="true">🗺️</span>
+          <span class="nav-label">Evidence Graph</span>
+        </a>
+
+        <a href="#dossier" class="nav-item" id="navDossier" data-view="dossier">
+          <span class="nav-icon" aria-hidden="true">📑</span>
+          <span class="nav-label">Case Dossiers</span>
+        </a>
+
+        <span class="nav-section-label">Configuration</span>
+
+        <a href="#settings" class="nav-item" id="navSettings" data-view="settings">
+          <span class="nav-icon" aria-hidden="true">⚙️</span>
+          <span class="nav-label">System Settings</span>
+        </a>
+      </nav>
+
+      <!-- System Health Indicator -->
+      <div class="sidebar-footer">
+        <div class="system-status-card">
+          <span class="status-dot-pulse" aria-hidden="true"></span>
+          <div class="status-text-group">
+            <span class="status-title">Core Engine Online</span>
+            <span class="status-subtitle">Local Node • Verified</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ======================================================================
+         2. MAIN APPLICATION WRAPPER
+         ====================================================================== -->
+    <div class="main-wrapper">
+
+      <!-- Top Header / Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Mobile Menu">
+            ☰
+          </button>
+          <div class="breadcrumb-trail" aria-label="Breadcrumb">
+            <span class="breadcrumb-root">VEXORA</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-active" id="breadcrumbActive">Investigation Dashboard</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Global Search Input -->
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input type="text" id="globalSearchInput" class="search-input" placeholder="Search cases, docs, entities..." aria-label="Search cases">
+            <span class="kbd-shortcut">Ctrl+K</span>
+          </div>
+
+          <!-- Topbar Actions -->
+          <div class="topbar-actions">
+            <!-- Live Clock Display -->
+            <button class="btn-secondary" id="clockWidget" title="Local System Time" style="padding: 7px 12px; font-family: var(--font-mono); font-size: 0.8rem;">
+              🕒 <span id="headerClock">--:--:--</span>
+            </button>
+
+            <!-- Notifications -->
+            <button class="btn-icon" id="notificationsBtn" title="Forensic Alerts" onclick="showToast('No critical alerts pending review.', 'info')">
+              🔔
+              <span class="badge-dot" aria-label="Unread alerts"></span>
+            </button>
+
+            <!-- Theme Toggle (Light / Dark) -->
+            <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle Theme (Light / Dark)">
+              <span id="themeToggleIcon">☀️</span>
+              <span id="themeToggleText">Light</span>
+            </button>
+
+            <!-- Primary Action: New Case Trigger -->
+            <button class="btn-primary" id="createNewCaseBtn" data-action="open-new-case">
+              <span>+</span>
+              <span>New Case</span>
+            </button>
+
+            <!-- Lead User Profile -->
+            <div class="user-profile-badge">
+              <div class="avatar-circle">MV</div>
+              <div class="user-meta">
+                <span class="user-name">Misari Vadalia</span>
+                <span class="user-role">Lead Investigator</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Dashboard Content -->
+      <main class="content-body" id="mainDashboardView">
+
+        <!-- Welcome Banner -->
+        <section class="hero-banner">
+          <div class="banner-content">
+            <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 1 Active</span>
+            <h1 class="banner-title">Document Forensics & Contextual Investigation</h1>
+            <p class="banner-desc">
+              Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
+            </p>
+          </div>
+        </section>
+
+        <!-- Metric Statistics Cards -->
+        <section class="stats-grid" aria-label="System Metrics">
+          
+          <div class="stat-card cyan">
+            <div class="stat-info">
+              <span class="stat-label">Active Cases</span>
+              <span class="stat-value" id="activeCasesCount">8</span>
+              <span class="stat-meta meta-positive">↑ 2 ongoing reviews</span>
+            </div>
+            <div class="stat-icon-wrapper" aria-hidden="true">📁</div>
+          </div>
+
+          <div class="stat-card indigo">
+            <div class="stat-info">
+              <span class="stat-label">Documents Indexed</span>
+              <span class="stat-value" id="totalDocsCount">24</span>
+              <span class="stat-meta meta-neutral">PDFs, JPGs & PNGs</span>
+            </div>
+            <div class="stat-icon-wrapper" aria-hidden="true">📄</div>
+          </div>
+
+          <div class="stat-card amber">
+            <div class="stat-info">
+              <span class="stat-label">Flagged Inconsistencies</span>
+              <span class="stat-value" id="flaggedAnomaliesCount">14</span>
+              <span class="stat-meta meta-warning">⚠ 4 requiring human review</span>
+            </div>
+            <div class="stat-icon-wrapper" aria-hidden="true">⚠️</div>
+          </div>
+
+          <div class="stat-card emerald">
+            <div class="stat-info">
+              <span class="stat-label">Evidence Correlated</span>
+              <span class="stat-value" id="evidenceNodesCount">52</span>
+              <span class="stat-meta meta-positive">✓ Mapped to source pages</span>
+            </div>
+            <div class="stat-icon-wrapper" aria-hidden="true">🔗</div>
+          </div>
+
+        </section>
+
+        <!-- Investigation Workflow Pipeline Visualizer -->
+        <section class="pipeline-section" aria-label="Investigation Workflow Pipeline">
+          <div class="section-header">
+            <div class="section-title-group">
+              <h2 class="section-title">Forensic Processing Pipeline</h2>
+              <span class="section-subtitle">VEXORA 7-stage evidence extraction and contextual correlation architecture</span>
+            </div>
+          </div>
+
+          <div class="pipeline-stepper">
+            <div class="pipeline-step active">
+              <span class="step-num">Stage 01</span>
+              <span class="step-name">Document Ingest</span>
+              <span class="step-status">PDF / Images</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 02</span>
+              <span class="step-name">Classification</span>
+              <span class="step-status">Doc Type ID</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 03</span>
+              <span class="step-name">Text & OCR</span>
+              <span class="step-status">PyMuPDF / OCR</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 04</span>
+              <span class="step-name">Entity Extraction</span>
+              <span class="step-status">spaCy NER</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 05</span>
+              <span class="step-name">Forensic Analysis</span>
+              <span class="step-status">Visual & Font</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 06</span>
+              <span class="step-name">Cross-Doc Match</span>
+              <span class="step-status">Discrepancy Check</span>
+            </div>
+
+            <div class="pipeline-step">
+              <span class="step-num">Stage 07</span>
+              <span class="step-name">Case Dossier</span>
+              <span class="step-status">Export Report</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Dual Column: Recent Cases Table & Live Forensic Feed -->
+        <div class="dashboard-grid-dual">
+          
+          <!-- Recent Investigation Cases Table -->
+          <section class="card-panel" aria-label="Recent Investigation Cases">
+            <div class="section-header">
+              <div class="section-title-group">
+                <h2 class="section-title">Active Investigation Cases</h2>
+                <span class="section-subtitle">Live cases requiring forensic analysis and contextual validation</span>
+              </div>
+              <button class="btn-secondary" data-action="open-new-case" style="padding: 6px 12px; font-size: 0.8rem;">
+                + Add Case
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table" id="recentCasesTable">
+                <thead>
+                  <tr>
+                    <th>Case Ref</th>
+                    <th>Case Details</th>
+                    <th>Documents</th>
+                    <th>Risk Level</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="case-id-cell">VX-2041</td>
+                    <td>
+                      <span class="case-title-cell">Loan Application #8841-B</span>
+                      <span class="case-subtitle">Lead: Misari Vadalia • Inconsistency in salary slips</span>
+                    </td>
+                    <td>4 docs</td>
+                    <td><span class="pill-tag pill-high">High Risk</span></td>
+                    <td><span class="pill-tag pill-status">In Review</span></td>
+                    <td>10m ago</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2041', 'info')">Inspect</button>
+                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2041', 'info')">Upload</button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="case-id-cell">VX-2039</td>
+                    <td>
+                      <span class="case-title-cell">Identity Verification Dossier</span>
+                      <span class="case-subtitle">Lead: Misari Vadalia • Cross-referencing Aadhaar & Passport</span>
+                    </td>
+                    <td>2 docs</td>
+                    <td><span class="pill-tag pill-medium">Medium</span></td>
+                    <td><span class="pill-tag pill-status">Processing</span></td>
+                    <td>1h ago</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2039', 'info')">Inspect</button>
+                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2039', 'info')">Upload</button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="case-id-cell">VX-2038</td>
+                    <td>
+                      <span class="case-title-cell">Procurement Invoice Discrepancy</span>
+                      <span class="case-subtitle">Lead: Forensic Desk • Tax ID mismatch detected</span>
+                    </td>
+                    <td>6 docs</td>
+                    <td><span class="pill-tag pill-high">High Risk</span></td>
+                    <td><span class="pill-tag pill-status">Under Analysis</span></td>
+                    <td>3h ago</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2038', 'info')">Inspect</button>
+                        <button class="table-action-btn" onclick="showToast('Upload initiated for VX-2038', 'info')">Upload</button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="case-id-cell">VX-2035</td>
+                    <td>
+                      <span class="case-title-cell">Employment Declaration Check</span>
+                      <span class="case-subtitle">Lead: Misari Vadalia • Verification complete</span>
+                    </td>
+                    <td>3 docs</td>
+                    <td><span class="pill-tag pill-low">Low</span></td>
+                    <td><span class="pill-tag pill-status">Verified</span></td>
+                    <td>Yesterday</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="table-action-btn" onclick="showToast('Inspecting Case VX-2035', 'info')">Inspect</button>
+                        <button class="table-action-btn" onclick="showToast('Dossier ready for VX-2035', 'success')">Dossier</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Live Forensic Anomaly Stream -->
+          <section class="card-panel" aria-label="Forensic Anomaly Alerts">
+            <div class="section-header">
+              <div class="section-title-group">
+                <h2 class="section-title">Forensic Anomaly Feed</h2>
+                <span class="section-subtitle">Real-time alerts flagged for human investigator inspection</span>
+              </div>
+            </div>
+
+            <div class="anomaly-feed">
+              <div class="anomaly-item critical">
+                <div class="anomaly-top">
+                  <span class="anomaly-type">Cross-Doc Mismatch</span>
+                  <span class="anomaly-time">14m ago</span>
+                </div>
+                <span class="anomaly-title">Date of Birth Conflict</span>
+                <p class="anomaly-desc">Document "ID_Card.png" states DOB 14/08/1996 while "Tax_Return.pdf" states 14/08/1998.</p>
+              </div>
+
+              <div class="anomaly-item warning">
+                <div class="anomaly-top">
+                  <span class="anomaly-type">Visual Forensics</span>
+                  <span class="anomaly-time">1h ago</span>
+                </div>
+                <span class="anomaly-title">Font Typographic Variation</span>
+                <p class="anomaly-desc">Salary field on Page 2 exhibits altered kerning and mismatched Helvetica Neue weight.</p>
+              </div>
+
+              <div class="anomaly-item warning">
+                <div class="anomaly-top">
+                  <span class="anomaly-type">Contextual Anomaly</span>
+                  <span class="anomaly-time">2h ago</span>
+                </div>
+                <span class="anomaly-title">Invoice Date Precedes PO Date</span>
+                <p class="anomaly-desc">Invoice date (02-Jan-2025) appears 18 days prior to Purchase Order approval date.</p>
+              </div>
+
+              <div class="anomaly-item verified">
+                <div class="anomaly-top">
+                  <span class="anomaly-type">Entity Correlated</span>
+                  <span class="anomaly-time">4h ago</span>
+                </div>
+                <span class="anomaly-title">Organization Name Verified</span>
+                <p class="anomaly-desc">Corporate registry ID matches across bank declaration and legal deed.</p>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+      </main>
+
+      <!-- Application Footer -->
+      <footer class="app-footer">
+        <div>
+          <span>© 2026 VEXORA — Document Forensics & Contextual Intelligence.</span>
+          <span style="margin-left: 8px; color: var(--text-muted);">
+            <em>Disclaimer: Findings are automated forensic observations subject to human investigator review.</em>
+          </span>
+        </div>
+        <div class="footer-links">
+          <a href="#docs" class="footer-link" onclick="showToast('Opening VEXORA Documentation', 'info')">Docs</a>
+          <span>•</span>
+          <a href="#roadmap" class="footer-link" onclick="showToast('Phase 1 Active (Frontend Foundation)', 'info')">Roadmap</a>
+          <span>•</span>
+          <a href="#github" class="footer-link" onclick="showToast('Repository: Misari-Vadalia-13/VEXORA', 'info')">GitHub</a>
+        </div>
+      </footer>
+
+    </div>
+
+  </div>
+
+  <!-- ======================================================================
+       3. MODAL DIALOG: CREATE NEW INVESTIGATION CASE
+       ====================================================================== -->
+  <div class="modal-overlay" id="newCaseModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">Create Investigation Case</h3>
+        <button class="modal-close-btn" id="closeCaseModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+      
+      <form id="newCaseForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="caseTitleInput">Case Title / Reference Name *</label>
+            <input type="text" id="caseTitleInput" class="form-control" placeholder="e.g. Audit of Q3 Vendor Invoices" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="casePriorityInput">Investigation Priority</label>
+            <select id="casePriorityInput" class="form-control">
+              <option value="Medium">Medium Priority</option>
+              <option value="High">High Risk / Urgent</option>
+              <option value="Low">Low / Routine Check</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="caseInvestigatorInput">Lead Investigator</label>
+            <input type="text" id="caseInvestigatorInput" class="form-control" value="Misari Vadalia">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="caseNotesInput">Investigation Scope / Notes</label>
+            <textarea id="caseNotesInput" class="form-control" rows="3" placeholder="Briefly describe the documents and suspicious attributes to examine..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="cancelCaseModalBtn">Cancel</button>
+          <button type="submit" class="btn-primary" id="saveCaseModalBtn">Create Case</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Stack Container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- Core JavaScript -->
+  <script src="js/app.js"></script>
+</body>
+</html>

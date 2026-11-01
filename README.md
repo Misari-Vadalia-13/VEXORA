@@ -23,7 +23,7 @@ The following features represent the planned project scope. Their implementation
 
 | Feature | Description | Status |
 |---|---|---|
-| Investigation Dashboard | Centralized overview of investigation activities. | Planned |
+| Investigation Dashboard | Centralized overview of investigation activities. | Completed (UI) |
 | Case Management | Create and manage investigation cases. | Planned |
 | Document Upload | Upload PDF, JPG and PNG documents. | Planned |
 | Document Library | Organize and access uploaded documents. | Planned |
@@ -75,17 +75,17 @@ The planned investigation workflow:
 
 VEXORA is being developed through nine structured phases.
 
-| Phase | Development Area |
-|---|---|
-| 01 | Project Setup & UI Foundation |
-| 02 | Core Pages & User Interface |
-| 03 | Backend & Database Integration |
-| 04 | Document Upload & Classification |
-| 05 | OCR & Information Extraction |
-| 06 | Forensic & Contextual Analysis |
-| 07 | Cross-Document Comparison & Evidence Mapping |
-| 08 | Investigation Dossier & Report Generation |
-| 09 | Audit Trail, Testing & Finalization |
+| Phase | Development Area | Status |
+|---|---|---|
+| 01 | Project Setup & UI Foundation | **Completed** |
+| 02 | Core Pages & User Interface | Not Started |
+| 03 | Backend & Database Integration | Not Started |
+| 04 | Document Upload & Classification | Not Started |
+| 05 | OCR & Information Extraction | Not Started |
+| 06 | Forensic & Contextual Analysis | Not Started |
+| 07 | Cross-Document Comparison & Evidence Mapping | Not Started |
+| 08 | Investigation Dossier & Report Generation | Not Started |
+| 09 | Audit Trail, Testing & Finalization | Not Started |
 
 Each phase includes implementation, testing, documentation and a beginner-friendly learning report.
 
@@ -139,17 +139,24 @@ The planned development environment includes:
 - Git
 - A modern web browser
 
-### Future Setup
+### Running Phase 1 (Frontend Foundation)
 
+To run the application locally:
+
+```bash
+# Using Python built-in HTTP server:
+py -m http.server 8080
+
+# Then open in any web browser:
+http://localhost:8080
+```
+
+### Future Setup (Phases 3-9)
 Once the backend and dependencies are implemented, setup instructions will be provided here, including:
-
-- Repository cloning.
 - Virtual environment creation.
-- Dependency installation.
+- Dependency installation (`pip install -r requirements.txt`).
 - Database initialization.
-- Application execution.
-
-Only verified commands will be added to the final setup guide.
+- Flask server execution.
 
 ## 🧪 Testing
 
