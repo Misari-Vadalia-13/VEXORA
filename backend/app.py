@@ -34,13 +34,17 @@ from backend.models import (
     save_document_extraction,
     get_document_extraction,
     get_all_findings,
+    get_finding_by_id,
+    get_findings_by_document,
     create_finding,
+    update_finding,
     get_system_stats,
     get_audit_logs,
     log_audit
 )
 from backend.uploader import process_single_upload, allowed_file
 from backend.extractor import extract_document_content, ExtractionError
+from backend.analyzer import analyze_document
 
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
@@ -381,6 +385,42 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"No extraction data found for document '{doc_id}'. Please trigger extraction first."}), 404
         return jsonify({'success': True, 'document_id': doc_id, 'data': data}), 200
 
+    @app.route('/api/documents/<doc_id>/analyze', methods=['POST'])
+    def api_analyze_document(doc_id):
+        """
+        Executes Phase 6 forensic & contextual intelligence analysis:
+        visual typography, font consistency, text overlaps, boundary checks,
+        missing fields, conflicting identifiers, chronological and monetary consistency.
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        try:
+            user = session.get('username', 'alex.turner')
+            result = analyze_document(doc_id, user=user)
+            if not result.get('success'):
+                return jsonify(result), 400
+            return jsonify(result), 200
+        except Exception as e:
+            app.logger.error(f"Analysis failure for {doc_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Forensic analysis failed: {str(e)}"}), 500
+
+    @app.route('/api/documents/<doc_id>/findings', methods=['GET'])
+    def api_get_document_findings(doc_id):
+        """Retrieves all forensic findings and anomalies for a specific document."""
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        findings = get_findings_by_document(doc_id)
+        return jsonify({
+            'success': True,
+            'document_id': doc_id,
+            'count': len(findings),
+            'data': findings
+        }), 200
+
     # ==========================================
     # Findings & Evidence API Routes
     # ==========================================
@@ -411,6 +451,33 @@ def create_app(config_class=Config):
                 'message': 'Forensic finding created successfully.',
                 'data': finding
             }), 201
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/findings/<finding_id>', methods=['GET'])
+    def api_get_finding(finding_id):
+        """Retrieves a single forensic finding record."""
+        finding = get_finding_by_id(finding_id)
+        if not finding:
+            return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
+        return jsonify({'success': True, 'data': finding}), 200
+
+    @app.route('/api/findings/<finding_id>', methods=['PATCH'])
+    def api_update_finding(finding_id):
+        """Updates status of a forensic finding ('Verified', 'Dismissed', 'Unresolved')."""
+        payload = request.get_json(silent=True) or {}
+        try:
+            user = session.get('username', 'alex.turner')
+            updated = update_finding(finding_id, payload, user=user)
+            if not updated:
+                return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
+            return jsonify({
+                'success': True,
+                'message': f"Finding '{finding_id}' status updated to {updated['status']}.",
+                'data': updated
+            }), 200
+        except ValidationError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 400
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 

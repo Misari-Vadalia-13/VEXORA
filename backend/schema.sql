@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS documents (
 -- 4. Forensic Findings & Evidence Table
 CREATE TABLE IF NOT EXISTS findings (
     id TEXT PRIMARY KEY,
-    case_id TEXT NOT NULL,
+    case_id TEXT,
     document_id TEXT,
     title TEXT NOT NULL,
     severity TEXT NOT NULL CHECK(severity IN ('Critical', 'High', 'Medium', 'Low', 'Info')),
@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS findings (
     description TEXT,
     confidence REAL DEFAULT 0.0,
     status TEXT NOT NULL DEFAULT 'Unresolved' CHECK(status IN ('Unresolved', 'Verified', 'Dismissed')),
+    page_number INTEGER DEFAULT 1,
+    coordinates TEXT,
+    rule_id TEXT,
+    evidence TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL

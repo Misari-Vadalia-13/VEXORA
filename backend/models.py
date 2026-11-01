@@ -14,6 +14,7 @@ VALID_PRIORITIES = {'Critical', 'High', 'Medium', 'Low'}
 VALID_CASE_STATUSES = {'Active', 'In Review', 'Pending', 'Archived', 'Solved'}
 VALID_DOCUMENT_STATUSES = {'Pending', 'Processing', 'Analyzed', 'Flagged', 'Clean'}
 VALID_FINDING_SEVERITIES = {'Critical', 'High', 'Medium', 'Low', 'Info'}
+VALID_FINDING_STATUSES = {'Unresolved', 'Verified', 'Dismissed'}
 
 class ValidationError(Exception):
     """Raised when incoming client payload fails validation criteria."""
@@ -312,6 +313,14 @@ def delete_document(doc_id, user="System"):
     log_audit("DOCUMENT_DELETED", "document", doc_id, f"Document '{doc['filename']}' deleted from system.", user)
     return True
 
+def update_document_status(doc_id, new_status, user="System"):
+    """Updates document status in SQLite and logs audit trail."""
+    if new_status not in VALID_DOCUMENT_STATUSES:
+        raise ValidationError(f"Invalid document status '{new_status}'.")
+    execute_db("UPDATE documents SET status = ? WHERE id = ?", (new_status, doc_id))
+    log_audit("DOCUMENT_STATUS_UPDATED", "document", doc_id, f"Status updated to: {new_status}", user)
+    return get_document_by_id(doc_id)
+
 def save_document_extraction(doc_id, extraction_data, user="System"):
     """Saves structured extraction results and full text into SQLite."""
     doc = query_db("SELECT * FROM documents WHERE id = ?", (doc_id,), one=True)
@@ -371,8 +380,36 @@ def get_all_findings(case_id=None, severity=None):
     query += " ORDER BY f.created_at DESC"
     return query_db(query, args)
 
+def get_finding_by_id(finding_id):
+    """Retrieves a single finding by identifier."""
+    return query_db(
+        """
+        SELECT f.*, c.title AS case_title, d.filename AS document_filename
+        FROM findings f
+        LEFT JOIN cases c ON f.case_id = c.id
+        LEFT JOIN documents d ON f.document_id = d.id
+        WHERE f.id = ?
+        """,
+        (finding_id,),
+        one=True
+    )
+
+def get_findings_by_document(doc_id):
+    """Retrieves all forensic findings associated with a specific document."""
+    return query_db(
+        """
+        SELECT f.*, c.title AS case_title, d.filename AS document_filename
+        FROM findings f
+        LEFT JOIN cases c ON f.case_id = c.id
+        LEFT JOIN documents d ON f.document_id = d.id
+        WHERE f.document_id = ?
+        ORDER BY f.page_number ASC, f.created_at ASC
+        """,
+        (doc_id,)
+    )
+
 def create_finding(data, user="System"):
-    """Adds a new forensic finding record."""
+    """Adds a new forensic finding record with coordinate and rule traceability."""
     year = datetime.now().year
     row = query_db("SELECT id FROM findings WHERE id LIKE ? ORDER BY id DESC LIMIT 1", (f"FND-{year}-%",), one=True)
     if row and row['id']:
@@ -387,27 +424,123 @@ def create_finding(data, user="System"):
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    coords = data.get('coordinates')
+    if isinstance(coords, (list, dict)):
+        coords = json.dumps(coords)
+
+    severity = data.get('severity', 'High')
+    if severity not in VALID_FINDING_SEVERITIES:
+        severity = 'High'
+
+    status = data.get('status', 'Unresolved')
+    if status not in VALID_FINDING_STATUSES:
+        status = 'Unresolved'
+
+    case_id = data.get('case_id')
+    if case_id:
+        exists = query_db("SELECT id FROM cases WHERE id = ?", (case_id,), one=True)
+        if not exists:
+            case_id = None
+    if not case_id:
+        any_case = query_db("SELECT id FROM cases LIMIT 1", one=True)
+        if any_case:
+            case_id = any_case['id']
+
     execute_db(
         """
-        INSERT INTO findings (id, case_id, document_id, title, severity, category, description, confidence, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO findings (
+            id, case_id, document_id, title, severity, category, description,
+            confidence, status, page_number, coordinates, rule_id, evidence, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             finding_id,
-            data['case_id'],
+            case_id,
             data.get('document_id'),
             data['title'],
-            data.get('severity', 'High'),
+            severity,
             data.get('category', 'Forensic Anomaly'),
             data.get('description', ''),
-            float(data.get('confidence', 0.0)),
-            data.get('status', 'Unresolved'),
+            float(data.get('confidence', 0.85)),
+            status,
+            int(data.get('page_number', 1)),
+            coords,
+            data.get('rule_id'),
+            data.get('evidence'),
             now
         )
     )
 
     log_audit("FINDING_FLAGGED", "finding", finding_id, f"Anomaly flagged: {data['title']}", user)
     return query_db("SELECT * FROM findings WHERE id = ?", (finding_id,), one=True)
+
+def update_finding(finding_id, update_data, user="System"):
+    """Updates status or notes for an existing finding."""
+    existing = query_db("SELECT * FROM findings WHERE id = ?", (finding_id,), one=True)
+    if not existing:
+        return None
+
+    new_status = update_data.get('status', existing['status'])
+    if new_status not in VALID_FINDING_STATUSES:
+        raise ValidationError(f"Invalid status '{new_status}'. Must be one of: {', '.join(sorted(VALID_FINDING_STATUSES))}.")
+
+    execute_db(
+        "UPDATE findings SET status = ? WHERE id = ?",
+        (new_status, finding_id)
+    )
+    log_audit("FINDING_UPDATED", "finding", finding_id, f"Finding status updated to: {new_status}", user)
+    return get_finding_by_id(finding_id)
+
+def save_document_findings(doc_id, findings_list, user="System"):
+    """
+    Persists analysis findings for a document. Clears previous automated
+    findings for this document to avoid duplication, then updates the document status.
+    """
+    doc = get_document_by_id(doc_id)
+    if not doc:
+        return []
+
+    case_id = doc.get('case_id')
+    if case_id:
+        exists = query_db("SELECT id FROM cases WHERE id = ?", (case_id,), one=True)
+        if not exists:
+            case_id = None
+    if not case_id:
+        any_case = query_db("SELECT id FROM cases LIMIT 1", one=True)
+        if any_case:
+            case_id = any_case['id']
+
+    # Clear prior findings for this document
+    execute_db("DELETE FROM findings WHERE document_id = ?", (doc_id,))
+
+    created_records = []
+    has_critical = False
+    has_high = False
+
+    for item in findings_list:
+        payload = dict(item)
+        payload['case_id'] = case_id
+        payload['document_id'] = doc_id
+        rec = create_finding(payload, user=user)
+        created_records.append(rec)
+        sev = payload.get('severity', 'Low')
+        if sev == 'Critical':
+            has_critical = True
+        elif sev == 'High':
+            has_high = True
+
+    # Update document status based on severity of findings
+    if has_critical or has_high:
+        new_status = 'Flagged'
+    elif created_records:
+        new_status = 'Analyzed'
+    else:
+        new_status = 'Clean'
+
+    update_document_status(doc_id, new_status, user=user)
+    log_audit("DOCUMENT_ANALYZED", "document", doc_id, f"Saved {len(created_records)} forensic findings (Status: {new_status}).", user)
+    return created_records
 
 # ==========================================
 # 5. System Statistics & Aggregations

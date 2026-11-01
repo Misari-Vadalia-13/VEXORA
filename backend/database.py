@@ -56,6 +56,17 @@ def init_db(db_path=None):
             cursor.execute("ALTER TABLE documents ADD COLUMN extracted_text TEXT")
         if 'extracted_data' not in cols and len(cols) > 0:
             cursor.execute("ALTER TABLE documents ADD COLUMN extracted_data TEXT")
+
+        cursor.execute("PRAGMA table_info(findings)")
+        f_cols = [row['name'] for row in cursor.fetchall()]
+        if 'page_number' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN page_number INTEGER DEFAULT 1")
+        if 'coordinates' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN coordinates TEXT")
+        if 'rule_id' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN rule_id TEXT")
+        if 'evidence' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN evidence TEXT")
         conn.commit()
     finally:
         conn.close()

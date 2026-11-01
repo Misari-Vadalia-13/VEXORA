@@ -711,7 +711,7 @@ async function initBackendSync() {
       // Update banner pill to show connected state
       const bannerPill = document.querySelector('.banner-pill');
       if (bannerPill) {
-        bannerPill.textContent = '⚡ VEXORA Intelligence Engine • Phase 5 Active (OCR & Information Extraction)';
+        bannerPill.textContent = '⚡ VEXORA Intelligence Engine • Phase 6 Active (Forensic & Contextual Analysis)';
       }
 
       // 1. Fetch live stats
@@ -765,8 +765,10 @@ async function initBackendSync() {
         }
       }
 
-      // 3. Fetch live documents and populate Document Library cards
+      // 3. Fetch live documents and populate Document Library cards & Inspector selector
       const docLibraryGrid = document.getElementById('docLibraryGrid');
+      const forensicDocSelector = document.getElementById('forensicDocSelector');
+
       if (docLibraryGrid) {
         try {
           const docsRes = await fetch(`${apiBase}/documents`);
@@ -774,6 +776,11 @@ async function initBackendSync() {
             const docsJson = await docsRes.json();
             if (docsJson.success && docsJson.data && docsJson.data.length > 0) {
               docLibraryGrid.innerHTML = '';
+
+              if (forensicDocSelector) {
+                forensicDocSelector.innerHTML = '';
+              }
+
               docsJson.data.forEach((doc) => {
                 const sizeMb = (doc.file_size / (1024 * 1024)).toFixed(1) + ' MB';
                 const icon = doc.file_type === 'pdf' ? '📄' : '🖼️';
@@ -787,6 +794,14 @@ async function initBackendSync() {
                   : catLower.includes('contract') || catLower.includes('agreement')
                   ? 'legal'
                   : 'all';
+
+                // Populate selector in Forensic Inspector
+                if (forensicDocSelector) {
+                  const opt = document.createElement('option');
+                  opt.value = doc.id;
+                  opt.textContent = `${doc.filename} (${doc.id})`;
+                  forensicDocSelector.appendChild(opt);
+                }
 
                 const card = document.createElement('div');
                 card.className = 'doc-card';
@@ -805,12 +820,18 @@ async function initBackendSync() {
                   </div>
                   <div class="doc-card-footer">
                     <button class="table-action-btn" onclick="triggerDocumentExtraction('${doc.id}')" title="Run OCR & Entity Extraction">⚡ Extract</button>
-                    <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
+                    <button class="table-action-btn" onclick="analyzeDocumentAndInspect('${doc.id}')" title="Run Forensic & Contextual Analysis">🔬 Analyze</button>
                     <a href="${apiBase}/documents/${doc.id}/download" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">Download</a>
                   </div>
                 `;
                 docLibraryGrid.appendChild(card);
               });
+
+              if (forensicDocSelector) {
+                forensicDocSelector.onchange = (e) => {
+                  loadDocumentFindings(e.target.value);
+                };
+              }
             }
           }
         } catch (e) {
@@ -853,4 +874,103 @@ window.triggerDocumentExtraction = async function(docId) {
     showToast('Failed to connect to extraction engine.', 'danger');
   }
 };
+
+/**
+ * Phase 6: Trigger Forensic & Contextual Analysis, then navigate to Forensic Inspector
+ */
+window.analyzeDocumentAndInspect = async function(docId) {
+  const apiBase = getApiBase();
+  showToast('Executing visual typography & contextual anomaly evaluation...', 'info');
+  try {
+    const res = await fetch(`${apiBase}/documents/${docId}/analyze`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`Analysis Complete! Risk Level: ${data.risk_level} (${data.findings_count} anomalies detected).`, data.risk_level.includes('Critical') ? 'danger' : 'warning');
+      console.log('[VEXORA Forensic Report]', data);
+
+      // Render findings in the Forensic Inspector view
+      renderForensicFindings(data.findings);
+
+      // Update selector in inspector if present
+      const selector = document.getElementById('forensicDocSelector');
+      if (selector) {
+        selector.value = docId;
+      }
+
+      // Switch view to Forensic Inspector
+      setTimeout(() => {
+        navigateToView('forensics');
+      }, 500);
+    } else {
+      showToast(`Forensic analysis failed: ${data.error || 'Unknown error'}`, 'danger');
+    }
+  } catch (err) {
+    console.error('[VEXORA Analysis Error]', err);
+    showToast('Failed to connect to forensic intelligence service.', 'danger');
+  }
+};
+
+/**
+ * Phase 6: Fetch and load findings for a selected document
+ */
+window.loadDocumentFindings = async function(docId) {
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/documents/${docId}/findings`);
+    const data = await res.json();
+    if (res.ok && data.success) {
+      renderForensicFindings(data.data);
+      showToast(`Loaded ${data.count} observation(s) for document ${docId}.`, 'info');
+    }
+  } catch (err) {
+    console.warn('[VEXORA Load Findings Error]', err);
+  }
+};
+
+/**
+ * Phase 6: Render findings dynamically into #forensicFindingsFeed
+ */
+function renderForensicFindings(findings) {
+  const feed = document.getElementById('forensicFindingsFeed');
+  if (!feed) return;
+
+  if (!findings || findings.length === 0) {
+    feed.innerHTML = `
+      <div class="finding-detail-card" style="border-left-color:var(--status-verified);">
+        <div class="finding-card-head">
+          <span class="finding-title">✓ Verified Document Profile</span>
+          <span class="finding-loc">All Evaluated Pages</span>
+        </div>
+        <p class="finding-reason">
+          No typographic inconsistencies, conflicting identifiers, or chronological flow anomalies detected across evaluated forensic rules.
+        </p>
+        <div class="finding-recommendation" style="color:var(--status-verified); background:var(--status-verified-dim); border-color:var(--status-verified-border);">
+          Document verified against active forensic heuristics.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  feed.innerHTML = '';
+  findings.forEach((f) => {
+    const sev = (f.severity || 'Medium').toLowerCase();
+    const cardClass = sev === 'critical' ? 'critical' : sev === 'high' ? 'critical' : '';
+    const locText = f.coordinates
+      ? `Page ${f.page_number || 1} • Box [${escapeHtml(String(f.coordinates))}]`
+      : `Page ${f.page_number || 1} • Contextual Check`;
+
+    const card = document.createElement('div');
+    card.className = `finding-detail-card ${cardClass}`;
+    card.innerHTML = `
+      <div class="finding-card-head">
+        <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
+        <span class="finding-loc">${escapeHtml(locText)}</span>
+      </div>
+      <p class="finding-reason">${escapeHtml(f.description)}</p>
+      ${f.evidence ? `<div class="finding-recommendation">🔍 Evidence: <strong>${escapeHtml(f.evidence)}</strong></div>` : ''}
+    `;
+    feed.appendChild(card);
+  });
+}
 

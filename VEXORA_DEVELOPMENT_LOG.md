@@ -16,7 +16,7 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 | 3 | Backend & Database Integration | **Completed** | 2026-11-01 |
 | 4 | Document Upload & Classification | **Completed** | 2026-11-01 |
 | 5 | OCR & Information Extraction | **Completed** | 2026-11-01 |
-| 6 | Forensic & Contextual Analysis | Not Started | — |
+| 6 | Forensic & Contextual Analysis | **Completed** | 2026-11-01 |
 | 7 | Cross-Document Comparison & Evidence Mapping | Not Started | — |
 | 8 | Investigation Dossier & Report Generation | Not Started | — |
 | 9 | Audit Trail, Testing & Finalization | Not Started | — |
@@ -353,7 +353,85 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 `feat(phase-5): implement PDF text extraction, OCR fallback, and named entity recognition`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 6.
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `3b94aa2`).
+
+---
+
+## Phase 6 — Forensic & Contextual Analysis Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Visual & Structural Forensic Analysis (`backend/analyzer.py`):**
+   - Implemented `analyze_visual_structure` inspecting PDF span geometry and typography via PyMuPDF.
+   - **`RULE-VIS-001` (Discrepant Font Family Detected):** Evaluates document-wide typeface usage. If an isolated span containing critical financial values, dates, or identifiers uses an anomalous outlier font (e.g. Courier in a Helvetica document), flags as typographic alteration with page number, coordinates (`bbox`), and confidence score.
+   - **`RULE-VIS-002` (Overlapping Text Elements Detected):** Evaluates bounding box intersections across all spans on each page. Detects dual-layer text stamping or overwritten figures where text has been digitally printed over existing values (40%+ collision ratio).
+   - **`RULE-VIS-003` (Out-of-Bounds Text Placement):** Identifies text spans placed beyond printable boundaries or hugging margin limits (< 5pt margin).
+   - **`RULE-VIS-004` (Irregular Line Spacing Disparity):** Detects discontinuous baseline jumps within structured paragraphs.
+   - **`RULE-VIS-005` (Degraded Resolution Artifact):** Flags low-resolution scanned artifacts (< 200x200 px) that compromise character legibility.
+2. **Contextual & Semantic Intelligence Engine (`backend/analyzer.py`):**
+   - Implemented `analyze_contextual_rules` evaluating contextual consistency across extracted text and entities.
+   - **`RULE-CTX-001` (Missing Mandatory Document Fields):** Audits documents against their classified type (e.g. Invoices missing invoice IDs, issue dates, total amounts, or vendor entities; Contracts missing execution dates or counterparty signers).
+   - **`RULE-CTX-002` (Multiple Conflicting Document Identifiers):** Flags documents featuring contradictory primary identifiers (e.g. composite invoices spliced from separate sources).
+   - **`RULE-CTX-003` (Chronological Sequence Inconsistencies):** Detects future dates (> current_year + 1) and flags reversed timeline violations (e.g. payment due dates occurring earlier than invoice issue dates).
+   - **`RULE-CTX-004` (Conflicting Monetary Values or Currencies):** Flags multi-currency collisions (e.g. USD and EUR indiscriminately mixed in one invoice) and contradictory totals.
+   - **`RULE-CTX-005` (Metadata Timestamp Mismatch):** Compares PDF technical creation date (`creationDate`) with dates referenced in the document text, flagging chronological divergence while noting metadata fallibility.
+3. **Risk Scoring & Severity Assessment (`calculate_risk_assessment`):**
+   - Computes weighted risk score (0-100) based on finding severity (`Critical`: 35pts, `High`: 20pts, `Medium`: 10pts, `Low`: 5pts, `Info`: 2pts).
+   - Categorizes risk tier: `Critical Risk`, `High Risk`, `Medium Risk`, `Low Risk`, or `Clean / Verified`.
+   - Adheres to roadmap requirements: uses measured labels (`Potential Anomaly`, `Needs Review`), provides explainable observations, and never automatically declares fraud.
+4. **Database & Schema Updates (`backend/schema.sql`, `backend/database.py`, `backend/models.py`):**
+   - Added `page_number`, `coordinates`, `rule_id`, and `evidence` columns to SQLite `findings` table.
+   - Implemented dynamic runtime migration in `init_db()` for frictionless database upgrades.
+   - Added `save_document_findings`, `get_findings_by_document`, `get_finding_by_id`, `update_finding`, and `update_document_status`.
+   - Linked findings to parent documents and cases with safe foreign key resolution.
+5. **REST API Endpoints (`backend/app.py`):**
+   - `POST /api/documents/<doc_id>/analyze`: Executes visual and contextual rules, stores findings, updates document status (`Flagged` / `Analyzed` / `Clean`), and returns complete analysis report.
+   - `GET /api/documents/<doc_id>/findings`: Retrieves all findings for a document.
+   - `GET /api/findings/<finding_id>`: Retrieves a single finding record.
+   - `PATCH /api/findings/<finding_id>`: Allows investigators to update status (`Verified`, `Dismissed`, `Unresolved`).
+6. **Frontend Integration (`frontend/index.html`, `frontend/js/app.js`):**
+   - Updated system hero banner pill to Phase 6 active status.
+   - Added `🔬 Analyze` action button to document cards in Document Library.
+   - Wired `analyzeDocumentAndInspect(docId)` to run live analysis, show risk telemetry toast, populate the Forensic Inspector dropdown (`#forensicDocSelector`), and render observation cards dynamically in `#forensicFindingsFeed`.
+   - Implemented `loadDocumentFindings(docId)` to switch document views in the inspector.
+7. **Automated Backend Test Suite (`tests/test_backend.py`):**
+   - Expanded test suite from 20 to 24 automated unit tests.
+   - Added unit tests: `test_analyze_visual_font_discrepancy`, `test_analyze_overlapping_text_elements`, `test_analyze_contextual_inconsistencies`, and `test_findings_api_lifecycle`.
+   - 24/24 unit tests pass in 7.16s (`OK`).
+
+### Technologies Introduced
+- **PyMuPDF Geometry & Typographic Extraction:** Span-level coordinate geometry (`bbox`), font family tracking, size extraction, and bounding-box collision math.
+- **Contextual Rule Engines:** Rule-based heuristics evaluating statutory requirements, chronological sequence validity, and multi-currency compatibility.
+- **RESTful Findings Lifecycle:** Dynamic status updates (`Verified`, `Dismissed`, `Unresolved`) with audit trail logging.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 24 unit tests via `python -m unittest tests/test_backend.py` — 24/24 passed in 7.16s (`OK`).
+- **Live Server Test:** Uploaded genuine digital sample with font discrepancy and reversed dates (`Live_Forensic_Sample.pdf`) to running server on port 5000:
+  - Invoked `POST /api/documents/DOC-2026-0048/analyze`:
+    - Result: HTTP 200 OK
+    - Risk Score: 55 | Risk Level: `Critical Risk`
+    - Finding 1: `[RULE-VIS-001] Discrepant Font Family Detected (High)` — Courier 12pt total amount diverging from Helvetica body.
+    - Finding 2: `[RULE-CTX-003] Chronological Sequence Inconsistency (Critical)` — Payment due date (2026-09-01) precedes invoice issue date (2026-11-01).
+- **Findings Lifecycle Test:** Fetched finding by ID, patched status to `Verified` (HTTP 200), and rejected invalid status with HTTP 400.
+- **Frontend Syntax Check:** `node -c frontend/js/app.js` passed with exit code 0.
+
+### Known Limitations
+- Cross-document comparison across multiple files and visual diff comparison are scheduled for Phase 7.
+- Dossier and final report generation are scheduled for Phase 8.
+
+### Concepts Learned
+1. **Typographic Forensics:** In digitally altered documents, bad actors often modify numbers or text using a standard font that slightly differs in family, size, or weight from the master template. Analyzing font frequency distribution highlights these localized anomalies.
+2. **Bounding Box Collisions:** When text is modified digitally without removing the underlying text layer, two spans often collide or overlap in 2D space. Calculating intersection-over-minimum area detects dual-layer overwriting.
+3. **Contextual & Chronological Validation:** Visual layout alone cannot catch all fraud; auditing logical sequences (e.g., due dates vs issue dates, mandatory fields) provides the contextual second half of forensic analysis.
+4. **Responsible Forensic Language:** Automated tools must never declare a document "fraudulent." Presenting observations with neutral labels (`Potential Anomaly`, `Needs Review`) protects investigator integrity and prevents false-positive bias.
+
+### Suggested Git Commit Message
+`feat(phase-6): implement visual typographic analysis, contextual rule engine, and forensic findings lifecycle`
+
+### Approval Status
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 7.
 
 
 

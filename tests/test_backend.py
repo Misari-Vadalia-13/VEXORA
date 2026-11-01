@@ -457,7 +457,154 @@ class VexoraBackendTestCase(unittest.TestCase):
         self.assertFalse(res_json['success'])
         self.assertIn('error', res_json)
 
+    # ==========================================
+    # Phase 6: Forensic & Contextual Intelligence Tests
+    # ==========================================
+
+    def test_analyze_visual_font_discrepancy(self):
+        """Verifies detection of discrepant font family in critical financial text (RULE-VIS-001)."""
+        import io
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        # Insert dominant body text in standard font (Helvetica)
+        for i in range(12):
+            page.insert_text(
+                (50, 50 + (i * 20)),
+                f"Standard corporate contract paragraph line {i+1} detailing obligations and terms.",
+                fontname="helv",
+                fontsize=10.0
+            )
+        # Insert anomalous text span in Courier with financial figure
+        page.insert_text(
+            (50, 320),
+            "Total Disbursed Balance Due: $9,950,000.00",
+            fontname="courier",
+            fontsize=12.0
+        )
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Font_Tampered_Invoice.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        # Trigger Analysis
+        analyze_res = self.client.post(f'/api/documents/{doc_id}/analyze')
+        self.assertEqual(analyze_res.status_code, 200)
+        data = analyze_res.get_json()
+        self.assertTrue(data['success'])
+        self.assertGreater(data['findings_count'], 0)
+        self.assertIn(data['risk_level'], ['Medium Risk', 'High Risk', 'Critical Risk'])
+
+        # Check that font rule was flagged
+        findings = data['findings']
+        font_findings = [f for f in findings if f['rule_id'] == 'RULE-VIS-001']
+        self.assertGreaterEqual(len(font_findings), 1)
+        self.assertEqual(font_findings[0]['page_number'], 1)
+        self.assertIsNotNone(font_findings[0]['coordinates'])
+
+    def test_analyze_overlapping_text_elements(self):
+        """Verifies detection of overlapping/colliding text elements (RULE-VIS-002)."""
+        import io
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        # Original text layer
+        page.insert_text((100, 100), "Original Settlement Amount: $10,000.00", fontname="helv", fontsize=11.0)
+        # Overlapping overwritten layer at almost identical coordinates
+        page.insert_text((102, 101), "Altered Settlement Amount: $90,000.00", fontname="helv", fontsize=11.0)
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Overprinted_Contract.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        analyze_res = self.client.post(f'/api/documents/{doc_id}/analyze')
+        self.assertEqual(analyze_res.status_code, 200)
+        data = analyze_res.get_json()
+        findings = data['findings']
+        overlap_findings = [f for f in findings if f['rule_id'] == 'RULE-VIS-002']
+        self.assertGreaterEqual(len(overlap_findings), 1)
+        self.assertEqual(overlap_findings[0]['severity'], 'High')
+
+    def test_analyze_contextual_inconsistencies(self):
+        """Verifies contextual rules: reversed chronological due date (RULE-CTX-003)."""
+        import io
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text(
+            (50, 70),
+            "Commercial Vendor Invoice INV-2026-7788\n"
+            "Invoice Date: 2026-10-15\n"
+            "Payment Due Date: 2026-08-01\n"  # Due date BEFORE invoice date!
+            "Total Amount: $45,000.00\n"
+            "Vendor: Apex Supplies Ltd.\n"
+        )
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Inconsistent_Dates_Invoice.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        analyze_res = self.client.post(f'/api/documents/{doc_id}/analyze')
+        self.assertEqual(analyze_res.status_code, 200)
+        data = analyze_res.get_json()
+        findings = data['findings']
+
+        # Verify reversed chronological flow was flagged
+        chrono_findings = [f for f in findings if f['rule_id'] == 'RULE-CTX-003']
+        self.assertGreaterEqual(len(chrono_findings), 1)
+        self.assertIn('chronologically earlier', chrono_findings[0]['description'].lower())
+
+    def test_findings_api_lifecycle(self):
+        """Verifies GET /documents/<id>/findings, GET /findings/<id>, and PATCH /findings/<id>."""
+        import io
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((50, 70), "Unusual Draft Invoice with anomalous date: 2045-12-31\nAmount: $10,000.00")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Lifecycle_Doc.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        # 1. Trigger analysis
+        self.client.post(f'/api/documents/{doc_id}/analyze')
+
+        # 2. GET findings for this document
+        doc_find_res = self.client.get(f'/api/documents/{doc_id}/findings')
+        self.assertEqual(doc_find_res.status_code, 200)
+        findings = doc_find_res.get_json()['data']
+        self.assertGreater(len(findings), 0)
+        target_fnd = findings[0]
+        fnd_id = target_fnd['id']
+
+        # 3. GET single finding by ID
+        get_one = self.client.get(f'/api/findings/{fnd_id}')
+        self.assertEqual(get_one.status_code, 200)
+        self.assertEqual(get_one.get_json()['data']['id'], fnd_id)
+
+        # 4. PATCH status to 'Verified'
+        patch_res = self.client.patch(f'/api/findings/{fnd_id}', json={'status': 'Verified'})
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.get_json()['data']['status'], 'Verified')
+
+        # 5. PATCH with invalid status returns 400
+        patch_invalid = self.client.patch(f'/api/findings/{fnd_id}', json={'status': 'Fraudulent'})
+        self.assertEqual(patch_invalid.status_code, 400)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
