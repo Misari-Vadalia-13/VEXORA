@@ -15,7 +15,7 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 | 2 | Core Pages & User Interface | **Completed** | 2026-11-01 |
 | 3 | Backend & Database Integration | **Completed** | 2026-11-01 |
 | 4 | Document Upload & Classification | **Completed** | 2026-11-01 |
-| 5 | OCR & Information Extraction | Not Started | — |
+| 5 | OCR & Information Extraction | **Completed** | 2026-11-01 |
 | 6 | Forensic & Contextual Analysis | Not Started | — |
 | 7 | Cross-Document Comparison & Evidence Mapping | Not Started | — |
 | 8 | Investigation Dossier & Report Generation | Not Started | — |
@@ -273,7 +273,87 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 `feat(phase-4): implement document upload, SHA-256 hashing, classification heuristics, and library sync`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 5.
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `2046f3a`).
+
+---
+
+## Phase 5 — OCR & Information Extraction Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Digital PDF Text & Layout Extraction (`backend/extractor.py`):**
+   - Implemented `extract_pdf_document` using high-performance `pymupdf` (PyMuPDF).
+   - Extracts page-by-page text blocks with coordinates (`bbox`: `[x0, y0, x1, y1]`), word counts, line counts, and page dimensions.
+   - Extracts document-level PDF metadata (`format`, `title`, `author`, `creationDate`, `modDate`, `producer`).
+   - Computes aggregated metrics (`total_words`, `page_count`).
+2. **Optical Character Recognition (OCR) Engine & Fallback (`backend/extractor.py`):**
+   - Implemented `extract_image_document` using `Pillow` (`PIL.Image`) and `pytesseract`.
+   - Built resilient fallback mechanism: catches `TesseractNotFoundError` if the native C++ Tesseract binary is not installed on the host system PATH, safely extracting image dimensions, color mode, format, and structure without crashing.
+   - Normalizes image extraction outputs into the identical unified forensic schema as PDFs.
+3. **Forensic Named Entity Recognition (NER) Module (`backend/ner.py`):**
+   - Implemented `extract_entities_from_text` with targeted pattern extractors for:
+     - **Dates:** ISO formats (`YYYY-MM-DD`, `DD/MM/YYYY`), spelled dates (`October 18, 2026`, `12th May 2026`).
+     - **Monetary Values:** Multi-currency symbols (`$`, `€`, `£`, `₹`, `USD`, `EUR`, `INR`) with commas and decimal places.
+     - **Identifiers:** Invoices, purchase orders, SWIFT/BIC, IBAN, case IDs, tax IDs (`INV-2026-8812`, `DOC-001`, `PO-4412`).
+     - **Organizations:** Corporate entities, banks, holdings, tech firms, audit agencies (`Apex Global Inc.`, `Global Logistics Ltd`).
+     - **Persons:** Named investigators, auditors, directors, doctors (`Dr. Alex Turner`, `Dr. Jane Foster`, `Mr. John Doe`).
+     - **Emails:** RFC-compliant email address extraction (`forensic.audit@apex.internal`).
+   - Implemented `merge_entities` to unify page-level detections into deduplicated, document-level traceable records.
+4. **Database Persistence & SQLite Auto-Migration (`backend/database.py`, `backend/models.py`):**
+   - Added `extracted_text TEXT` and `extracted_data TEXT` columns to `documents` table in `backend/schema.sql`.
+   - Added dynamic runtime SQLite schema migration in `init_db()` (`PRAGMA table_info(documents)`) so existing installations upgrade automatically without data loss.
+   - Added `save_document_extraction(doc_id, text, data)` and `get_document_extraction(doc_id)` in `backend/models.py`.
+5. **REST API Document Extraction Endpoints (`backend/app.py`):**
+   - `POST /api/documents/<doc_id>/extract`: Triggers extraction for the target document, executes PDF layout extraction or OCR, runs NER entity detection, persists structured results to SQLite, and returns comprehensive JSON response (HTTP 200).
+   - `GET /api/documents/<doc_id>/extracted`: Retrieves previously cached extraction results and named entities from SQLite (HTTP 200). Returns HTTP 404 if not yet extracted.
+6. **Frontend UI Integration (`frontend/index.html`, `frontend/js/app.js`):**
+   - Updated system banner pill to indicate Phase 5 active status.
+   - Added `⚡ Extract` action button directly to document library cards (`#docLibraryGrid`).
+   - Added `window.triggerDocumentExtraction(docId)` JavaScript handler providing live toast notifications and telemetry.
+7. **Automated Backend Test Suite (`tests/test_backend.py`):**
+   - Expanded test suite from 16 to 20 automated tests.
+   - Added tests for digital PDF layout & entity extraction (`test_extract_digital_pdf`), multi-page PDF extraction & page traceability (`test_extract_multi_page_pdf`), image document processing & OCR fallback (`test_extract_image_document`), and corrupted file handling (`test_extract_corrupted_document`).
+   - All 20/20 unit tests pass in 6.74s.
+
+### Technologies Introduced
+- **PyMuPDF (`pymupdf`):** High-speed PDF text parsing, bounding-box coordinate geometry, and document metadata extraction.
+- **Pillow (`PIL.Image`):** Image loading, dimension extraction, format detection, and preprocessing for OCR.
+- **pytesseract:** Python wrapper for Google's Tesseract-OCR engine with structured exception handling.
+- **Forensic Named Entity Recognition (NER):** High-precision regex pattern matchers with page-level reference tagging and cross-page deduplication.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 20 unit tests via `python -m unittest tests/test_backend.py` — 20/20 passed in 6.74s (`OK`).
+- **Live Server Test:** Uploaded genuine digital PDF `Live_Test_Invoice.pdf` to live Flask server on port 5000:
+  - Invoked `POST /api/documents/DOC-2026-0048/extract`:
+    - Result: HTTP 200 OK
+    - Format: PDF, 1 Page, 16 Words
+    - Extracted Dates: `2026-11-01`
+    - Extracted Monetary Values: `$125,500.00`
+    - Extracted Identifiers: `INV-2026-9900`
+    - Extracted Organizations: `Global Logistics Ltd`
+    - Extracted Persons: `Dr. Jane Foster`
+    - Extracted Emails: `contact@globallogistics.com`
+  - Invoked `GET /api/documents/DOC-2026-0048/extracted`: HTTP 200 OK with retrieved cached entity metadata.
+- **Corrupted File Test:** Corrupted byte stream rejected cleanly with HTTP 400 and descriptive error message.
+- **Frontend Syntax Validation:** `node -c frontend/js/app.js` passed with exit code 0.
+
+### Known Limitations
+- Advanced cross-document contextual anomaly detection and rule evaluation are scheduled for Phase 6.
+- Interactive side-by-side document comparison visualizer is scheduled for Phase 7.
+
+### Concepts Learned
+1. **Digital PDF Geometry:** PDFs store text as positioned glyph sequences rather than continuous prose; PyMuPDF reconstructs blocks, lines, and bounding boxes (`bbox`) for spatial analysis.
+2. **Graceful Binary Fallback:** Desktop/server environments may lack external native binaries like `tesseract.exe`; building software with automated degradation ensures high availability without crashes.
+3. **Traceable Named Entity Extraction:** In forensic auditing, identifying an entity is insufficient—it must be tied back to a specific page number and coordinates for legal defensibility.
+4. **Non-Destructive Database Migrations:** Using SQLite table pragma inspections at startup to add new columns dynamically without requiring table drops or manual database restarts.
+
+### Suggested Git Commit Message
+`feat(phase-5): implement PDF text extraction, OCR fallback, and named entity recognition`
+
+### Approval Status
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 6.
 
 
 

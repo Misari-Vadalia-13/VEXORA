@@ -341,6 +341,123 @@ class VexoraBackendTestCase(unittest.TestCase):
         dl_404 = self.client.get(f'/api/documents/{doc_id}/download')
         self.assertEqual(dl_404.status_code, 404)
 
+    def test_extract_digital_pdf(self):
+        """Verifies text, layout bounding box, and entity extraction from a digital PDF."""
+        import io
+        import pymupdf
+
+        # Create genuine digital PDF with text
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text(
+            (50, 70),
+            "Vendor Invoice INV-2026-8812\n"
+            "Date: 2026-10-18\n"
+            "Contractor: Apex Global Inc.\n"
+            "Auditor: Dr. Alex Turner\n"
+            "Total Due: $4,850,000.00\n"
+            "Contact: forensic.audit@apex.internal\n"
+        )
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        # 1. Upload PDF
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Apex_Digital_Invoice.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        self.assertEqual(up_res.status_code, 201)
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        # 2. Trigger Extraction
+        extract_res = self.client.post(f'/api/documents/{doc_id}/extract')
+        self.assertEqual(extract_res.status_code, 200)
+        ext_json = extract_res.get_json()
+        self.assertTrue(ext_json['success'])
+        data = ext_json['data']
+        self.assertEqual(data['format'], 'PDF')
+        self.assertEqual(data['page_count'], 1)
+        self.assertGreater(data['total_words'], 5)
+
+        # 3. Verify Extracted Entities
+        entities = data['entities']
+        date_vals = [d['value'] for d in entities['dates']]
+        self.assertIn('2026-10-18', date_vals)
+
+        id_vals = [i['value'] for i in entities['identifiers']]
+        self.assertTrue(any('INV-2026-8812' in v for v in id_vals))
+
+        money_vals = [m['value'] for m in entities['monetary_values']]
+        self.assertTrue(any('$4,850,000.00' in v or '4,850,000.00' in v for v in money_vals))
+
+        org_vals = [o['value'] for o in entities['organizations']]
+        self.assertTrue(any('Apex Global Inc' in v for v in org_vals))
+
+        # 4. Verify Retrieval from Database
+        get_res = self.client.get(f'/api/documents/{doc_id}/extracted')
+        self.assertEqual(get_res.status_code, 200)
+        self.assertEqual(get_res.get_json()['data']['page_count'], 1)
+
+    def test_extract_multi_page_pdf(self):
+        """Verifies multi-page PDF extraction and page traceability."""
+        import io
+        import pymupdf
+
+        doc = pymupdf.open()
+        p1 = doc.new_page()
+        p1.insert_text((50, 50), "Page One: Agreement initiated on 2026-05-12.")
+        p2 = doc.new_page()
+        p2.insert_text((50, 50), "Page Two: Settlement amount of $250,000.00 agreed.")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Multi_Page_Contract.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        extract_res = self.client.post(f'/api/documents/{doc_id}/extract')
+        self.assertEqual(extract_res.status_code, 200)
+        data = extract_res.get_json()['data']
+        self.assertEqual(data['page_count'], 2)
+        self.assertEqual(len(data['pages']), 2)
+        self.assertEqual(data['pages'][0]['page_number'], 1)
+        self.assertEqual(data['pages'][1]['page_number'], 2)
+
+    def test_extract_image_document(self):
+        """Verifies image metadata, dimension extraction, and OCR resilience."""
+        import io
+        from PIL import Image
+
+        img = Image.new('RGB', (300, 150), color='white')
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+
+        upload_data = {'file': (buf, 'Sample_Scan.png')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        extract_res = self.client.post(f'/api/documents/{doc_id}/extract')
+        self.assertEqual(extract_res.status_code, 200)
+        data = extract_res.get_json()['data']
+        self.assertEqual(data['format'], 'PNG')
+        self.assertEqual(data['page_count'], 1)
+        self.assertEqual(data['metadata']['dimensions'], '300x150')
+
+    def test_extract_corrupted_document(self):
+        """Verifies graceful error handling (HTTP 400) when document is corrupted."""
+        import io
+
+        corrupted_bytes = b"CORRUPTED BYTES THAT ARE NOT A PDF"
+        upload_data = {'file': (io.BytesIO(corrupted_bytes), 'Corrupt_File.pdf')}
+        up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
+        doc_id = up_res.get_json()['data'][0]['id']
+
+        extract_res = self.client.post(f'/api/documents/{doc_id}/extract')
+        self.assertEqual(extract_res.status_code, 400)
+        res_json = extract_res.get_json()
+        self.assertFalse(res_json['success'])
+        self.assertIn('error', res_json)
+
 if __name__ == '__main__':
     unittest.main()
+
 

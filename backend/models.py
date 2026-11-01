@@ -5,6 +5,7 @@ and strict input validation for Cases, Documents, Findings, and Audit Logs.
 """
 
 import re
+import json
 from datetime import datetime
 from backend.database import query_db, execute_db
 
@@ -310,6 +311,39 @@ def delete_document(doc_id, user="System"):
     execute_db("DELETE FROM documents WHERE id = ?", (doc_id,))
     log_audit("DOCUMENT_DELETED", "document", doc_id, f"Document '{doc['filename']}' deleted from system.", user)
     return True
+
+def save_document_extraction(doc_id, extraction_data, user="System"):
+    """Saves structured extraction results and full text into SQLite."""
+    doc = query_db("SELECT * FROM documents WHERE id = ?", (doc_id,), one=True)
+    if not doc:
+        return None
+
+    full_text = extraction_data.get('full_text', '')
+    serialized_json = json.dumps(extraction_data)
+
+    execute_db(
+        """
+        UPDATE documents
+        SET extracted_text = ?, extracted_data = ?, status = 'Analyzed'
+        WHERE id = ?
+        """,
+        (full_text, serialized_json, doc_id)
+    )
+
+    page_count = extraction_data.get('page_count', 1)
+    word_count = extraction_data.get('total_words', 0)
+    log_audit("DOCUMENT_EXTRACTED", "document", doc_id, f"Extracted {page_count} page(s), {word_count} word(s).", user)
+    return get_document_by_id(doc_id)
+
+def get_document_extraction(doc_id):
+    """Retrieves and parses the structured extraction data for a document."""
+    doc = query_db("SELECT id, filename, file_type, extracted_text, extracted_data FROM documents WHERE id = ?", (doc_id,), one=True)
+    if not doc or not doc['extracted_data']:
+        return None
+    try:
+        return json.loads(doc['extracted_data'])
+    except Exception:
+        return None
 
 # ==========================================
 # 4. Findings & Evidence Operations

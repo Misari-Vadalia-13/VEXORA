@@ -711,7 +711,7 @@ async function initBackendSync() {
       // Update banner pill to show connected state
       const bannerPill = document.querySelector('.banner-pill');
       if (bannerPill) {
-        bannerPill.textContent = '⚡ VEXORA Intelligence Engine • Phase 4 Active (Ingestion & Classification)';
+        bannerPill.textContent = '⚡ VEXORA Intelligence Engine • Phase 5 Active (OCR & Information Extraction)';
       }
 
       // 1. Fetch live stats
@@ -804,6 +804,7 @@ async function initBackendSync() {
                     Case: <strong>${escapeHtml(doc.case_id || 'General Vault')}</strong>
                   </div>
                   <div class="doc-card-footer">
+                    <button class="table-action-btn" onclick="triggerDocumentExtraction('${doc.id}')" title="Run OCR & Entity Extraction">⚡ Extract</button>
                     <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                     <a href="${apiBase}/documents/${doc.id}/download" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">Download</a>
                   </div>
@@ -822,4 +823,34 @@ async function initBackendSync() {
     console.log('[VEXORA API] Running in standalone frontend mode.');
   }
 }
+
+/**
+ * Trigger Forensic OCR & Information Extraction for a specific document
+ */
+window.triggerDocumentExtraction = async function(docId) {
+  const apiBase = getApiBase();
+  showToast('Initiating forensic text & entity extraction...', 'info');
+  try {
+    const res = await fetch(`${apiBase}/documents/${docId}/extract`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      const ext = data.data;
+      const entities = ext.entities || {};
+      const entityCount = (entities.dates?.length || 0) +
+        (entities.monetary_values?.length || 0) +
+        (entities.organizations?.length || 0) +
+        (entities.persons?.length || 0) +
+        (entities.identifiers?.length || 0) +
+        (entities.emails?.length || 0);
+
+      showToast(`Extraction Complete! Found ${entityCount} entities across ${ext.page_count} page(s) (${ext.total_words} words).`, 'success');
+      console.log('[VEXORA Extraction Details]', ext);
+    } else {
+      showToast(`Extraction failed: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    console.error('[VEXORA Extraction Error]', err);
+    showToast('Failed to connect to extraction engine.', 'danger');
+  }
+};
 

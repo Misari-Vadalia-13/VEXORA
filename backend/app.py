@@ -31,6 +31,8 @@ from backend.models import (
     get_document_by_id,
     create_document,
     delete_document,
+    save_document_extraction,
+    get_document_extraction,
     get_all_findings,
     create_finding,
     get_system_stats,
@@ -38,6 +40,7 @@ from backend.models import (
     log_audit
 )
 from backend.uploader import process_single_upload, allowed_file
+from backend.extractor import extract_document_content, ExtractionError
 
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
@@ -336,6 +339,47 @@ def create_app(config_class=Config):
                     app.logger.warning(f"Could not remove physical file {target_file}: {e}")
 
         return jsonify({'success': True, 'message': f"Document '{doc_id}' deleted successfully."}), 200
+
+    @app.route('/api/documents/<doc_id>/extract', methods=['POST'])
+    def api_extract_document(doc_id):
+        """
+        Executes text, layout block, metadata, and entity extraction on the document.
+        Uses PyMuPDF for PDFs and Pillow/Tesseract for images.
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
+        disk_filename = Path(doc['file_path']).name
+        target_file = upload_folder / disk_filename
+
+        if not target_file.exists():
+            return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' not found on disk."}), 404
+
+        try:
+            user = session.get('username', 'alex.turner')
+            extracted_data = extract_document_content(target_file)
+            save_document_extraction(doc_id, extracted_data, user=user)
+
+            return jsonify({
+                'success': True,
+                'message': f"Successfully extracted {extracted_data['page_count']} page(s) and {len(extracted_data['entities']['dates']) + len(extracted_data['entities']['monetary_values'])} entities.",
+                'document_id': doc_id,
+                'data': extracted_data
+            }), 200
+        except ExtractionError as ee:
+            return jsonify({'success': False, 'error': str(ee)}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': f"Extraction error: {str(e)}"}), 500
+
+    @app.route('/api/documents/<doc_id>/extracted', methods=['GET'])
+    def api_get_extracted_document(doc_id):
+        """Retrieves previously extracted forensic layout and entities for a document."""
+        data = get_document_extraction(doc_id)
+        if not data:
+            return jsonify({'success': False, 'error': f"No extraction data found for document '{doc_id}'. Please trigger extraction first."}), 404
+        return jsonify({'success': True, 'document_id': doc_id, 'data': data}), 200
 
     # ==========================================
     # Findings & Evidence API Routes

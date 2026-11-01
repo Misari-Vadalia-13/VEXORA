@@ -52,6 +52,10 @@ def init_db(db_path=None):
         cols = [row['name'] for row in cursor.fetchall()]
         if 'file_hash' not in cols and len(cols) > 0:
             cursor.execute("ALTER TABLE documents ADD COLUMN file_hash TEXT")
+        if 'extracted_text' not in cols and len(cols) > 0:
+            cursor.execute("ALTER TABLE documents ADD COLUMN extracted_text TEXT")
+        if 'extracted_data' not in cols and len(cols) > 0:
+            cursor.execute("ALTER TABLE documents ADD COLUMN extracted_data TEXT")
         conn.commit()
     finally:
         conn.close()

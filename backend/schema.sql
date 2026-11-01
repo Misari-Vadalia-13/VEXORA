@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS documents (
     category TEXT DEFAULT 'Uncategorized',
     classification_confidence REAL DEFAULT 0.0,
     status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Processing', 'Analyzed', 'Flagged', 'Clean')),
+    extracted_text TEXT,
+    extracted_data TEXT,
     uploaded_by TEXT DEFAULT 'Lead Investigator',
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL

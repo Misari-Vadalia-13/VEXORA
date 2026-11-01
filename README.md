@@ -27,8 +27,8 @@ The following features represent the planned project scope. Their implementation
 | Case Management | Create and manage investigation cases. | Completed (UI) |
 | Document Upload | Upload PDF, JPG and PNG documents. | Completed (UI) |
 | Document Library | Organize and access uploaded documents. | Completed (UI) |
-| OCR Processing | Extract text from scanned documents and images. | Planned (Phase 5) |
-| Information Extraction | Identify names, dates and organizations. | Planned (Phase 5) |
+| OCR Processing | Extract text from scanned documents and images. | Completed (Phase 5) |
+| Information Extraction | Identify names, dates and organizations. | Completed (Phase 5) |
 | Document Analysis | Examine unusual formatting and contextual inconsistencies. | Completed (UI) |
 | Cross-Document Comparison | Compare information across multiple documents. | Completed (UI) |
 | Evidence Mapping | Connect findings to their original documents and pages. | Completed (UI) |
@@ -52,7 +52,7 @@ VEXORA uses a beginner-friendly technology stack.
 ### Document Processing & Analysis
 - **PyMuPDF** – Extracts text and page information from PDF documents.
 - **Tesseract OCR** – Recognizes text from scanned documents.
-- **spaCy** – Identifies entities such as names, dates and organizations.
+- **spaCy / Regex NER** – Identifies entities such as names, dates and organizations.
 
 ### Development Tools
 - **Visual Studio Code / Antigravity** – Development environment.
@@ -81,7 +81,7 @@ VEXORA is being developed through nine structured phases.
 | 02 | Core Pages & User Interface | **Completed** |
 | 03 | Backend & Database Integration | **Completed** |
 | 04 | Document Upload & Classification | **Completed** |
-| 05 | OCR & Information Extraction | Not Started |
+| 05 | OCR & Information Extraction | **Completed** |
 | 06 | Forensic & Contextual Analysis | Not Started |
 | 07 | Cross-Document Comparison & Evidence Mapping | Not Started |
 | 08 | Investigation Dossier & Report Generation | Not Started |
@@ -117,7 +117,9 @@ VEXORA/
 │   ├── app.py
 │   ├── config.py
 │   ├── database.py
+│   ├── extractor.py
 │   ├── models.py
+│   ├── ner.py
 │   ├── schema.sql
 │   └── vexora.db
 │
