@@ -293,7 +293,21 @@ function initThemeManager() {
 
       const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
       const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-      applyTheme(newTheme);
+
+      // Use native View Transitions API if supported for zero-glitch GPU cross-fade
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          applyTheme(newTheme);
+        });
+      } else {
+        // Fallback: apply temporary transition class
+        document.documentElement.classList.add('theme-transitioning');
+        applyTheme(newTheme);
+        setTimeout(() => {
+          document.documentElement.classList.remove('theme-transitioning');
+        }, 400);
+      }
+
       localStorage.setItem('vexora-theme', newTheme);
       showToast(`Switched to ${newTheme.toUpperCase()} theme mode`, 'info');
     });
