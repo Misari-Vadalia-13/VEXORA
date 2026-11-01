@@ -179,7 +179,7 @@
           <!-- Hero Banner -->
           <div class="hero-banner">
             <div class="banner-content">
-              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 8 Active (Investigation Dossier & Report Generation)</span>
+              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 9 Active (System Fully Integrated & Operational)</span>
               <h1 class="banner-title">Document Forensics & Contextual Intelligence</h1>
               <p class="banner-desc">
                 Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
@@ -1335,16 +1335,52 @@
             <!-- Storage & Diagnostics -->
             <div class="settings-card">
               <h3 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700;">Node Diagnostics</h3>
-              <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.6;">
-                • Engine Version: <strong>VEXORA Phase 2 Prototype</strong><br>
+              <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.6;" id="settingsDiagnosticsSummary">
+                • Engine Version: <strong>VEXORA v1.0 (Phase 9 Fully Integrated)</strong><br>
                 • Storage Vault: <code>c:\VEXORA\uploads</code><br>
                 • Reports Export: <code>c:\VEXORA\reports</code><br>
-                • Database: <strong>SQLite (Planned Phase 3)</strong><br>
-                • Core Node: <strong>Online (Localhost:8080)</strong>
+                • Database: <strong>SQLite 3 Relational (Full-Stack Mode)</strong><br>
+                • Core Node: <strong>Online (Port 5000 / Flask REST API)</strong>
               </p>
-              <button class="btn-secondary" style="margin-top:auto;" onclick="showToast('Running system diagnostic self-test: All systems normal.', 'success')">
+              <button class="btn-secondary" style="margin-top:auto;" onclick="runSystemDiagnostics()">
                 Run Diagnostics Self-Test
               </button>
+            </div>
+          </div>
+
+          <!-- Audit Trail & Forensics Activity Log Panel -->
+          <div class="card-panel" style="margin-top:24px;">
+            <div class="section-header">
+              <div class="section-title-group">
+                <h2 class="section-title">Investigation Audit Trail & Activity Log</h2>
+                <span class="section-subtitle">Immutable chronological record of all document uploads, forensic scans, cross-checks, and report exports</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <button class="btn-secondary" onclick="exportAuditLogs('csv')" style="font-size:0.85rem;" title="Export RFC 4180 CSV">📥 Export CSV</button>
+                <button class="btn-secondary" onclick="exportAuditLogs('json')" style="font-size:0.85rem;" title="Export JSON Log">📋 Export JSON</button>
+                <button class="btn-secondary" onclick="loadAuditTrailLogs()" style="font-size:0.85rem;">🔄 Refresh Logs</button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Log ID</th>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>Entity Type</th>
+                    <th>Entity ID</th>
+                    <th>Investigator</th>
+                    <th>Activity Details</th>
+                  </tr>
+                </thead>
+                <tbody id="auditTrailTableBody">
+                  <tr>
+                    <td colspan="7" style="text-align:center; color:var(--text-muted); padding:16px;">Loading audit activity history...</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -1362,7 +1398,7 @@
         <div class="footer-links">
           <a href="#docs" class="footer-link" onclick="showToast('Opening VEXORA Documentation', 'info')">Docs</a>
           <span>•</span>
-          <a href="#roadmap" class="footer-link" onclick="showToast('Phase 2 Active (Core Pages & UI)', 'info')">Roadmap</a>
+          <a href="#roadmap" class="footer-link" onclick="showToast('Phase 9 Active (System Fully Integrated & Operational)', 'info')">Roadmap</a>
           <span>•</span>
           <a href="#github" class="footer-link" onclick="showToast('Repository: Misari-Vadalia-13/VEXORA', 'info')">GitHub</a>
         </div>

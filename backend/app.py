@@ -13,7 +13,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from flask import Flask, jsonify, request, send_from_directory, send_file, session
+import csv
+import io
+import json
+from datetime import datetime
+
+from flask import Flask, jsonify, request, send_from_directory, send_file, session, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend.config import Config, FRONTEND_DIR, DATABASE_PATH
@@ -673,18 +678,134 @@ def create_app(config_class=Config):
 
 
     # ==========================================
-    # Audit Trail API Route
+    # Audit Trail API Routes (Phase 9)
     # ==========================================
     @app.route('/api/audit-logs', methods=['GET'])
     def api_audit_logs():
-        """Retrieves recent chronological audit records."""
-        limit = request.args.get('limit', 50, type=int)
-        logs = get_audit_logs(limit=limit)
+        """
+        Retrieves chronological audit records with optional filtering
+        by action, entity_type, user, and limit.
+        """
+        action = request.args.get('action')
+        entity_type = request.args.get('entity_type')
+        user = request.args.get('user')
+        limit = request.args.get('limit', 100, type=int)
+
+        logs = get_audit_logs(action=action, entity_type=entity_type, user=user, limit=limit)
         return jsonify({
             'success': True,
             'count': len(logs),
+            'filters': {
+                'action': action,
+                'entity_type': entity_type,
+                'user': user,
+                'limit': limit
+            },
             'data': logs
         }), 200
+
+    @app.route('/api/audit-logs/export', methods=['GET'])
+    def api_export_audit_logs():
+        """
+        Exports the entire immutable investigation audit trail in CSV or JSON format
+        for courtroom archival and forensic compliance verification.
+        """
+        export_format = request.args.get('format', 'csv').lower().strip()
+        limit = request.args.get('limit', 500, type=int)
+        logs = get_audit_logs(limit=limit)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if export_format == 'json':
+            json_str = json.dumps({'success': True, 'count': len(logs), 'exported_at': datetime.now().isoformat(), 'data': logs}, indent=2)
+            return Response(
+                json_str,
+                mimetype='application/json',
+                headers={'Content-Disposition': f'attachment; filename="VEXORA_Audit_Trail_{timestamp}.json"'}
+            )
+
+        # Default to RFC 4180 CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Audit ID', 'Timestamp', 'Action', 'Entity Type', 'Entity ID', 'Investigator / User', 'Details'])
+
+        for log in logs:
+            writer.writerow([
+                log['id'],
+                log['timestamp'],
+                log['action'],
+                log['entity_type'],
+                log['entity_id'] or '',
+                log['user'] or 'System',
+                log['details'] or ''
+            ])
+
+        csv_content = output.getvalue()
+        output.close()
+
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="VEXORA_Audit_Trail_{timestamp}.csv"'}
+        )
+
+    # ==========================================
+    # System Diagnostics & Health Check (Phase 9)
+    # ==========================================
+    @app.route('/api/system/diagnostics', methods=['GET'])
+    def api_system_diagnostics():
+        """
+        Executes an end-to-end self-diagnostic check across the database,
+        storage directories, and forensic extraction engines.
+        """
+        import sys
+        try:
+            import pymupdf
+            mupdf_ver = getattr(pymupdf, '__version__', 'Installed')
+        except Exception:
+            mupdf_ver = 'Not Available'
+
+        # Check database table counts
+        db_stats = {}
+        try:
+            for tbl in ['users', 'cases', 'documents', 'findings', 'comparisons', 'reports', 'audit_logs']:
+                row = query_db(f"SELECT COUNT(*) AS count FROM {tbl}", one=True)
+                db_stats[tbl] = row['count'] if row else 0
+            db_status = 'Healthy'
+        except Exception as e:
+            db_status = f'Error: {str(e)}'
+
+        # Check directories
+        upload_dir = Path(Config.UPLOAD_FOLDER)
+        reports_dir = Path(Config.REPORTS_FOLDER)
+
+        storage_health = {
+            'upload_folder': str(upload_dir),
+            'upload_folder_writable': upload_dir.exists() and os.access(upload_dir, os.W_OK),
+            'reports_folder': str(reports_dir),
+            'reports_folder_writable': reports_dir.exists() and os.access(reports_dir, os.W_OK)
+        }
+
+        all_healthy = (
+            db_status == 'Healthy' and
+            storage_health['upload_folder_writable'] and
+            storage_health['reports_folder_writable']
+        )
+
+        return jsonify({
+            'success': True,
+            'status': 'Operational' if all_healthy else 'Degraded',
+            'engine_version': 'VEXORA v1.0 (Phase 9 Fully Integrated)',
+            'python_version': sys.version.split()[0],
+            'pymupdf_version': mupdf_ver,
+            'database': {
+                'status': db_status,
+                'engine': 'SQLite 3 Relational',
+                'table_counts': db_stats
+            },
+            'storage': storage_health,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 200
+
 
     # ==========================================
     # Authentication & Session Routes

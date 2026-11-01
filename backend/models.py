@@ -587,9 +587,28 @@ def log_audit(action, entity_type, entity_id, details, user="System"):
     except Exception as e:
         print(f"[Warning] Failed to log audit event: {e}")
 
-def get_audit_logs(limit=50):
-    """Retrieves recent audit logs in descending chronological order."""
-    return query_db("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+def get_audit_logs(action=None, entity_type=None, user=None, limit=100):
+    """
+    Retrieves chronological audit logs with optional filtering by action, entity type, and user.
+    """
+    query = "SELECT * FROM audit_logs WHERE 1=1"
+    params = []
+
+    if action:
+        query += " AND action LIKE ?"
+        params.append(f"%{action}%")
+    if entity_type:
+        query += " AND entity_type = ?"
+        params.append(entity_type)
+    if user:
+        query += " AND user LIKE ?"
+        params.append(f"%{user}%")
+
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    return query_db(query, tuple(params))
+
 
 # ==========================================
 # 7. Investigation Reports & Dossiers

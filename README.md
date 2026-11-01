@@ -33,7 +33,7 @@ The following features represent the planned project scope. Their implementation
 | Cross-Document Comparison | Compare information across multiple documents. | Completed (Phase 7) |
 | Evidence Mapping | Connect findings to their original documents and pages. | Completed (Phase 7) |
 | Investigation Dossier | Generate structured investigation reports. | Completed (Phase 8) |
-| Audit Trail | Maintain records of important investigation activities. | Completed (UI) |
+| Audit Trail | Maintain records of important investigation activities, export logs to CSV/JSON, and run diagnostic self-tests. | Completed (Phase 9) |
 
 ## ⚙️ Technology Stack
 
@@ -60,7 +60,7 @@ VEXORA uses a beginner-friendly technology stack.
 
 ## 🔍 How VEXORA Works
 
-The planned investigation workflow:
+The investigation workflow:
 
 1. **Create an Investigation:** Start a new case and organize its details.
 2. **Upload Documents:** Add PDF files and supported images.
@@ -70,10 +70,11 @@ The planned investigation workflow:
 6. **Compare Documents:** Identify matching, repeated and conflicting information.
 7. **Map Evidence:** Connect findings with their original document pages.
 8. **Generate Reports:** Create an investigation dossier containing findings and supporting evidence.
+9. **Audit & Diagnostics:** Maintain full evidentiary audit logs with CSV/JSON exports and diagnostic health checks.
 
 ## 🗺️ Development Roadmap
 
-VEXORA is being developed through nine structured phases.
+VEXORA has been systematically developed and verified through nine structured phases.
 
 | Phase | Development Area | Status |
 |---|---|---|
@@ -85,7 +86,7 @@ VEXORA is being developed through nine structured phases.
 | 06 | Forensic & Contextual Analysis | **Completed** |
 | 07 | Cross-Document Comparison & Evidence Mapping | **Completed** |
 | 08 | Investigation Dossier & Report Generation | **Completed** |
-| 09 | Audit Trail, Testing & Finalization | Not Started |
+| 09 | Audit Trail, Testing & Finalization | **Completed** |
 
 Each phase includes implementation, testing, documentation and a beginner-friendly learning report.
 
@@ -173,19 +174,24 @@ To run the automated backend test suite (isolated SQLite test database):
 
 ## 🧪 Testing
 
-Testing will cover:
+The comprehensive automated test suite covers:
 
-- Frontend navigation and responsiveness.
-- Backend routes and database operations.
-- Document uploads and validation.
-- PDF text extraction and OCR.
-- Entity extraction.
-- Contextual analysis.
-- Cross-document comparison.
-- Evidence traceability.
-- PDF report generation.
+- Frontend navigation, interactive UI components, and theme switching.
+- Backend REST API routes and SQLite database transactions.
+- Secure document uploads, MIME validation, SHA-256 integrity hashing, and metadata tracking.
+- PyMuPDF digital text extraction, bounding-box layout parsing, and OCR fallback.
+- Named entity recognition (names, dates, financial sums, organizations).
+- Forensic heuristics (unusual dates, round amounts, duplicate references, layout anomalies).
+- Multi-document comparison (pairwise cross-checking, discrepancies, matching anchors).
+- Case dossier & PDF report generation with visual integrity scoring.
+- Audit trail logging with parameterized filtering, RFC 4180 CSV / JSON exports, and system diagnostics self-test.
+- Complete end-to-end investigation lifecycle verification.
 
-Actual testing results will be documented as development progresses.
+All 39 automated tests execute cleanly against an isolated test database:
+
+```bash
+.\.venv\Scripts\python -m unittest tests/test_backend.py
+```
 
 ## ⚠️ Important Disclaimer
 

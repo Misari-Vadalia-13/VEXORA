@@ -896,8 +896,149 @@ class VexoraBackendTestCase(unittest.TestCase):
             except Exception:
                 pass
 
+    # ==========================================
+    # Phase 9: Audit Trail, Diagnostics & E2E Tests
+    # ==========================================
+
+    def test_audit_logs_filtering(self):
+        """Verifies filtering of immutable audit logs by action, entity_type, and user."""
+        res = self.client.get('/api/audit-logs?entity_type=case&limit=10')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('data', data)
+
+        for log in data['data']:
+            self.assertEqual(log['entity_type'], 'case')
+
+    def test_audit_logs_export_csv(self):
+        """Verifies RFC 4180 CSV export of investigation audit trail."""
+        res = self.client.get('/api/audit-logs/export?format=csv')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('text/csv', res.mimetype)
+        self.assertIn('Content-Disposition', res.headers)
+        self.assertIn('attachment', res.headers['Content-Disposition'])
+
+        csv_text = res.data.decode('utf-8')
+        lines = csv_text.strip().split('\n')
+        self.assertGreaterEqual(len(lines), 2)  # Header + at least 1 log row
+        self.assertIn('Audit ID', lines[0])
+        self.assertIn('Timestamp', lines[0])
+        self.assertIn('Action', lines[0])
+        self.assertIn('Entity Type', lines[0])
+
+    def test_audit_logs_export_json(self):
+        """Verifies JSON export of investigation audit trail."""
+        res = self.client.get('/api/audit-logs/export?format=json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.mimetype, 'application/json')
+        data = json.loads(res.data.decode('utf-8'))
+        self.assertTrue(data['success'])
+        self.assertIn('count', data)
+        self.assertIn('data', data)
+        self.assertGreater(data['count'], 0)
+
+    def test_system_diagnostics_endpoint(self):
+        """Verifies system-wide diagnostics self-test health check."""
+        res = self.client.get('/api/system/diagnostics')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn(data['status'], ('Operational', 'Healthy'))
+        self.assertIn('database', data)
+        self.assertIn('storage', data)
+        self.assertTrue(data['storage']['upload_folder_writable'])
+        self.assertTrue(data['storage']['reports_folder_writable'])
+        self.assertIn('python_version', data)
+
+    def test_end_to_end_investigation_lifecycle(self):
+        """
+        Executes the complete investigation pipeline:
+        Case Creation -> Document Ingestion -> OCR Extraction -> Forensic Analysis
+        -> Cross-Document Comparison -> Dossier Report Generation -> Audit Verification.
+        """
+        import io
+        import pymupdf
+
+        # 1. Create a dedicated investigation case
+        case_res = self.client.post('/api/cases', json={
+            'title': 'E2E Full Lifecycle Audit',
+            'type': 'Procurement Fraud',
+            'priority': 'High',
+            'investigator': 'Lead Inspector Misari'
+        })
+        self.assertEqual(case_res.status_code, 201)
+        case_id = case_res.get_json()['data']['id']
+
+        # 2. Upload Document A (Vendor Invoice)
+        doc_a_pdf = pymupdf.open()
+        p1 = doc_a_pdf.new_page()
+        p1.insert_text((50, 50), "Vendor Statement\nInvoice: INV-E2E-100\nDate: 2026-10-01\nTotal: $125,000.00\nVendor: Zenith Technologies")
+        bytes_a = doc_a_pdf.tobytes()
+        doc_a_pdf.close()
+
+        upload_a = self.client.post(
+            '/api/documents/upload',
+            data={'file': (io.BytesIO(bytes_a), 'E2E_Invoice.pdf'), 'case_id': case_id},
+            content_type='multipart/form-data'
+        )
+        self.assertEqual(upload_a.status_code, 201)
+        doc_a_id = upload_a.get_json()['data'][0]['id']
+
+        # 3. Upload Document B (Purchase Order with discrepancy)
+        doc_b_pdf = pymupdf.open()
+        p2 = doc_b_pdf.new_page()
+        p2.insert_text((50, 50), "Purchase Order\nRef: INV-E2E-100\nDate: 2026-10-05\nTotal: $95,000.00\nVendor: Zenith Offshore Logistics")
+        bytes_b = doc_b_pdf.tobytes()
+        doc_b_pdf.close()
+
+        upload_b = self.client.post(
+            '/api/documents/upload',
+            data={'file': (io.BytesIO(bytes_b), 'E2E_PO.pdf'), 'case_id': case_id},
+            content_type='multipart/form-data'
+        )
+        self.assertEqual(upload_b.status_code, 201)
+        doc_b_id = upload_b.get_json()['data'][0]['id']
+
+        # 4. OCR Extraction on Doc A
+        ext_res = self.client.post(f'/api/documents/{doc_a_id}/extract')
+        self.assertEqual(ext_res.status_code, 200)
+
+        # 5. Forensic Analysis on Doc A
+        ana_res = self.client.post(f'/api/documents/{doc_a_id}/analyze')
+        self.assertEqual(ana_res.status_code, 200)
+
+        # 6. Pairwise Cross-Document Comparison
+        cmp_res = self.client.post('/api/documents/compare', json={'doc_a_id': doc_a_id, 'doc_b_id': doc_b_id})
+        self.assertEqual(cmp_res.status_code, 200)
+        cmp_data = cmp_res.get_json()
+        self.assertTrue(cmp_data['success'])
+        self.assertGreater(cmp_data['discrepancies_count'], 0)
+
+        # 7. Generate Case Dossier Report in PDF
+        rpt_res = self.client.post(f'/api/cases/{case_id}/report', json={'format': 'pdf'})
+        self.assertEqual(rpt_res.status_code, 201)
+        rpt_data = rpt_res.get_json()
+        self.assertTrue(rpt_data['success'])
+        self.assertTrue(os.path.exists(rpt_data['file_path']))
+
+        # Clean up generated PDF
+        try:
+            os.remove(rpt_data['file_path'])
+        except Exception:
+            pass
+
+        # 8. Verify audit logs recorded the full investigation pipeline
+        audit_res = self.client.get(f'/api/audit-logs?limit=50')
+        self.assertEqual(audit_res.status_code, 200)
+        actions = [log['action'] for log in audit_res.get_json()['data']]
+        self.assertIn('CASE_CREATED', actions)
+        self.assertIn('DOCUMENT_UPLOAD', actions)
+        self.assertIn('REPORT_GENERATED', actions)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

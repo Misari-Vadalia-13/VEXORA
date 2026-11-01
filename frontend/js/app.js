@@ -785,6 +785,9 @@ async function initBackendSync() {
       // Phase 8: Load generated reports list
       loadGeneratedReportsList();
 
+      // Phase 9: Load live investigation audit trail
+      loadAuditTrailLogs();
+
       // 3. Fetch live documents and populate Document Library cards & Inspector selector
       const docLibraryGrid = document.getElementById('docLibraryGrid');
       const forensicDocSelector = document.getElementById('forensicDocSelector');
@@ -1394,6 +1397,119 @@ window.loadGeneratedReportsList = async function() {
     console.warn('[VEXORA Reports History Sync Failed]', err);
   }
 };
+
+/**
+ * ============================================================================
+ * Phase 9: Audit Trail, Diagnostics & System Finalization
+ * ============================================================================
+ */
+
+/**
+ * Loads chronological audit trail logs into #auditTrailTableBody
+ */
+window.loadAuditTrailLogs = async function(filters = {}) {
+  const tableBody = document.getElementById('auditTrailTableBody');
+  if (!tableBody) return;
+
+  const apiBase = getApiBase();
+  try {
+    let url = `${apiBase}/audit-logs?limit=50`;
+    if (filters.action) url += `&action=${encodeURIComponent(filters.action)}`;
+    if (filters.entity_type) url += `&entity_type=${encodeURIComponent(filters.entity_type)}`;
+    if (filters.user) url += `&user=${encodeURIComponent(filters.user)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (data.success && data.data && data.data.length > 0) {
+      tableBody.innerHTML = '';
+      data.data.forEach((log) => {
+        const actionStr = log.action || 'ACTIVITY';
+        const isAuth = actionStr.includes('LOGIN') || actionStr.includes('AUTH');
+        const isAlert = actionStr.includes('FLAG') || actionStr.includes('CONFLICT') || actionStr.includes('DISCREPANCY');
+        const isReport = actionStr.includes('REPORT') || actionStr.includes('DOSSIER');
+
+        const pillClass = isAlert ? 'pill-high' : isReport ? 'pill-medium' : isAuth ? 'pill-status' : 'pill-low';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><code style="font-size:0.75rem;">#${log.id}</code></td>
+          <td><small style="color:var(--text-muted); font-family:var(--font-mono);">${escapeHtml(log.timestamp || '')}</small></td>
+          <td><span class="pill-tag ${pillClass}">${escapeHtml(actionStr)}</span></td>
+          <td><code>${escapeHtml(log.entity_type || 'system')}</code></td>
+          <td><code style="font-size:0.8rem;">${escapeHtml(log.entity_id || '—')}</code></td>
+          <td><strong>${escapeHtml(log.user || 'System')}</strong></td>
+          <td style="font-size:0.8rem; color:var(--text-secondary); max-width:300px;">
+            ${escapeHtml(log.details || '')}
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    } else {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center; color:var(--text-muted); padding:16px;">
+            No audit records matching query parameters.
+          </td>
+        </tr>
+      `;
+    }
+  } catch (err) {
+    console.warn('[VEXORA Audit Trail Sync Failed]', err);
+  }
+};
+
+/**
+ * Triggers direct browser download of the entire investigation audit trail
+ */
+window.exportAuditLogs = function(format = 'csv') {
+  const apiBase = getApiBase();
+  showToast(`Exporting complete investigation audit trail (${format.toUpperCase()})...`, 'info');
+  window.open(`${apiBase}/audit-logs/export?format=${format}`, '_blank');
+};
+
+/**
+ * Executes system-wide health and diagnostics self-test
+ */
+window.runSystemDiagnostics = async function() {
+  const apiBase = getApiBase();
+  showToast('Executing system-wide diagnostic health check...', 'info');
+
+  try {
+    const res = await fetch(`${apiBase}/system/diagnostics`);
+    if (!res.ok) {
+      showToast('System diagnostics returned error status.', 'danger');
+      return;
+    }
+
+    const data = await res.json();
+    if (data.success) {
+      const db = data.database || {};
+      const counts = db.table_counts || {};
+      const storage = data.storage || {};
+
+      const summaryEl = document.getElementById('settingsDiagnosticsSummary');
+      if (summaryEl) {
+        summaryEl.innerHTML = `
+          • Engine Status: <strong style="color:var(--status-verified);">${data.status.toUpperCase()}</strong><br>
+          • Engine Version: <strong>${escapeHtml(data.engine_version)}</strong><br>
+          • Python Runtime: <strong>${escapeHtml(data.python_version)}</strong> • PyMuPDF: <strong>${escapeHtml(data.pymupdf_version)}</strong><br>
+          • Relational Database: <strong>${escapeHtml(db.engine)} (${escapeHtml(db.status)})</strong><br>
+          • Repository Metrics: <strong>${counts.cases || 0} Cases, ${counts.documents || 0} Docs, ${counts.findings || 0} Findings, ${counts.reports || 0} Reports</strong><br>
+          • Storage Vault: <code>${escapeHtml(storage.upload_folder)}</code> (${storage.upload_folder_writable ? 'Writable ✓' : 'ReadOnly ⚠'})<br>
+          • Reports Storage: <code>${escapeHtml(storage.reports_folder)}</code> (${storage.reports_folder_writable ? 'Writable ✓' : 'ReadOnly ⚠'})
+        `;
+      }
+
+      showToast(`Diagnostics Completed! Node Status: ${data.status.toUpperCase()} (${counts.cases || 0} Cases, ${counts.documents || 0} Docs, ${counts.reports || 0} Reports).`, 'success');
+    }
+  } catch (err) {
+    console.error('[VEXORA Diagnostics Error]', err);
+    showToast('Failed to reach diagnostics service.', 'danger');
+  }
+};
+
 
 
 
