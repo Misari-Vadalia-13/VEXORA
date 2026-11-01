@@ -287,6 +287,10 @@ function initThemeManager() {
 
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', () => {
+      // Trigger icon spring rotation animation
+      themeToggleBtn.classList.add('animating');
+      setTimeout(() => themeToggleBtn.classList.remove('animating'), 500);
+
       const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
       const newTheme = currentTheme === 'light' ? 'dark' : 'light';
       applyTheme(newTheme);
