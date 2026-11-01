@@ -79,7 +79,7 @@ VEXORA is being developed through nine structured phases.
 |---|---|---|
 | 01 | Project Setup & UI Foundation | **Completed** |
 | 02 | Core Pages & User Interface | **Completed** |
-| 03 | Backend & Database Integration | Not Started |
+| 03 | Backend & Database Integration | **Completed** |
 | 04 | Document Upload & Classification | Not Started |
 | 05 | OCR & Information Extraction | Not Started |
 | 06 | Forensic & Contextual Analysis | Not Started |
@@ -93,7 +93,7 @@ See [`VEXORA_DEVELOPMENT_ROADMAP.md`](VEXORA_DEVELOPMENT_ROADMAP.md) for the com
 
 See [`VEXORA_DEVELOPMENT_LOG.md`](VEXORA_DEVELOPMENT_LOG.md) for phase progress and implementation records.
 
-## 📁 Planned Project Structure
+## 📁 Implemented Project Structure
 
 ```text
 VEXORA/
@@ -101,22 +101,34 @@ VEXORA/
 ├── frontend/
 │   ├── index.html
 │   ├── pages/
+│   │   ├── cases.html
+│   │   ├── upload.html
+│   │   ├── library.html
+│   │   ├── analysis.html
+│   │   ├── comparison.html
+│   │   ├── report.html
+│   │   └── settings.html
 │   ├── css/
-│   ├── js/
-│   └── assets/
+│   │   └── style.css
+│   └── js/
+│       └── app.js
 │
 ├── backend/
 │   ├── app.py
-│   ├── routes/
-│   ├── database/
-│   ├── processing/
-│   └── analysis/
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schema.sql
+│   └── vexora.db
 │
 ├── uploads/
+│   └── .gitkeep
 │
 ├── reports/
+│   └── .gitkeep
 │
 ├── tests/
+│   └── test_backend.py
 │
 ├── requirements.txt
 ├── README.md
@@ -124,39 +136,35 @@ VEXORA/
 └── VEXORA_DEVELOPMENT_LOG.md
 ```
 
-*Note: This is the proposed structure. The actual structure may evolve during implementation.*
-
-## 🚀 Getting Started
-
-VEXORA is currently in the development planning/setup stage. Installation and execution instructions will be added and verified as the corresponding phases are completed.
+## 🚀 How to Run VEXORA
 
 ### Prerequisites
 
-The planned development environment includes:
-
-- Python 3
-- Visual Studio Code or Antigravity
-- Git
+- Python 3.10+
 - A modern web browser
 
-### Running Phase 1 (Frontend Foundation)
+### Running with Flask & SQLite (Full-Stack Mode)
 
-To run the application locally:
+To run the complete application with SQLite persistence and REST API endpoints:
 
 ```bash
-# Using Python built-in HTTP server:
-py -m http.server 8080
+# 1. Activate the dedicated virtual environment:
+.\.venv\Scripts\activate
 
-# Then open in any web browser:
-http://localhost:8080
+# 2. Start the Flask application server:
+python backend/app.py
+
+# 3. Open in your web browser:
+http://127.0.0.1:5000
 ```
 
-### Future Setup (Phases 3-9)
-Once the backend and dependencies are implemented, setup instructions will be provided here, including:
-- Virtual environment creation.
-- Dependency installation (`pip install -r requirements.txt`).
-- Database initialization.
-- Flask server execution.
+### Running Automated Test Suite
+
+To run the automated backend test suite (isolated SQLite test database):
+
+```bash
+.\.venv\Scripts\python -m unittest tests/test_backend.py
+```
 
 ## 🧪 Testing
 

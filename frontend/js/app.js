@@ -16,11 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
   initUploadSimulator();
   initToastSystem();
   initKeyboardShortcuts();
+  initBackendSync();
 
   // Handle direct URL hash navigation (e.g. #cases, #upload, #forensics)
   handleInitialRoute();
 
-  showToast('VEXORA Phase 2 Core Systems Initialized.', 'info');
+  showToast('VEXORA Forensic Intelligence System Initialized.', 'info');
 });
 
 /**
@@ -407,7 +408,7 @@ function initCaseModal() {
 
   // Handle Form Submission
   if (caseForm) {
-    caseForm.addEventListener('submit', (e) => {
+    caseForm.addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const titleInput = document.getElementById('caseTitleInput');
@@ -425,17 +426,45 @@ function initCaseModal() {
         return;
       }
 
-      // Generate random case reference number
-      const randomId = 'VX-' + Math.floor(2100 + Math.random() * 8000);
+      let caseId = 'VX-' + Math.floor(2100 + Math.random() * 8000);
+      let isLiveSaved = false;
+
+      // Attempt to save to backend SQLite database
+      try {
+        const apiBase = getApiBase();
+        const response = await fetch(`${apiBase}/cases`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            type: 'Financial Fraud',
+            priority: priority,
+            status: 'Active',
+            investigator: investigator,
+            description: notes
+          })
+        });
+
+        if (response.ok) {
+          const resData = await response.json();
+          if (resData.success && resData.data) {
+            caseId = resData.data.id;
+            isLiveSaved = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[VEXORA API] Backend not reachable for case creation, using optimistic local state.', err);
+      }
+
       const priorityClass =
-        priority === 'High' ? 'pill-high' : priority === 'Medium' ? 'pill-medium' : 'pill-low';
+        priority === 'High' ? 'pill-high' : priority === 'Critical' ? 'pill-high' : priority === 'Medium' ? 'pill-medium' : 'pill-low';
       const priorityDataAttr = priority.toLowerCase();
 
       // 1. Insert row in Dashboard table if present
       if (tableBody) {
         const newRow = document.createElement('tr');
         newRow.innerHTML = `
-          <td class="case-id-cell">${randomId}</td>
+          <td class="case-id-cell">${caseId}</td>
           <td>
             <span class="case-title-cell">${escapeHtml(title)}</span>
             <span class="case-subtitle">Lead: ${escapeHtml(investigator)} • Created just now</span>
@@ -460,7 +489,7 @@ function initCaseModal() {
         newCard.setAttribute('data-priority', priorityDataAttr);
         newCard.innerHTML = `
           <div class="case-card-header">
-            <span class="case-card-id">${randomId}</span>
+            <span class="case-card-id">${caseId}</span>
             <span class="pill-tag ${priorityClass}">${priority}</span>
           </div>
           <h3 class="case-card-title">${escapeHtml(title)}</h3>
@@ -504,7 +533,11 @@ function initCaseModal() {
       }
 
       closeModal();
-      showToast(`Case ${randomId} registered in active inventory!`, 'success');
+      if (isLiveSaved) {
+        showToast(`Case ${caseId} created and saved in SQLite database!`, 'success');
+      } else {
+        showToast(`Case ${caseId} registered in active inventory!`, 'success');
+      }
     });
   }
 }
@@ -577,3 +610,68 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+/**
+ * 11. Backend API Synchronizer & Live Database Integration
+ */
+function getApiBase() {
+  if (window.location.port === '5000') {
+    return '/api';
+  }
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:5000/api';
+  }
+  return '/api';
+}
+
+async function initBackendSync() {
+  const apiBase = getApiBase();
+  try {
+    const healthRes = await fetch(`${apiBase}/health`, { method: 'GET' });
+    if (!healthRes.ok) return;
+    const healthData = await healthRes.json();
+
+    if (healthData.status === 'healthy') {
+      console.log('[VEXORA API] Connected to Flask backend & SQLite database.');
+
+      // Update banner pill to show connected state
+      const bannerPill = document.querySelector('.banner-pill');
+      if (bannerPill) {
+        bannerPill.textContent = '⚡ VEXORA Intelligence Engine • SQLite Connected (Phase 3)';
+      }
+
+      // Fetch live stats
+      try {
+        const statsRes = await fetch(`${apiBase}/stats`);
+        if (statsRes.ok) {
+          const statsJson = await statsRes.json();
+          if (statsJson.success && statsJson.data) {
+            const stats = statsJson.data;
+            const activeCounter = document.getElementById('activeCasesCount');
+            if (activeCounter && stats.active_cases !== undefined) {
+              activeCounter.textContent = stats.active_cases;
+            }
+            const docsCounter = document.getElementById('totalDocsCount');
+            if (docsCounter && stats.total_documents !== undefined) {
+              docsCounter.textContent = stats.total_documents;
+            }
+            const flagsCounter = document.getElementById('flaggedAnomaliesCount');
+            if (flagsCounter && stats.critical_findings !== undefined) {
+              flagsCounter.textContent = stats.critical_findings;
+            }
+            const evidenceCounter = document.getElementById('evidenceNodesCount');
+            if (evidenceCounter && stats.total_findings !== undefined) {
+              evidenceCounter.textContent = stats.total_findings;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[VEXORA API] Stats fetch failed:', e);
+      }
+    }
+  } catch (err) {
+    // Backend server not currently running on port 5000; running in static client mode
+    console.log('[VEXORA API] Running in standalone frontend mode.');
+  }
+}
+

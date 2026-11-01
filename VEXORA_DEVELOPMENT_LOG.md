@@ -13,7 +13,7 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 |---|---|---|---|
 | 1 | Project Setup & UI Foundation | **Completed** | 2026-11-01 |
 | 2 | Core Pages & User Interface | **Completed** | 2026-11-01 |
-| 3 | Backend & Database Integration | Not Started | — |
+| 3 | Backend & Database Integration | **Completed** | 2026-11-01 |
 | 4 | Document Upload & Classification | Not Started | — |
 | 5 | OCR & Information Extraction | Not Started | — |
 | 6 | Forensic & Contextual Analysis | Not Started | — |
@@ -119,5 +119,93 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 `feat(phase-2): implement all core screens, multi-view router, and forensic UI components`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 3.
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `7aae7ca`).
+
+---
+
+## Phase 3 — Backend & Database Integration Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** Completed (Ready for Review)
+
+### Features Implemented
+1. **Python Environment & Architecture Scaffolding:**
+   - Established isolated Python virtual environment (`.venv`) adhering to dependency management standards.
+   - Installed Flask 3.1.3 and its core ecosystem (`Werkzeug`, `Jinja2`, `Click`, `Blinker`, `itsdangerous`, `MarkupSafe`).
+   - Created `backend/config.py` managing filesystem paths, database URIs, upload directories, security keys, and environment flags.
+   - Created `backend/__init__.py` packaging backend modules cleanly.
+2. **SQLite Relational Database Engine:**
+   - Authored `backend/schema.sql` defining 5 core tables with strict constraints, foreign keys, and performant indexes:
+     - `users`: ID, username, email, scrypt password hash, role, badge number, creation timestamp.
+     - `cases`: ID (`CAS-YYYY-NNNN`), title, type, priority, status, investigator, description, timestamps.
+     - `documents`: ID (`DOC-YYYY-NNNN`), case reference, filename, type, file size, storage path, category, classification confidence, processing status, timestamps.
+     - `findings`: ID (`FND-YYYY-NNN`), case reference, document reference, anomaly title, severity, category, description, confidence, status, timestamps.
+     - `audit_logs`: ID, action name, entity type, entity ID, event description, acting user, immutable timestamp.
+   - Authored `backend/database.py` managing SQLite connection lifecycle with `sqlite3.Row` dictionary-like column mapping, safe automated migration, and database seed population.
+   - Pre-populated realistic demonstration records (Apex Global Offshore Audit, Veridian IP Due Diligence, Solari Energy Subsidies) ensuring immediately demonstrable functionality upon launch.
+3. **Business Logic & Validation Layer:**
+   - Authored `backend/models.py` implementing repository queries with parameterized SQL (`?` placeholders) protecting against SQL injection attacks.
+   - Implemented strict input validation (`validate_case_data`, `validate_user_registration`) rejecting empty titles, illegal priority enums, malformed emails, and invalid status values.
+   - Implemented auto-generating sequential identifiers (`CAS-YYYY-0001`, `DOC-YYYY-0001`, `FND-YYYY-001`).
+   - Implemented system telemetry calculation (`get_system_stats`) aggregating live case counts, flagged document ratios, and risk percentages.
+4. **Flask REST API & Static Application Server:**
+   - Created `backend/app.py` serving both the complete frontend application (`/`, `/index.html`, `/css/...`, `/js/...`, `/pages/...`) and the REST API suite:
+     - `GET /api/health` — returns database connection status and engine metadata.
+     - `GET /api/stats` — returns real-time KPI metrics for dashboard counters.
+     - `GET /api/cases` — lists cases with priority, status, and search query filters.
+     - `POST /api/cases` — creates investigation case with validation and audit logging (returns HTTP 201).
+     - `GET /api/cases/<id>` — retrieves case details with attached documents and findings.
+     - `PUT /api/cases/<id>` — updates case status and parameters.
+     - `DELETE /api/cases/<id>` — deletes case and logs activity.
+     - `GET /api/documents` & `POST /api/documents` — document registry and retrieval.
+     - `GET /api/findings` & `POST /api/findings` — forensic anomaly registry.
+     - `GET /api/audit-logs` — provides chronological activity trail.
+     - `POST /api/auth/login` & `POST /api/auth/register` — investigator authentication with scrypt hashing.
+     - `GET /api/auth/current-user` — returns current analyst profile.
+   - Integrated non-blocking CORS headers (`Access-Control-Allow-Origin: *`) allowing development previews across both port 5000 and port 8080.
+5. **Frontend Live Database Integration:**
+   - Enhanced `frontend/js/app.js` with `initBackendSync()` and `getApiBase()` to automatically discover the Flask backend.
+   - Replaced static "+ New Case" client mocking with asynchronous `fetch('/api/cases', { method: 'POST' })` persisting records directly to SQLite.
+   - Added optimistic UI fallback ensuring uninterrupted usability even if the backend is offline.
+   - Enhanced dashboard banner to display live connection state: `⚡ VEXORA Intelligence Engine • SQLite Connected (Phase 3)`.
+6. **Automated Backend Test Suite:**
+   - Authored `tests/test_backend.py` with 11 automated test cases using Python's standard `unittest` framework.
+   - Verified isolated test database setup and teardown (`test_vexora.db`).
+   - Verified input validation rejection (HTTP 400), authentication flow (HTTP 201 / 401 / 409), CRUD operations, and health checks.
+
+### Technologies Introduced
+- **Python (v3.15):** Core programming language for backend business logic, validation, and database operations.
+- **Flask (v3.1.3):** Lightweight WSGI web application framework connecting frontend requests to database models.
+- **SQLite 3:** Built-in serverless relational database engine storing users, cases, documents, findings, and audit trails.
+- **Werkzeug Security:** Industry-standard password hashing and verification using the `scrypt` key derivation function.
+- **Unittest:** Python standard library automated testing framework.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 11 tests via `unittest` — 11/11 passed in 3.58 seconds (`OK`).
+- **Database Persistence Check:** Created case `CAS-PERSIST-999` in one Python process, terminated the process, launched a separate process, and successfully retrieved the case from `backend/vexora.db`.
+- **Live HTTP API Tests:**
+  - `GET http://127.0.0.1:5000/api/health` ➔ HTTP 200 (`healthy`, SQLite connected).
+  - `GET http://127.0.0.1:5000/api/stats` ➔ HTTP 200 (returned active cases and document metrics).
+  - `POST http://127.0.0.1:5000/api/cases` (valid payload) ➔ HTTP 201 (`CAS-2026-0893` created and saved in SQLite).
+  - `POST http://127.0.0.1:5000/api/cases` (empty title) ➔ HTTP 400 (`Case title is required and cannot be empty.`, field: `title`).
+  - `DELETE http://127.0.0.1:5000/api/cases/CAS-2026-0893` ➔ HTTP 200 (`Case deleted successfully`).
+- **JavaScript Syntax Check:** `node --check frontend/js/app.js` passed with exit code 0.
+
+### Known Limitations
+- File binary ingestion (actual PDF/image binary streaming to `uploads/` directory) and automated document classification are scheduled for Phase 4.
+- Forensic text extraction and OCR processing pipelines are scheduled for Phase 5.
+
+### Concepts Learned
+1. **Relational Database Schema Design:** Primary keys, foreign key constraints (`ON DELETE CASCADE`), CHECK constraints, and indexing for fast lookups.
+2. **REST API Design & HTTP Status Codes:** Using standard codes (`200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `409 Conflict`, `500 Server Error`).
+3. **Parameterized SQL Queries:** Always passing variables as parameters (`?`) rather than string concatenation to prevent SQL injection vulnerabilities.
+4. **Password Hashing:** Storing cryptographically secure one-way hashes (`scrypt`) instead of plaintext passwords.
+5. **Full-Stack Application Wiring:** Bridging a vanilla HTML/CSS/JS frontend to a Python Flask API with live telemetry and optimistic UI fallbacks.
+
+### Suggested Git Commit Message
+`feat(phase-3): implement Flask REST API, SQLite relational schema, case CRUD, and backend test suite`
+
+### Approval Status
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 4.
+
 
