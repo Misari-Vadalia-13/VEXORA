@@ -832,6 +832,31 @@ async function initBackendSync() {
                   loadDocumentFindings(e.target.value);
                 };
               }
+
+              // Phase 7: Populate comparison document selectors
+              const compareDocA = document.getElementById('compareDocA');
+              const compareDocB = document.getElementById('compareDocB');
+              if (compareDocA && compareDocB && docsJson.data.length > 0) {
+                compareDocA.innerHTML = '';
+                compareDocB.innerHTML = '';
+                docsJson.data.forEach((doc) => {
+                  const optA = document.createElement('option');
+                  optA.value = doc.id;
+                  optA.textContent = `${doc.filename} (${doc.id})`;
+                  compareDocA.appendChild(optA);
+
+                  const optB = document.createElement('option');
+                  optB.value = doc.id;
+                  optB.textContent = `${doc.filename} (${doc.id})`;
+                  compareDocB.appendChild(optB);
+                });
+                if (docsJson.data.length > 1) {
+                  compareDocB.selectedIndex = 1;
+                }
+              }
+
+              // Phase 7: Load live evidence provenance graph
+              loadEvidenceProvenanceGraph();
             }
           }
         } catch (e) {
@@ -973,4 +998,165 @@ function renderForensicFindings(findings) {
     feed.appendChild(card);
   });
 }
+
+/**
+ * ============================================================================
+ * Phase 7: Cross-Document Comparison & Discrepancy Matrix
+ * ============================================================================
+ */
+window.triggerCrossDocumentComparison = async function() {
+  const docASelect = document.getElementById('compareDocA');
+  const docBSelect = document.getElementById('compareDocB');
+  const docAId = docASelect ? docASelect.value : null;
+  const docBId = docBSelect ? docBSelect.value : null;
+
+  if (!docAId || !docBId) {
+    showToast('Please select two documents to compare.', 'warning');
+    return;
+  }
+  if (docAId === docBId) {
+    showToast('Please select two distinct documents for cross-comparison.', 'warning');
+    return;
+  }
+
+  const apiBase = getApiBase();
+  showToast('Executing cross-document entity alignment & discrepancy analysis...', 'info');
+
+  try {
+    const res = await fetch(`${apiBase}/documents/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_a_id: docAId, doc_b_id: docBId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      const compResult = data.data || data;
+      renderComparisonMatrix(compResult);
+      const discCount = compResult.discrepancies_count !== undefined
+        ? compResult.discrepancies_count
+        : ((compResult.conflicts_count || 0) + (compResult.mismatches_count || 0));
+
+      if (discCount > 0) {
+        showToast(`Comparison complete: Flagged ${discCount} cross-document discrepanc${discCount === 1 ? 'y' : 'ies'}.`, 'warning');
+      } else {
+        showToast('Comparison complete: Full factual alignment verified across both documents.', 'success');
+      }
+    } else {
+      showToast(`Comparison failed: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    console.error('[VEXORA Comparison Error]', err);
+    showToast('Failed to connect to comparison engine.', 'danger');
+  }
+};
+
+/**
+ * Phase 7: Render dynamic comparison findings into #comparisonMatrixBody
+ */
+function renderComparisonMatrix(result) {
+  const matrixBody = document.getElementById('comparisonMatrixBody');
+  if (!matrixBody) return;
+
+  matrixBody.innerHTML = '';
+  const docA = result.doc_a || result.document_a || {};
+  const docB = result.doc_b || result.document_b || {};
+  const items = result.alignment_matrix || result.discrepancies || [];
+
+  if (items.length === 0) {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td style="font-weight:700;">Overall Alignment</td>
+      <td>${escapeHtml(docA.filename || 'Doc A')}</td>
+      <td>${escapeHtml(docB.filename || 'Doc B')}</td>
+      <td><span class="pill-tag pill-low">✓ Exact Match</span></td>
+      <td>Identical identifiers, aligned monetary figures, and consistent counterparty entities verified across both records.</td>
+    `;
+    matrixBody.appendChild(row);
+    return;
+  }
+
+  items.forEach((m) => {
+    const row = document.createElement('tr');
+    const attr = m.attribute || m.field || m.type || 'Field';
+    const valA = m.val_a ?? m.doc_a_value ?? '—';
+    const valB = m.val_b ?? m.doc_b_value ?? '—';
+    const status = m.status || '';
+    const sev = String(m.severity || '').toLowerCase();
+
+    const isConflict = status === 'Conflict' || status === 'Duplicate' || sev === 'critical' || sev === 'high';
+    const isMismatch = status === 'Mismatch' || sev === 'medium' || sev === 'warning';
+
+    const bgStyle = isConflict ? 'background:var(--status-danger-dim);' : isMismatch ? 'background:var(--status-anomaly-dim);' : '';
+    const pillClass = isConflict ? 'pill-high' : isMismatch ? 'pill-medium' : 'pill-low';
+    const verdict = m.verdict || (isConflict ? '⚠️ CONFLICT' : isMismatch ? '⚠️ VARIANCE' : '✓ Verified');
+    const explanation = m.explanation || m.message || '';
+
+    if (bgStyle) row.style = bgStyle;
+    row.innerHTML = `
+      <td style="font-weight:700; color:${isConflict ? 'var(--status-danger)' : isMismatch ? 'var(--status-anomaly)' : 'inherit'};">
+        ${escapeHtml(attr)}
+      </td>
+      <td style="font-family:var(--font-mono); font-size:0.85rem;">
+        ${escapeHtml(String(valA))}
+      </td>
+      <td style="font-family:var(--font-mono); font-size:0.85rem;">
+        ${escapeHtml(String(valB))}
+      </td>
+      <td><span class="pill-tag ${pillClass}">${escapeHtml(verdict)}</span></td>
+      <td>
+        <strong>${escapeHtml(explanation)}</strong>
+        ${m.variance ? `<br><small style="color:var(--text-muted);">Variance: ${escapeHtml(String(m.variance))}</small>` : ''}
+      </td>
+    `;
+    matrixBody.appendChild(row);
+  });
+}
+
+/**
+ * ============================================================================
+ * Phase 7: Evidence Provenance Graph Sync
+ * ============================================================================
+ */
+window.loadEvidenceProvenanceGraph = async function() {
+  const container = document.getElementById('evidenceProvenanceContainer');
+  if (!container) return;
+
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/evidence-graph`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const nodes = data.data || data.nodes || [];
+    if (nodes && nodes.length > 0) {
+      container.innerHTML = '';
+      nodes.forEach((n) => {
+        const card = document.createElement('div');
+        card.className = 'case-card';
+        const sev = (n.severity || 'Medium').toLowerCase();
+        const pillClass = sev === 'critical' || sev === 'high' ? 'pill-high' : sev === 'medium' ? 'pill-medium' : 'pill-low';
+        const coordText = n.coordinates ? ` • BBox: [${n.coordinates}]` : '';
+
+        card.innerHTML = `
+          <span class="case-card-id">${escapeHtml(n.id)}</span>
+          <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary); margin:6px 0;">
+            ${escapeHtml(n.title)}
+          </h4>
+          <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:8px;">
+            Source: <code>${escapeHtml(n.document_name || n.document_id || 'Unknown')}</code> • Page ${n.page_number || 1}${escapeHtml(coordText)}
+          </p>
+          <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">
+            ${escapeHtml(n.evidence || '')}
+          </p>
+          <div class="pill-tag ${pillClass}">
+            ${n.case_id ? `Linked to Case ${escapeHtml(n.case_id)}` : 'General Repository Finding'}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+  } catch (err) {
+    console.warn('[VEXORA Evidence Graph Sync Failed]', err);
+  }
+};
+
 

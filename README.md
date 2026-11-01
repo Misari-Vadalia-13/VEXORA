@@ -30,8 +30,8 @@ The following features represent the planned project scope. Their implementation
 | OCR Processing | Extract text from scanned documents and images. | Completed (Phase 5) |
 | Information Extraction | Identify names, dates and organizations. | Completed (Phase 5) |
 | Document Analysis | Examine unusual formatting and contextual inconsistencies. | Completed (Phase 6) |
-| Cross-Document Comparison | Compare information across multiple documents. | Completed (UI) |
-| Evidence Mapping | Connect findings to their original documents and pages. | Completed (UI) |
+| Cross-Document Comparison | Compare information across multiple documents. | Completed (Phase 7) |
+| Evidence Mapping | Connect findings to their original documents and pages. | Completed (Phase 7) |
 | Investigation Dossier | Generate structured investigation reports. | Completed (UI) |
 | Audit Trail | Maintain records of important investigation activities. | Completed (UI) |
 
@@ -83,7 +83,7 @@ VEXORA is being developed through nine structured phases.
 | 04 | Document Upload & Classification | **Completed** |
 | 05 | OCR & Information Extraction | **Completed** |
 | 06 | Forensic & Contextual Analysis | **Completed** |
-| 07 | Cross-Document Comparison & Evidence Mapping | Not Started |
+| 07 | Cross-Document Comparison & Evidence Mapping | **Completed** |
 | 08 | Investigation Dossier & Report Generation | Not Started |
 | 09 | Audit Trail, Testing & Finalization | Not Started |
 
@@ -116,6 +116,7 @@ VEXORA/
 ├── backend/
 │   ├── analyzer.py
 │   ├── app.py
+│   ├── comparator.py
 │   ├── config.py
 │   ├── database.py
 │   ├── extractor.py

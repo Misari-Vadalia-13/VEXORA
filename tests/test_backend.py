@@ -603,8 +603,158 @@ class VexoraBackendTestCase(unittest.TestCase):
         patch_invalid = self.client.patch(f'/api/findings/{fnd_id}', json={'status': 'Fraudulent'})
         self.assertEqual(patch_invalid.status_code, 400)
 
+    # ==========================================
+    # Phase 7: Cross-Document Comparison & Evidence Tests
+    # ==========================================
+
+    def test_compare_matching_documents(self):
+        """Verifies pairwise comparison across two harmonized matching documents."""
+        import io
+        import pymupdf
+
+        # Document A: Vendor Invoice
+        doc_a = pymupdf.open()
+        p1 = doc_a.new_page()
+        p1.insert_text(
+            (50, 50),
+            "Original Billing Statement\n"
+            "Invoice: INV-2026-8812\n"
+            "Date: 2026-10-18\n"
+            "Entity: Apex Global Inc.\n"
+            "Amount: $4,850,000.00\n"
+        )
+        bytes_a = doc_a.tobytes()
+        doc_a.close()
+
+        # Document B: Bank Mandate
+        doc_b = pymupdf.open()
+        p2 = doc_b.new_page()
+        p2.insert_text(
+            (50, 50),
+            "Bank Confirmation\n"
+            "Reference: INV-2026-8812\n"
+            "Execution Date: 2026-10-18\n"
+            "Account: Apex Global Inc.\n"
+            "Disbursed: $4,850,000.00\n"
+        )
+        bytes_b = doc_b.tobytes()
+        doc_b.close()
+
+        up_a = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_a), 'Invoice_A.pdf')}, content_type='multipart/form-data')
+        doc_a_id = up_a.get_json()['data'][0]['id']
+
+        up_b = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_b), 'Bank_B.pdf')}, content_type='multipart/form-data')
+        doc_b_id = up_b.get_json()['data'][0]['id']
+
+        cmp_res = self.client.post('/api/documents/compare', json={'doc_a_id': doc_a_id, 'doc_b_id': doc_b_id})
+        self.assertEqual(cmp_res.status_code, 200)
+        data = cmp_res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['verdict'], 'Consistent Records')
+        self.assertGreaterEqual(data['matches_count'], 2)
+        self.assertEqual(data['conflicts_count'], 0)
+
+    def test_compare_conflicting_documents(self):
+        """Verifies detection of monetary and counterparty conflicts across documents."""
+        import io
+        import pymupdf
+
+        # Document A: High value claim
+        doc_a = pymupdf.open()
+        p1 = doc_a.new_page()
+        p1.insert_text(
+            (50, 50),
+            "Contract Claim: $4,850,000.00\n"
+            "Vendor: Apex Global Inc.\n"
+            "Date: 2026-10-18\n"
+        )
+        bytes_a = doc_a.tobytes()
+        doc_a.close()
+
+        # Document B: Lower payment slip with disparate entity
+        doc_b = pymupdf.open()
+        p2 = doc_b.new_page()
+        p2.insert_text(
+            (50, 50),
+            "Settlement Receipt: $2,100,000.00\n"
+            "Payee: Apex Offshore Logistics LLC\n"
+            "Date: 2026-05-12\n"
+        )
+        bytes_b = doc_b.tobytes()
+        doc_b.close()
+
+        up_a = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_a), 'Claim_Doc.pdf')}, content_type='multipart/form-data')
+        doc_a_id = up_a.get_json()['data'][0]['id']
+
+        up_b = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_b), 'Receipt_Doc.pdf')}, content_type='multipart/form-data')
+        doc_b_id = up_b.get_json()['data'][0]['id']
+
+        cmp_res = self.client.post('/api/documents/compare', json={'doc_a_id': doc_a_id, 'doc_b_id': doc_b_id})
+        self.assertEqual(cmp_res.status_code, 200)
+        data = cmp_res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['verdict'], 'High Discrepancy')
+        self.assertGreater(data['conflicts_count'], 0)
+        self.assertGreater(data['risk_score'], 30)
+
+        # Confirm monetary conflict was flagged in matrix
+        matrix = data['alignment_matrix']
+        money_conflicts = [m for m in matrix if 'Monetary' in m['attribute'] and m['status'] == 'Conflict']
+        self.assertGreaterEqual(len(money_conflicts), 1)
+
+    def test_compare_case_documents_endpoint(self):
+        """Verifies case-wide multi-document cross-comparison discovery."""
+        import io
+        import pymupdf
+
+        # Create case
+        c_res = self.client.post('/api/cases', json={'title': 'Cross-Doc Audit Case', 'type': 'Financial Audit', 'priority': 'High'})
+        case_id = c_res.get_json()['data']['id']
+
+        # Upload Doc 1 to this case
+        d1 = pymupdf.open()
+        d1.new_page().insert_text((50, 50), "Document 1 Total: $500,000.00")
+        b1 = d1.tobytes()
+        d1.close()
+        self.client.post('/api/documents/upload', data={'file': (io.BytesIO(b1), 'Case_D1.pdf'), 'case_id': case_id}, content_type='multipart/form-data')
+
+        # Upload Doc 2 to this case
+        d2 = pymupdf.open()
+        d2.new_page().insert_text((50, 50), "Document 2 Total: $250,000.00")
+        b2 = d2.tobytes()
+        d2.close()
+        self.client.post('/api/documents/upload', data={'file': (io.BytesIO(b2), 'Case_D2.pdf'), 'case_id': case_id}, content_type='multipart/form-data')
+
+        # Run case-wide compare
+        case_cmp = self.client.get(f'/api/cases/{case_id}/compare')
+        self.assertEqual(case_cmp.status_code, 200)
+        data = case_cmp.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['documents_count'], 2)
+        self.assertEqual(data['comparisons_run'], 1)
+
+    def test_evidence_provenance_graph_endpoint(self):
+        """Verifies retrieval of transparent evidence provenance nodes."""
+        res = self.client.get('/api/evidence-graph')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('data', data)
+
+    def test_compare_validation_errors(self):
+        """Verifies edge cases: same document comparison and missing IDs."""
+        # 1. Missing parameters
+        res1 = self.client.post('/api/documents/compare', json={'doc_a_id': 'DOC-1'})
+        self.assertEqual(res1.status_code, 400)
+
+        # 2. Comparing document to itself
+        res2 = self.client.post('/api/documents/compare', json={'doc_a_id': 'DOC-1', 'doc_b_id': 'DOC-1'})
+        self.assertEqual(res2.status_code, 400)
+        self.assertIn('itself', res2.get_json()['error'])
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

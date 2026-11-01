@@ -45,6 +45,11 @@ from backend.models import (
 from backend.uploader import process_single_upload, allowed_file
 from backend.extractor import extract_document_content, ExtractionError
 from backend.analyzer import analyze_document
+from backend.comparator import (
+    compare_two_documents,
+    compare_case_documents,
+    get_evidence_provenance_nodes
+)
 
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
@@ -478,6 +483,63 @@ def create_app(config_class=Config):
             }), 200
         except ValidationError as ve:
             return jsonify({'success': False, 'error': str(ve)}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # ==========================================
+    # Cross-Document Comparison & Evidence Routes (Phase 7)
+    # ==========================================
+    @app.route('/api/documents/compare', methods=['POST'])
+    def api_compare_documents():
+        """
+        Executes pairwise cross-document comparison:
+        analyzes monetary alignment, date synchronization, counterparty variations,
+        identifier correlations, and duplicate files.
+        """
+        payload = request.get_json(silent=True) or {}
+        doc_a_id = payload.get('doc_a_id')
+        doc_b_id = payload.get('doc_b_id')
+
+        if not doc_a_id or not doc_b_id:
+            return jsonify({'success': False, 'error': 'Both doc_a_id and doc_b_id are required in JSON payload.'}), 400
+
+        try:
+            user = session.get('username', 'alex.turner')
+            result = compare_two_documents(doc_a_id, doc_b_id, user=user)
+            if not result.get('success'):
+                return jsonify(result), 400
+            return jsonify(result), 200
+        except Exception as e:
+            app.logger.error(f"Comparison error between {doc_a_id} and {doc_b_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Cross-document comparison failed: {str(e)}"}), 500
+
+    @app.route('/api/cases/<case_id>/compare', methods=['GET'])
+    def api_compare_case_documents(case_id):
+        """Executes full-case cross-document discrepancy discovery across all assigned files."""
+        case = get_case_by_id(case_id)
+        if not case:
+            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+
+        try:
+            user = session.get('username', 'alex.turner')
+            result = compare_case_documents(case_id, user=user)
+            return jsonify(result), 200
+        except Exception as e:
+            app.logger.error(f"Case comparison error for {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Case comparison failed: {str(e)}"}), 500
+
+    @app.route('/api/evidence-graph', methods=['GET'])
+    def api_evidence_graph():
+        """Retrieves transparent evidence provenance nodes linking findings to document pages."""
+        case_id = request.args.get('case_id')
+        try:
+            nodes = get_evidence_provenance_nodes(case_id=case_id)
+            return jsonify({
+                'success': True,
+                'count': len(nodes),
+                'case_id': case_id,
+                'data': nodes
+            }), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 

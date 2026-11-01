@@ -75,10 +75,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 6. Cross-Document Comparisons Table
+CREATE TABLE IF NOT EXISTS comparisons (
+    id TEXT PRIMARY KEY,
+    case_id TEXT,
+    doc_a_id TEXT NOT NULL,
+    doc_b_id TEXT NOT NULL,
+    discrepancies_count INTEGER DEFAULT 0,
+    matches_count INTEGER DEFAULT 0,
+    results_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+    FOREIGN KEY (doc_a_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (doc_b_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
 -- Indexes for optimal querying performance
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_priority ON cases(priority);
 CREATE INDEX IF NOT EXISTS idx_documents_case_id ON documents(case_id);
 CREATE INDEX IF NOT EXISTS idx_findings_case_id ON findings(case_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+CREATE INDEX IF NOT EXISTS idx_comparisons_case_id ON comparisons(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);

@@ -431,7 +431,88 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 `feat(phase-6): implement visual typographic analysis, contextual rule engine, and forensic findings lifecycle`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 7.
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `67eb1b9`).
+
+---
+
+## Phase 7 — Cross-Document Comparison & Evidence Mapping Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Cross-Document Discrepancy & Correlation Engine (`backend/comparator.py`):**
+   - Implemented `compare_two_documents(doc_a_id, doc_b_id)`:
+     - **Monetary Discrepancy Evaluation:** Extracts and parses numerical figures across documents. Flags variances exceeding configurable thresholds ($0.01 / 1%) with computed absolute and percentage variances.
+     - **Timeline & Date Contradictions:** Compares dates across documents (e.g. invoice dates, due dates, contract execution dates) to identify chronological contradictions.
+     - **Entity & Counterparty Matching:** Uses fuzzy token similarity matching (`difflib.SequenceMatcher`) to compare counterparties and organizations. Flags subtle variations, name shifts, and shell company substitutions (e.g. `Apex Global Inc.` vs `Apex Offshore Logistics LLC` at 65% similarity).
+     - **Duplicate Reference Identification:** Audits primary identifiers (e.g. invoice numbers, tax IDs, passport numbers). Flags when identical reference numbers appear across documents with divergent monetary totals or counterparties.
+     - **File Hash Collisions:** Compares SHA-256 cryptographic hashes. Flags identical files uploaded under different filenames or attached to multiple cases as duplicate submissions.
+   - Implemented `compare_case_documents(case_id)`:
+     - Conducts systematic pairwise cross-checks across all documents assigned to an investigation case.
+     - Aggregates unique discrepancies into a case-level cross-document discrepancy summary.
+   - Implemented `get_evidence_provenance_nodes(case_id=None)`:
+     - Generates an evidence provenance graph linking investigation cases -> source documents -> forensic findings and extracted entities -> exact page numbers and 2D bounding box coordinates (`bbox`).
+     - Ensures full transparency: every finding can be traced back to its physical origin.
+   - Utility Helpers:
+     - `parse_monetary_amount`: Extracts clean floats from formatted strings across currency symbols (`$`, `€`, `£`, `₹`).
+     - `normalize_text`: Standardizes whitespace, punctuation, and casing for deterministic entity comparisons.
+     - `calculate_similarity`: SequenceMatcher-based ratio for fuzzy string matching without external C dependencies.
+
+2. **Database & Schema Updates (`backend/schema.sql`, `backend/database.py`, `backend/models.py`):**
+   - Added `comparisons` table to SQLite schema with indices on `(document_a_id, document_b_id)` and `case_id`:
+     - `id`, `case_id`, `document_a_id`, `document_b_id`, `comparison_type`, `discrepancies_count`, `summary`, `details_json`, `created_at`.
+   - Updated `backend/database.py` with runtime table inspection to automatically create `comparisons` table on existing databases.
+   - Persisted pairwise comparison results into SQLite for auditability.
+
+3. **REST API Endpoints (`backend/app.py`):**
+   - `POST /api/documents/compare`: Accepts `{ doc_a_id, doc_b_id }`, executes comparison engine, persists record in `comparisons`, and returns detailed discrepancy matrix.
+   - `GET /api/cases/<case_id>/compare`: Runs multi-document cross-comparison across all documents in a case.
+   - `GET /api/evidence-graph`: Returns full provenance graph nodes linking cases, documents, findings, page numbers, and bounding boxes.
+
+4. **Frontend Integration (`frontend/index.html`, `frontend/js/app.js`):**
+   - Updated system hero banner pill: `⚡ VEXORA Intelligence Engine • Phase 7 Active (Cross-Document Comparison & Evidence Mapping)`.
+   - Populated primary and reference document selectors (`#compareDocA`, `#compareDocB`) dynamically from `/api/documents`.
+   - Connected "Run Cross-Check" button (`#runComparisonBtn`) to `window.triggerCrossDocumentComparison()`.
+   - Rendered live discrepancy findings dynamically into the Discrepancy Matrix (`#comparisonMatrixBody`), highlighting critical mismatches, monetary variances, and verified alignments with color-coded severity pills.
+   - Implemented `window.loadEvidenceProvenanceGraph()` to render live provenance cards into `#evidenceProvenanceContainer`, displaying source filenames, page numbers, bounding boxes, and linked case IDs.
+   - Added `🔄 Refresh Provenance` action to Evidence Provenance Graph header.
+
+5. **Automated Backend Test Suite (`tests/test_backend.py`):**
+   - Expanded unit test suite from 24 to 29 tests (+5 comprehensive tests):
+     - `test_compare_matching_documents`: Verifies zero discrepancies on identical data.
+     - `test_compare_conflicting_documents`: Verifies detection of monetary variance, chronological date contradiction, and counterparty mismatch.
+     - `test_compare_case_documents_endpoint`: Validates case-level multi-document cross-check endpoint.
+     - `test_evidence_provenance_graph_endpoint`: Validates evidence provenance graph node structure.
+     - `test_compare_validation_errors`: Validates input checking (missing parameters, identical document IDs, 400 Bad Request).
+   - All 29 unit tests pass in 10.54s (`OK`).
+
+### Technologies Introduced
+- **Cross-Document Entity Alignment:** Correlating unstructured entities across multiple heterogeneous files into a structured matrix.
+- **Fuzzy Token Similarity Matching (`difflib.SequenceMatcher`):** High-precision token similarity calculation for legal counterparty verification.
+- **Evidence Provenance Architecture:** Bidirectional linking from investigation findings back to document page and visual bounding box coordinates.
+- **Relational Comparison Storage:** SQLite-backed comparison records preserving historical cross-check telemetry.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 29 unit tests via `python -m unittest tests/test_backend.py` — 29/29 passed in 10.54s (`OK`).
+- **Frontend Syntax Check:** `node -c frontend/js/app.js` passed with exit code 0.
+- **Live Server Test:** Endpoints `/api/documents/compare`, `/api/cases/<case_id>/compare`, and `/api/evidence-graph` validated against live database.
+
+### Known Limitations
+- Investigation Dossier generation, Markdown/HTML report compilation, and printable export are scheduled for Phase 8.
+- Comprehensive audit trail export and final system hardening are scheduled for Phase 9.
+
+### Concepts Learned
+1. **Multi-Document Discrepancy Detection:** Fraud and human error rarely present themselves in a single document in isolation; discrepancies typically manifest across paired documents (e.g., an invoice claiming $10,000 against a purchase order authorized for $7,500).
+2. **Fuzzy String Comparison in Forensics:** Entity names frequently suffer from minor typographical shifts, abbreviations, or shell company variations. Applying sequence matching allows investigators to discern between innocent spelling variants and deceptive substitutions.
+3. **Evidence Provenance & Auditability:** Forensic conclusions are only as strong as their source traceability. Providing direct links to specific pages and bounding coordinates makes findings indisputable and courtroom-ready.
+
+### Suggested Git Commit Message
+`feat(phase-7): implement cross-document comparison, discrepancy matrix, and evidence provenance mapping`
+
+### Approval Status
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 8.
+
 
 
 

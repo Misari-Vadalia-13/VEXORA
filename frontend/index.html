@@ -179,7 +179,7 @@
           <!-- Hero Banner -->
           <div class="hero-banner">
             <div class="banner-content">
-              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 6 Active (Forensic & Contextual Analysis)</span>
+              <span class="banner-pill">⚡ VEXORA Intelligence Engine • Phase 7 Active (Cross-Document Comparison & Evidence Mapping)</span>
               <h1 class="banner-title">Document Forensics & Contextual Intelligence</h1>
               <p class="banner-desc">
                 Welcome to the centralized investigation workspace. Ingest multi-format documents, perform OCR extraction, detect visual irregularities, evaluate contextual alignment, and generate explainable, audit-ready forensic dossiers.
@@ -1018,7 +1018,7 @@
               <h1 class="page-title">Cross-Document Comparison</h1>
               <p class="page-subtitle">Correlate extracted entities across multiple documents to identify factual contradictions.</p>
             </div>
-            <button class="btn-primary" onclick="showToast('Executing cross-document entity alignment algorithm', 'info')">
+            <button class="btn-primary" id="runComparisonBtn" onclick="triggerCrossDocumentComparison()">
               Run Cross-Check
             </button>
           </div>
@@ -1062,7 +1062,7 @@
                     <th>Impact / Explanation</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody id="comparisonMatrixBody">
                   <tr>
                     <td style="font-weight:700;">Full Legal Name</td>
                     <td>Misari Vadalia</td>
@@ -1117,6 +1117,7 @@
               <h1 class="page-title">Evidence Provenance Graph</h1>
               <p class="page-subtitle">Track every detected finding and extracted entity back to its exact document page and bounding box.</p>
             </div>
+            <button class="btn-secondary" onclick="loadEvidenceProvenanceGraph()" style="font-size:0.85rem;">🔄 Refresh Provenance</button>
           </div>
 
           <div class="card-panel">
@@ -1127,7 +1128,7 @@
               </div>
             </div>
 
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
+            <div id="evidenceProvenanceContainer" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
               <div class="case-card">
                 <span class="case-card-id">EV-NODE #001</span>
                 <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">Salary Field Modification</h4>
