@@ -30,12 +30,14 @@ from backend.models import (
     get_all_documents,
     get_document_by_id,
     create_document,
+    delete_document,
     get_all_findings,
     create_finding,
     get_system_stats,
     get_audit_logs,
     log_audit
 )
+from backend.uploader import process_single_upload, allowed_file
 
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
@@ -219,6 +221,57 @@ def create_app(config_class=Config):
             'data': docs
         }), 200
 
+    @app.route('/api/documents/upload', methods=['POST'])
+    def api_upload_documents():
+        """
+        Ingests multi-format documents (PDF, JPG, PNG).
+        Supports single file ('file') or batch uploads ('files').
+        Validates formats and sizes, hashes with SHA-256, classifies, and saves to disk and SQLite.
+        """
+        case_id = request.form.get('case_id') or request.args.get('case_id')
+        user = session.get('username', 'alex.turner')
+        upload_folder = app.config.get('UPLOAD_FOLDER')
+
+        # Collect files from multipart form
+        file_list = []
+        if 'files' in request.files:
+            file_list = request.files.getlist('files')
+        elif 'file' in request.files:
+            file_list = [request.files['file']]
+
+        if not file_list or all(f.filename == '' for f in file_list):
+            return jsonify({'success': False, 'error': 'No files provided in request.'}), 400
+
+        uploaded_docs = []
+        errors = []
+
+        for f in file_list:
+            if not f or not f.filename:
+                continue
+            try:
+                doc = process_single_upload(f, case_id=case_id, user=user, upload_folder=upload_folder)
+                uploaded_docs.append(doc)
+            except ValidationError as ve:
+                errors.append({'filename': f.filename, 'error': ve.message, 'field': ve.field})
+            except Exception as e:
+                errors.append({'filename': f.filename, 'error': str(e)})
+
+        # If all uploads failed due to validation, return 400
+        if not uploaded_docs and errors:
+            return jsonify({
+                'success': False,
+                'error': errors[0]['error'],
+                'details': errors
+            }), 400
+
+        return jsonify({
+            'success': True,
+            'message': f"Successfully ingested {len(uploaded_docs)} document(s).",
+            'count': len(uploaded_docs),
+            'data': uploaded_docs,
+            'errors': errors if errors else None
+        }), 201
+
     @app.route('/api/documents', methods=['POST'])
     def api_register_document():
         """Registers metadata for a new document."""
@@ -244,6 +297,45 @@ def create_app(config_class=Config):
         if not doc:
             return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
         return jsonify({'success': True, 'data': doc}), 200
+
+    @app.route('/api/documents/<doc_id>/download', methods=['GET'])
+    def api_download_document(doc_id):
+        """Safely streams document file from uploads folder."""
+        doc = get_document_by_id(doc_id)
+        if not doc or not doc.get('file_path'):
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
+        disk_filename = Path(doc['file_path']).name
+        target_file = upload_folder / disk_filename
+
+        if not target_file.exists():
+            return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' missing on disk."}), 404
+
+        return send_from_directory(upload_folder, disk_filename, as_attachment=False, download_name=doc['filename'])
+
+    @app.route('/api/documents/<doc_id>', methods=['DELETE'])
+    def api_delete_document(doc_id):
+        """Deletes a document record and removes physical file from disk."""
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        user = session.get('username', 'alex.turner')
+        delete_document(doc_id, user=user)
+
+        # Remove physical file if exists
+        if doc.get('file_path'):
+            upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
+            disk_filename = Path(doc['file_path']).name
+            target_file = upload_folder / disk_filename
+            if target_file.exists():
+                try:
+                    target_file.unlink()
+                except Exception as e:
+                    app.logger.warning(f"Could not remove physical file {target_file}: {e}")
+
+        return jsonify({'success': True, 'message': f"Document '{doc_id}' deleted successfully."}), 200
 
     # ==========================================
     # Findings & Evidence API Routes

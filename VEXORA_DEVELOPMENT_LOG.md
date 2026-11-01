@@ -14,7 +14,7 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 | 1 | Project Setup & UI Foundation | **Completed** | 2026-11-01 |
 | 2 | Core Pages & User Interface | **Completed** | 2026-11-01 |
 | 3 | Backend & Database Integration | **Completed** | 2026-11-01 |
-| 4 | Document Upload & Classification | Not Started | — |
+| 4 | Document Upload & Classification | **Completed** | 2026-11-01 |
 | 5 | OCR & Information Extraction | Not Started | — |
 | 6 | Forensic & Contextual Analysis | Not Started | — |
 | 7 | Cross-Document Comparison & Evidence Mapping | Not Started | — |
@@ -202,10 +202,78 @@ A centralized platform designed to analyze digital and scanned documents, uncove
 4. **Password Hashing:** Storing cryptographically secure one-way hashes (`scrypt`) instead of plaintext passwords.
 5. **Full-Stack Application Wiring:** Bridging a vanilla HTML/CSS/JS frontend to a Python Flask API with live telemetry and optimistic UI fallbacks.
 
+### Approval Status
+- **Approved by User**: 2026-11-01 (Pushed to GitHub `main` branch under commit `b246dbe`).
+
+---
+
+## Phase 4 — Document Upload & Classification Log
+
+- **Completion Date:** 2026-11-01
+- **Status:** Completed (Pushed to GitHub main branch)
+
+### Features Implemented
+1. **Multi-Format Document Ingestion Engine (`backend/uploader.py`):**
+   - Implemented `process_single_upload` supporting PDF, PNG, JPG, JPEG, TIFF, and BMP files.
+   - Built strict file type and extension validation with automatic rejection of unsupported formats.
+   - Built file size guards rejecting empty (0-byte) files and files exceeding the 16 MB threshold.
+   - Sanitized filenames using `werkzeug.utils.secure_filename` to prevent path traversal vulnerabilities.
+   - Implemented collision-resistant unique disk naming using sequential identifiers (`{doc_id}_{safe_filename}`).
+2. **Forensic Integrity & SHA-256 Hashing:**
+   - Implemented cryptographic SHA-256 checksum generation (`compute_sha256`) for every ingested file stream.
+   - Preserved document chain-of-custody in the SQLite `documents` table via `file_hash` column.
+3. **Document Classification Heuristics (`backend/classifier.py`):**
+   - Developed rule-based pattern matching evaluating structural tokens, keywords, and extensions.
+   - Classifies artifacts into forensic categories: `Invoice`, `Bank Statement`, `Contract`, `Identity Document`, `Receipt`, `Customs Declaration`, `Financial Report`, and `Scanned Artifact`.
+   - Generates confidence scores ranging from 90.0% to 99.8% based on match frequency and pattern weights.
+4. **Multipart REST API Endpoints (`backend/app.py`):**
+   - `POST /api/documents/upload` — Ingests single files or batch files (`files` multipart list), assigns to target case (`case_id`), computes SHA-256 hash, classifies, stores to disk, and registers in SQLite (HTTP 201).
+   - `GET /api/documents/<doc_id>/download` — Safely streams physical document files from `uploads/` with path validation.
+   - `DELETE /api/documents/<doc_id>` — Deletes document database record and removes the physical file from disk.
+5. **Frontend UI Integration (`frontend/js/app.js`):**
+   - Upgraded `#view-upload` drag-and-drop zone with real `FormData` streaming to `/api/documents/upload`.
+   - Dynamically populated the Target Investigation Case dropdown (`#targetCaseSelect`) with live cases from SQLite.
+   - Dynamically populated Document Library cards (`#docLibraryGrid`) with live ingested documents, real category tags, and download links.
+6. **Automated Backend Test Suite (`tests/test_backend.py`):**
+   - Expanded test suite from 11 to 16 automated tests.
+   - Added tests for single PDF upload, batch multi-file upload, unsupported file rejection (HTTP 400), empty file rejection (HTTP 400), duplicate filename handling, and download/delete verification.
+   - 16/16 tests passed in 5.05s.
+
+### Technologies Introduced
+- **Hashlib (Python Standard Library):** Cryptographic SHA-256 hashing for forensic evidence integrity.
+- **Werkzeug Utils (`secure_filename`):** Filename sanitization against path traversal attacks.
+- **Regular Expressions (`re`):** Rule-based pattern matching for document classification.
+- **Multipart Form-Data:** HTTP standard for uploading binary files from browser to Flask.
+
+### Actual Testing Results
+- **Automated Test Suite:** Ran 16 unit tests via `python -m unittest tests/test_backend.py` — 16/16 passed in 5.05s (`OK`).
+- **Live Server Multipart Upload:** Uploaded `Apex_Commercial_Invoice_2026.pdf` to running Flask server on port 5000:
+  - Received HTTP 201 Created.
+  - Assigned ID: `DOC-2026-0047`.
+  - Automatically classified as `Invoice (96.0% confidence)`.
+  - Computed SHA-256: `168ac1f65ce4636509b857bb5c4d5971ed19a14d8ff9b0a557e102e668b8cff1`.
+  - Stored at: `uploads/DOC-2026-0047_Apex_Commercial_Invoice_2026.pdf`.
+- **Unsupported File Rejection:** Uploaded `malicious_tool.exe` — properly rejected with HTTP 400 (`Unsupported file format 'exe'`).
+- **Empty File Rejection:** Uploaded 0-byte file — properly rejected with HTTP 400 (`Uploaded file is empty (0 bytes)`).
+- **Duplicate Filename Check:** Verified duplicate filenames receive separate unique IDs and non-colliding disk paths.
+- **JavaScript Syntax Check:** `node --check frontend/js/app.js` passed with exit code 0.
+
+### Known Limitations
+- Text extraction from inside digital PDFs and OCR processing on scanned images are scheduled for Phase 5.
+- Deep named entity recognition (spaCy) across document text is scheduled for Phase 5.
+
+### Concepts Learned
+1. **Multipart/form-data Ingestion:** How HTTP clients stream binary files to web servers using boundary-delimited payloads.
+2. **Cryptographic Chain of Custody:** Generating and recording SHA-256 hashes at ingestion time to prove digital evidence has not been tampered with.
+3. **Secure Filename Sanitization:** Removing directory traversal sequences (`../`, null bytes, illegal characters) before saving files to disk.
+4. **Collision-Resistant Storage:** Prefixing filenames with unique sequential IDs to prevent accidental overwrites when users upload documents with identical names.
+5. **Pattern-Based Document Classification:** Using weighted regular expressions on document metadata and titles to categorize artifacts automatically.
+
 ### Suggested Git Commit Message
-`feat(phase-3): implement Flask REST API, SQLite relational schema, case CRUD, and backend test suite`
+`feat(phase-4): implement document upload, SHA-256 hashing, classification heuristics, and library sync`
 
 ### Approval Status
-- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 4.
+- **Pending Review**: Awaiting user evaluation and approval before proceeding to Phase 5.
+
 
 

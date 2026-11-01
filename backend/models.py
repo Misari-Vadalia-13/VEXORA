@@ -280,8 +280,8 @@ def create_document(data, user="System"):
 
     execute_db(
         """
-        INSERT INTO documents (id, case_id, filename, file_type, file_size, file_path, category, classification_confidence, status, uploaded_by, uploaded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO documents (id, case_id, filename, file_type, file_size, file_path, file_hash, category, classification_confidence, status, uploaded_by, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             doc_id,
@@ -290,6 +290,7 @@ def create_document(data, user="System"):
             data.get('file_type', 'unknown').lower(),
             int(data.get('file_size', 0)),
             data.get('file_path', ''),
+            data.get('file_hash', ''),
             data.get('category', 'Uncategorized'),
             float(data.get('classification_confidence', 0.0)),
             data.get('status', 'Pending'),
@@ -300,6 +301,15 @@ def create_document(data, user="System"):
 
     log_audit("DOCUMENT_UPLOAD", "document", doc_id, f"Document '{data['filename']}' registered.", user)
     return get_document_by_id(doc_id)
+
+def delete_document(doc_id, user="System"):
+    """Deletes a document record from SQLite."""
+    doc = query_db("SELECT * FROM documents WHERE id = ?", (doc_id,), one=True)
+    if not doc:
+        return False
+    execute_db("DELETE FROM documents WHERE id = ?", (doc_id,))
+    log_audit("DOCUMENT_DELETED", "document", doc_id, f"Document '{doc['filename']}' deleted from system.", user)
+    return True
 
 # ==========================================
 # 4. Findings & Evidence Operations

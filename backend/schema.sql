@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS documents (
     file_type TEXT NOT NULL,
     file_size INTEGER NOT NULL,
     file_path TEXT,
+    file_hash TEXT,
     category TEXT DEFAULT 'Uncategorized',
     classification_confidence REAL DEFAULT 0.0,
     status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Processing', 'Analyzed', 'Flagged', 'Clean')),

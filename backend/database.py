@@ -47,6 +47,11 @@ def init_db(db_path=None):
     conn = get_db(db_path)
     try:
         conn.executescript(schema_sql)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(documents)")
+        cols = [row['name'] for row in cursor.fetchall()]
+        if 'file_hash' not in cols and len(cols) > 0:
+            cursor.execute("ALTER TABLE documents ADD COLUMN file_hash TEXT")
         conn.commit()
     finally:
         conn.close()

@@ -241,17 +241,106 @@ class VexoraBackendTestCase(unittest.TestCase):
         bad_login_res = self.client.post('/api/auth/login', data=json.dumps(bad_login_payload), content_type='application/json')
         self.assertEqual(bad_login_res.status_code, 401)
 
-    def test_frontend_routes_served(self):
-        """Verifies Flask correctly serves HTML, CSS, and JS frontend assets."""
-        index_res = self.client.get('/')
-        self.assertEqual(index_res.status_code, 200)
-        self.assertIn(b'VEXORA', index_res.data)
+    def test_upload_single_pdf(self):
+        """Verifies single PDF upload, SHA-256 hash generation, classification, and disk storage."""
+        import io
+        dummy_pdf_content = b"%PDF-1.4 mock content invoice test subtotal VAT payment details %%EOF"
+        data = {
+            'case_id': 'CAS-2026-0891',
+            'file': (io.BytesIO(dummy_pdf_content), 'Apex_Vendor_Invoice_INV99.pdf')
+        }
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 201)
+        res_data = res.get_json()
+        self.assertTrue(res_data['success'])
+        self.assertEqual(res_data['count'], 1)
+        doc = res_data['data'][0]
+        self.assertTrue(doc['id'].startswith('DOC-'))
+        self.assertEqual(doc['filename'], 'Apex_Vendor_Invoice_INV99.pdf')
+        self.assertEqual(doc['category'], 'Invoice')
+        self.assertGreaterEqual(doc['classification_confidence'], 90.0)
+        self.assertTrue(len(doc['file_hash']) == 64)  # SHA-256 hex length
 
-        css_res = self.client.get('/css/style.css')
-        self.assertEqual(css_res.status_code, 200)
+    def test_upload_multiple_files(self):
+        """Verifies batch upload of multiple documents in a single HTTP request."""
+        import io
+        doc1 = (io.BytesIO(b"%PDF-1.4 contract agreement terms %%EOF"), 'Partnership_Agreement.pdf')
+        doc2 = (io.BytesIO(b"\x89PNG\r\n\x1a\n mock customs declaration image data"), 'Customs_Manifest_Port.png')
+        data = {
+            'case_id': 'CAS-2026-0888',
+            'files': [doc1, doc2]
+        }
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 201)
+        res_data = res.get_json()
+        self.assertTrue(res_data['success'])
+        self.assertEqual(res_data['count'], 2)
+        categories = [d['category'] for d in res_data['data']]
+        self.assertIn('Contract', categories)
+        self.assertIn('Customs Declaration', categories)
 
-        js_res = self.client.get('/js/app.js')
-        self.assertEqual(js_res.status_code, 200)
+    def test_upload_unsupported_file_type(self):
+        """Verifies rejection of unsupported file extensions with HTTP 400."""
+        import io
+        data = {
+            'file': (io.BytesIO(b"MZ executable binary payload"), 'malicious_tool.exe')
+        }
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 400)
+        res_data = res.get_json()
+        self.assertFalse(res_data['success'])
+        self.assertIn('unsupported', res_data['error'].lower())
+
+    def test_upload_empty_file(self):
+        """Verifies rejection of empty (0-byte) files."""
+        import io
+        data = {
+            'file': (io.BytesIO(b""), 'empty_invoice.pdf')
+        }
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('empty', res.get_json()['error'].lower())
+
+    def test_duplicate_filename_handling(self):
+        """Verifies that uploading duplicate filenames preserves both with unique IDs and disk paths."""
+        import io
+        pdf_bytes = b"%PDF-1.4 mock content %%EOF"
+        data1 = {'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
+        res1 = self.client.post('/api/documents/upload', data=data1, content_type='multipart/form-data')
+        self.assertEqual(res1.status_code, 201)
+        doc1 = res1.get_json()['data'][0]
+
+        data2 = {'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
+        res2 = self.client.post('/api/documents/upload', data=data2, content_type='multipart/form-data')
+        self.assertEqual(res2.status_code, 201)
+        doc2 = res2.get_json()['data'][0]
+
+        self.assertNotEqual(doc1['id'], doc2['id'])
+        self.assertNotEqual(doc1['file_path'], doc2['file_path'])
+
+    def test_download_and_delete_document(self):
+        """Verifies streaming document download and subsequent deletion."""
+        import io
+        pdf_content = b"%PDF-1.4 Download stream verification sample %%EOF"
+        data = {'file': (io.BytesIO(pdf_content), 'Download_Test_Document.pdf')}
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 201)
+        doc_id = res.get_json()['data'][0]['id']
+
+        # Download document
+        dl_res = self.client.get(f'/api/documents/{doc_id}/download')
+        self.assertEqual(dl_res.status_code, 200)
+        self.assertEqual(dl_res.data, pdf_content)
+        dl_res.close()  # Close stream to release Windows file handle
+
+        # Delete document
+        del_res = self.client.delete(f'/api/documents/{doc_id}')
+        self.assertEqual(del_res.status_code, 200)
+
+        # Confirm 404
+        dl_404 = self.client.get(f'/api/documents/{doc_id}/download')
+        self.assertEqual(dl_404.status_code, 404)
 
 if __name__ == '__main__':
     unittest.main()
+

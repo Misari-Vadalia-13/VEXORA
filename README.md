@@ -80,7 +80,7 @@ VEXORA is being developed through nine structured phases.
 | 01 | Project Setup & UI Foundation | **Completed** |
 | 02 | Core Pages & User Interface | **Completed** |
 | 03 | Backend & Database Integration | **Completed** |
-| 04 | Document Upload & Classification | Not Started |
+| 04 | Document Upload & Classification | **Completed** |
 | 05 | OCR & Information Extraction | Not Started |
 | 06 | Forensic & Contextual Analysis | Not Started |
 | 07 | Cross-Document Comparison & Evidence Mapping | Not Started |
