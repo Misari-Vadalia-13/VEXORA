@@ -640,6 +640,24 @@ def analyze_document(doc_id, user="System"):
     except Exception as pdf_ext_err:
         pass
 
+    # V2 Phase D Hook: Image Forensics for Scans & Photos (IMG-001 to IMG-004)
+    try:
+        from backend.config import Config
+        img_flag = getattr(Config, 'ENABLE_IMAGE_FORENSICS', False)
+        try:
+            from flask import current_app, has_app_context
+            if has_app_context() and current_app and 'ENABLE_IMAGE_FORENSICS' in current_app.config:
+                img_flag = current_app.config.get('ENABLE_IMAGE_FORENSICS', False)
+        except Exception:
+            pass
+
+        if img_flag:
+            from backend.forensics_image import run_image_forensics
+            img_findings = run_image_forensics(file_path)
+            all_findings.extend(img_findings)
+    except Exception as img_ext_err:
+        pass
+
     # Annotate findings with objective evidence class labels
     try:
         from backend.evidence_class import classify_finding

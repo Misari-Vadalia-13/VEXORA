@@ -31,6 +31,12 @@ RULE_EVIDENCE_CLASS_MAP = {
     'PDF-004': 'Potential Manipulation',      # Embedded Image Placed Over Text / Resolution Disparity
     'PDF-005': 'Potential Manipulation',      # Invisible or Fully Off-Page Text
 
+    # Phase D: Image Forensic Rules
+    'IMG-001': 'Potential Manipulation',      # Error Level Analysis (ELA) Compression Disparity
+    'IMG-002': 'Observation',                 # Noise or Sharpness Inconsistency Across Blocks
+    'IMG-003': 'Potential Manipulation',      # Copy-Move Duplication via ORB Keypoint Matching
+    'IMG-004': 'Observation',                 # Signature Region Presence & Text Overlap Check
+
     # Fallback Generic Rules
     'RULE-GEN-001': 'Observation'
 }
@@ -54,6 +60,8 @@ def get_evidence_class(rule_id, existing_class=None):
     clean_id = rule_id.strip()
     if clean_id.startswith('LLM-'):
         return 'Inconsistency'
+    if clean_id.startswith('IMG-'):
+        return RULE_EVIDENCE_CLASS_MAP.get(clean_id, 'Potential Manipulation')
     return RULE_EVIDENCE_CLASS_MAP.get(clean_id, DEFAULT_EVIDENCE_CLASS)
 
 

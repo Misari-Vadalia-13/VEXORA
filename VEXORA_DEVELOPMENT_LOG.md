@@ -943,3 +943,66 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-c): implement LLM reasoning layer, anti-hallucination quote verification, finding explanations, and contextual cross-check`
+
+
+---
+
+## Phase D: Image Forensics for Scans & Photos (IMG-001 through IMG-004)
+**Date:** 2026-11-02
+**Status:** Completed
+**Branch:** feature/v2-phase-d (merged into main)
+
+### What Was Built
+1. **Core Image Forensics Engine (`backend/forensics_image.py`):**
+   - Built with lightweight OpenCV (`opencv-python-headless`) and NumPy:
+     - **IMG-001 (Error Level Analysis - ELA):** Recompresses image in-memory at JPEG quality 90 and calculates block-level error surfaces relative to the document median error. Anomalous blocks with elevated recompression residue are flagged as `Potential Manipulation`, identifying elements spliced from different compression generations or digital sources.
+     - **IMG-002 (Noise & Sharpness Inconsistency):** Evaluates Laplacian high-frequency edge variance across non-empty blocks. Identifies sharp digital text or cut-outs embedded in soft-scanned or blurry backgrounds as an `Observation`.
+     - **IMG-003 (Copy-Move Duplication via ORB Keypoint Clustering):** Computes ORB keypoint descriptors and matches features with Lowe's ratio test. Clusters displacement vectors by spatial distance and angular orientation (+-15 deg, +-25px) to catch cloned seals, rubber stamps, numbers, and signatures as `Potential Manipulation`.
+     - **IMG-004 (Signature Region Presence & Overlap Check):** Analyzes the lower 35% of the page for cursive handwritten ink strokes using adaptive Gaussian thresholding and connected components. Checks for physical overlap with printed lines. If document resolution is below threshold or unsuited, returns the required explicit fallback notice: `"signature analysis: unsupported for this document"`.
+   - **`run_image_forensics(file_path)`:** Master coordinator analyzing standalone images (.png, .jpg, .jpeg, .tiff, .bmp, .webp) and rasterized PDF pages via PyMuPDF.
+
+2. **Evidence Classification & Objective Forensic Taxonomy (`backend/evidence_class.py`):**
+   - Mapped `IMG-001` and `IMG-003` to `Potential Manipulation`.
+   - Mapped `IMG-002` and `IMG-004` to `Observation`.
+   - All findings include explicit disclaimers: `"Heuristic indicator; compression residue may also reflect multiple legitimate saves..."` and `"Heuristic indicator; identical graphics (logos, letterhead) can trigger match clusters..."`.
+   - Strictly enforces the rule to never assert "confirmed fraud".
+
+3. **Analyzer Integration & Feature Flag (`backend/config.py`, `backend/analyzer.py`):**
+   - Added configuration flag `ENABLE_IMAGE_FORENSICS = os.environ.get('ENABLE_IMAGE_FORENSICS', 'false').lower() in ('true', '1', 'yes')`.
+   - Connected `run_image_forensics` to `analyze_document` under safe exception wrappers, ensuring zero disruption when the flag is disabled.
+
+4. **Unit & Integration Test Suite (`tests/test_v2_phase_d.py`):**
+   - 8 comprehensive tests:
+     - `test_image_forensics_availability`: Confirms OpenCV and NumPy availability.
+     - `test_img_001_error_level_analysis`: Validates ELA detection on spliced patch with different compression history.
+     - `test_img_002_sharpness_inconsistency`: Validates Laplacian variance detection on sharp patch on blurred canvas.
+     - `test_img_003_copy_move_detection`: Validates ORB keypoint clustering on cloned stamps.
+     - `test_img_004_signature_region_detection`: Validates cursive ink stroke clustering.
+     - `test_img_004_signature_unsupported_small_image`: Validates unsupported fallback message on low-resolution image.
+     - `test_run_image_forensics_standalone_image`: Validates end-to-end file pipeline.
+     - `test_analyzer_integration_with_flag`: Validates `ENABLE_IMAGE_FORENSICS` flag control (0 findings when False, findings generated when True).
+
+### Technologies Introduced
+- **OpenCV & NumPy Computer Vision Pipeline:** Headless OpenCV for fast morphological processing, Laplacian edge variance, ORB feature detection, and connected components analysis.
+- **Error Level Analysis (ELA):** In-memory JPEG quantization error profiling to uncover digital cut-and-paste manipulations without GPU dependencies.
+- **Displacement Vector Clustering:** Spatial clustering of keypoint match vectors to separate duplicated elements from random repetitive textures.
+
+### Actual Testing Results
+- **Phase D Image Forensics Suite (`tests/test_v2_phase_d.py`):** 8/8 passed (`OK`).
+- **Phase C LLM Reasoning Suite (`tests/test_v2_phase_c.py`):** 9/9 passed (`OK`).
+- **Phase B PDF Forensics Suite (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Suite (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Suite (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Test Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 99/99 passing across all suites in 24.75s.
+
+### Known Limitations
+- ELA can produce false positives on high-contrast text edges in clean uncompressed PNGs; mitigated by requiring significant block residue disparity above document median error.
+- Heavily re-compressed web screenshots or degraded multi-generation faxes may obscure original sensor noise patterns.
+
+### Concepts Learned
+- **Robust Outlier Filtering in Documents:** Standard business documents have large white margins. Calculating median sharpness variance must exclude zero-variance blank margins to avoid dividing by zero or setting the baseline too low.
+- **Vector Clustering for Copy-Move:** Individual ORB feature matches have noise, but clustering matches that share both identical displacement distance and parallel angular orientation cleanly isolates cloned figures and stamps.
+
+### Suggested Git Commit Message
+`feat(phase-d): implement image forensics module (IMG-001 ELA, IMG-002 sharpness, IMG-003 copy-move, IMG-004 signature check)`
