@@ -1008,12 +1008,18 @@ function renderForensicFindings(findings) {
       ? `Page ${f.page_number || 1} • Box [${escapeHtml(String(f.coordinates))}]`
       : `Page ${f.page_number || 1} • Contextual Check`;
 
+    const evClass = f.evidence_class || 'Observation';
+    const evClassPill = evClass === 'Potential Manipulation' ? 'pill-high' : evClass === 'Inconsistency' ? 'pill-medium' : 'pill-low';
+
     const card = document.createElement('div');
     card.className = `finding-detail-card ${cardClass}`;
     card.innerHTML = `
       <div class="finding-card-head">
         <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
-        <span class="finding-loc">${escapeHtml(locText)}</span>
+        <div>
+          <span class="pill-tag ${evClassPill}" style="margin-right:6px; font-size:0.7rem;">${escapeHtml(evClass)}</span>
+          <span class="finding-loc">${escapeHtml(locText)}</span>
+        </div>
       </div>
       <p class="finding-reason">${escapeHtml(f.description)}</p>
       ${f.evidence ? `<div class="finding-recommendation">🔍 Evidence: <strong>${escapeHtml(f.evidence)}</strong></div>` : ''}
@@ -1275,8 +1281,17 @@ window.loadCaseDossierPreview = async function(caseId) {
           card.className = `finding-detail-card ${sev === 'critical' || sev === 'high' ? 'critical' : ''}`;
           const coordText = f.coordinates ? ` • Box [${escapeHtml(f.coordinates)}]` : '';
 
+          const evClass = f.evidence_class || 'Observation';
+          const evClassPill = evClass === 'Potential Manipulation' ? 'pill-high' : evClass === 'Inconsistency' ? 'pill-medium' : 'pill-low';
+
           card.innerHTML = `
-            <strong>[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</strong> (${escapeHtml(f.severity)})
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong>[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</strong>
+              <div>
+                <span class="pill-tag ${evClassPill}" style="margin-right:6px; font-size:0.7rem;">${escapeHtml(evClass)}</span>
+                <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">(${escapeHtml(f.severity)})</span>
+              </div>
+            </div>
             <p style="font-size:0.8rem; margin:3px 0 0 0; color:var(--text-secondary);">
               Page ${f.page_number || 1}${coordText}: ${escapeHtml(f.description)}
             </p>

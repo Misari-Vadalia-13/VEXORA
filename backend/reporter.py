@@ -127,6 +127,7 @@ def generate_case_dossier_data(case_id):
             'title': f['title'],
             'severity': sev,
             'category': f.get('category') or 'Forensic Observation',
+            'evidence_class': f.get('evidence_class') or 'Observation',
             'description': f.get('description') or '',
             'evidence': f.get('evidence') or '',
             'page_number': f.get('page_number', 1),
@@ -399,7 +400,8 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
             page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 10), f"[{f['rule_id']}] {f['title']}", fontname="hebo", fontsize=8, color=(15/255, 23/255, 42/255))
             page.insert_text(fitz.Point(MARGIN_RIGHT - 110, y + 10), f"Severity: {sev.upper()}", fontname="hebo", fontsize=7.5, color=badge_color)
 
-            loc_text = f"Page {f['page_number']}" + (f" • Box [{f['coordinates']}]" if f['coordinates'] else "")
+            ev_class = f.get('evidence_class') or 'Observation'
+            loc_text = f"Page {f['page_number']}" + (f" • Box [{f['coordinates']}]" if f['coordinates'] else "") + f" • Class: {ev_class}"
             page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 21), loc_text, fontname="courier", fontsize=7, color=(100/255, 116/255, 139/255))
 
             desc_text = f['description'][:100] + "..." if len(f['description']) > 100 else f['description']
@@ -568,7 +570,10 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
             <div style="border-left: 4px solid {border_color}; background:#f8fafc; padding:12px 16px; margin-bottom:12px; border-radius:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <span style="font-weight:700; color:#0f172a;">[{f['rule_id']}] {f['title']}</span>
-                    <span style="font-size:0.75rem; font-weight:700; color:{border_color}; text-transform:uppercase;">{sev}</span>
+                    <span>
+                        <span style="font-size:0.75rem; background:#e2e8f0; color:#334155; padding:2px 6px; border-radius:3px; margin-right:6px; font-weight:600;">{f.get('evidence_class') or 'Observation'}</span>
+                        <span style="font-size:0.75rem; font-weight:700; color:{border_color}; text-transform:uppercase;">{sev}</span>
+                    </span>
                 </div>
                 <div style="font-size:0.8rem; color:#64748b; margin-bottom:6px;">
                     Source Document: <code>{f.get('document_id', 'Unknown')}</code> • Page {f.get('page_number', 1)}{coord_str}

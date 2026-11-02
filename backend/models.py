@@ -358,6 +358,19 @@ def get_document_extraction(doc_id):
 # 4. Findings & Evidence Operations
 # ==========================================
 
+def _hydrate_finding_evidence_class(f):
+    """Ensures finding dict contains an objective evidence_class label, falling back to rule map."""
+    if not f or not isinstance(f, dict):
+        return f
+    try:
+        from backend.evidence_class import get_evidence_class
+        if not f.get('evidence_class'):
+            f['evidence_class'] = get_evidence_class(f.get('rule_id'))
+    except Exception:
+        if not f.get('evidence_class'):
+            f['evidence_class'] = 'Observation'
+    return f
+
 def get_all_findings(case_id=None, severity=None):
     """Retrieves findings with optional filters."""
     query = """
@@ -378,11 +391,12 @@ def get_all_findings(case_id=None, severity=None):
         args.append(severity)
 
     query += " ORDER BY f.created_at DESC"
-    return query_db(query, args)
+    results = query_db(query, args)
+    return [_hydrate_finding_evidence_class(f) for f in results]
 
 def get_finding_by_id(finding_id):
     """Retrieves a single finding by identifier."""
-    return query_db(
+    res = query_db(
         """
         SELECT f.*, c.title AS case_title, d.filename AS document_filename
         FROM findings f
@@ -393,10 +407,11 @@ def get_finding_by_id(finding_id):
         (finding_id,),
         one=True
     )
+    return _hydrate_finding_evidence_class(res)
 
 def get_findings_by_document(doc_id):
     """Retrieves all forensic findings associated with a specific document."""
-    return query_db(
+    results = query_db(
         """
         SELECT f.*, c.title AS case_title, d.filename AS document_filename
         FROM findings f
@@ -407,6 +422,7 @@ def get_findings_by_document(doc_id):
         """,
         (doc_id,)
     )
+    return [_hydrate_finding_evidence_class(f) for f in results]
 
 def create_finding(data, user="System"):
     """Adds a new forensic finding record with coordinate and rule traceability."""
@@ -446,34 +462,71 @@ def create_finding(data, user="System"):
         if any_case:
             case_id = any_case['id']
 
-    execute_db(
-        """
-        INSERT INTO findings (
-            id, case_id, document_id, title, severity, category, description,
-            confidence, status, page_number, coordinates, rule_id, evidence, created_at
+    # Resolve objective evidence class label
+    ev_class = data.get('evidence_class')
+    try:
+        from backend.evidence_class import get_evidence_class
+        ev_class = get_evidence_class(data.get('rule_id'), ev_class)
+    except Exception:
+        ev_class = ev_class or 'Observation'
+
+    try:
+        execute_db(
+            """
+            INSERT INTO findings (
+                id, case_id, document_id, title, severity, category, description,
+                confidence, status, page_number, coordinates, rule_id, evidence, evidence_class, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                finding_id,
+                case_id,
+                data.get('document_id'),
+                data['title'],
+                severity,
+                data.get('category', 'Forensic Anomaly'),
+                data.get('description', ''),
+                float(data.get('confidence', 0.85)),
+                status,
+                int(data.get('page_number', 1)),
+                coords,
+                data.get('rule_id'),
+                data.get('evidence'),
+                ev_class,
+                now
+            )
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            finding_id,
-            case_id,
-            data.get('document_id'),
-            data['title'],
-            severity,
-            data.get('category', 'Forensic Anomaly'),
-            data.get('description', ''),
-            float(data.get('confidence', 0.85)),
-            status,
-            int(data.get('page_number', 1)),
-            coords,
-            data.get('rule_id'),
-            data.get('evidence'),
-            now
+    except Exception:
+        # Fallback for unmigrated schema
+        execute_db(
+            """
+            INSERT INTO findings (
+                id, case_id, document_id, title, severity, category, description,
+                confidence, status, page_number, coordinates, rule_id, evidence, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                finding_id,
+                case_id,
+                data.get('document_id'),
+                data['title'],
+                severity,
+                data.get('category', 'Forensic Anomaly'),
+                data.get('description', ''),
+                float(data.get('confidence', 0.85)),
+                status,
+                int(data.get('page_number', 1)),
+                coords,
+                data.get('rule_id'),
+                data.get('evidence'),
+                now
+            )
         )
-    )
 
     log_audit("FINDING_FLAGGED", "finding", finding_id, f"Anomaly flagged: {data['title']}", user)
-    return query_db("SELECT * FROM findings WHERE id = ?", (finding_id,), one=True)
+    return get_finding_by_id(finding_id)
 
 def update_finding(finding_id, update_data, user="System"):
     """Updates status or notes for an existing finding."""

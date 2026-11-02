@@ -630,6 +630,24 @@ def analyze_document(doc_id, user="System"):
 
     all_findings = visual_findings + context_findings
 
+    # V2 Phase B Hook: Extended PDF Forensics (PDF-001 to PDF-005)
+    try:
+        from backend.config import Config
+        if getattr(Config, 'ENABLE_EXTENDED_FORENSICS', False):
+            from backend.forensics_pdf import run_extended_pdf_forensics
+            extended_pdf_findings = run_extended_pdf_forensics(file_path)
+            all_findings.extend(extended_pdf_findings)
+    except Exception as pdf_ext_err:
+        pass
+
+    # Annotate findings with objective evidence class labels
+    try:
+        from backend.evidence_class import classify_finding
+        for f in all_findings:
+            classify_finding(f)
+    except Exception:
+        pass
+
     # 3. Calculate Risk Assessment
     assessment = calculate_risk_assessment(all_findings)
 

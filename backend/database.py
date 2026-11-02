@@ -72,6 +72,8 @@ def init_db(db_path=None):
             cursor.execute("ALTER TABLE findings ADD COLUMN rule_id TEXT")
         if 'evidence' not in f_cols and len(f_cols) > 0:
             cursor.execute("ALTER TABLE findings ADD COLUMN evidence TEXT")
+        if 'evidence_class' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN evidence_class TEXT DEFAULT NULL")
         conn.commit()
     finally:
         conn.close()

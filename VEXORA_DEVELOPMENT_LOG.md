@@ -831,3 +831,59 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-a): implement visual evidence overlay rendering, evidence image endpoints, and interactive UI inspection modal`
+
+
+---
+
+## Phase B: Deeper PDF Forensics & Evidence Classification
+**Date:** 2026-11-02
+**Status:** Completed
+**Branch:** feature/v2-phase-b (merged into main)
+
+### What Was Built
+1. **Standardized Forensic Evidence Classification Layer (`backend/evidence_class.py`):**
+   - Implemented an objective 3-tier classification taxonomy to strictly comply with hackathon rules ("must distinguish observations from potential anomalies, and must never call anything 'confirmed fraud'"):
+     - **Observation**: A measured physical or structural fact (e.g., multiple fonts present, incremental updates).
+     - **Inconsistency**: Two contradictory facts or conflicting attributes (e.g., date divergence, check digit mismatch).
+     - **Potential Manipulation**: An anomaly pattern commonly seen after document alteration (e.g., white-box redaction, superimposed signature raster).
+   - Created `RULE_EVIDENCE_CLASS_MAP` covering all visual, contextual, and extended rules with fallback defaults.
+   - Built helper functions `get_evidence_class(rule_id, existing_class)` and `classify_finding(finding)`.
+2. **Advanced PDF Forensic Detectors (`backend/forensics_pdf.py`):**
+   - **PDF-001 (Text Hidden Under Filled Shapes):** Detects text blocks occluded by filled/opaque vector shapes (>65% overlap area) — typical in white-box redactions and digital figure alteration.
+   - **PDF-002 (Incremental Updates in File Body):** Inspects raw PDF file bytes for multiple `%%EOF` markers, detecting post-creation revisions and appended streams.
+   - **PDF-003 (Metadata Revision Desynchronization):** Detects creation date vs. modification date divergence and commercial visual editor signatures (e.g., Canva, Photoshop, iLovePDF, Sejda, Nitro, GIMP).
+   - **PDF-004 (Superimposed Raster Images & DPI Disparity):** Detects embedded raster images placed directly over underlying vector text spans, as well as extreme image resolution disparities (>3.5x ratio on page).
+   - **PDF-005 (Invisible & Off-Page Text Elements):** Uses expanded TextPage clipping boundaries (-500 to +500 pt) to catch text rendered outside visible page boundaries, and checks for invisible render mode 3.
+   - **`run_extended_pdf_forensics(file_path)`:** Master coordinator returning standardized finding dictionaries.
+3. **Database Schema & Model Hydration (`backend/database.py`, `backend/models.py`):**
+   - Idempotently migrated `findings` table: added column `evidence_class TEXT DEFAULT NULL`.
+   - Updated `create_finding`, `get_all_findings`, `get_finding_by_id`, and `get_findings_by_document` with backward-compatible hydration via `_hydrate_finding_evidence_class`.
+4. **Analyzer & Reporter Integration (`backend/analyzer.py`, `backend/reporter.py`):**
+   - Hooked `run_extended_pdf_forensics` into `analyze_document` under feature flag `ENABLE_EXTENDED_FORENSICS` inside safe `try/except`.
+   - Annotated all findings with `evidence_class`.
+   - Updated `generate_case_dossier_data`, `generate_dossier_pdf`, and `generate_dossier_html` to render evidence class badges and classification labels.
+5. **Frontend UI Badging (`frontend/js/app.js`, `frontend/js/v2.js`):**
+   - Rendered distinct color-coded evidence class badges (`Observation`, `Inconsistency`, `Potential Manipulation`) across finding cards and dossier preview.
+   - Added `Class: <strong id="v2ModalClass">` to visual evidence modal.
+
+### Technologies Introduced
+- **PyMuPDF Drawing & Vector Geometry Extraction:** `page.get_drawings()` vector polygon analysis and `page.get_text("dict")` span intersection calculations.
+- **Expanded TextPage Clipping:** Using `page.get_textpage(clip=fitz.Rect(-500, -500, w+500, h+500))` to uncover off-page text hidden outside visible mediabox viewports.
+- **Raw Byte Stream Parsing:** Fast binary counting of `%%EOF` trailer markers in raw PDF file streams without parsing overhead.
+
+### Actual Testing Results
+- **Phase B Unit & Integration Tests (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Tests (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Tests (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 82/82 passing across all suites in 19.56s.
+
+### Known Limitations
+- Pure raster scans without OCR or vector streams cannot be analyzed for PDF-001 or PDF-005 without prior OCR layout extraction.
+
+### Concepts Learned
+1. **Viewport Clipping vs Document Content:** PDF viewers only show what is inside the page cropbox/mediabox, but attackers often hide text or notes outside the viewport. Default `get_text()` calls also clip to page boundaries, so expanding the TextPage clip is essential for true forensic discovery.
+2. **Objective Evidence Nomenclature:** Calling an anomaly "fraud" loses points and violates forensic standards. Categorizing items as "Observations", "Inconsistencies", or "Potential Manipulations" maintains objectivity while giving human investigators clear, actionable intelligence.
+
+### Suggested Git Commit Message
+`feat(phase-b): implement deeper PDF forensic rules PDF-001 through PDF-005 and evidence classification`

@@ -27,6 +27,7 @@
           <div class="v2-modal-body">
             <div class="v2-evidence-meta-bar">
               <span class="v2-evidence-meta-item">Document: <strong id="v2ModalDocName">—</strong></span>
+              <span class="v2-evidence-meta-item">Class: <strong id="v2ModalClass">—</strong></span>
               <span class="v2-evidence-meta-item">Location: <strong id="v2ModalLocation">—</strong></span>
               <span class="v2-evidence-meta-item">Severity: <strong id="v2ModalSeverity">—</strong></span>
             </div>
@@ -178,6 +179,8 @@
       rulePill.className = 'pill-tag ' + (sevLower === 'critical' || sevLower === 'high' ? 'pill-high' : sevLower === 'medium' ? 'pill-medium' : 'pill-low');
     }
 
+    const classEl = document.getElementById('v2ModalClass');
+    if (classEl) classEl.textContent = finding.evidence_class || 'Observation';
     if (titleEl) titleEl.textContent = title;
     if (docNameEl) docNameEl.textContent = finding.document_filename || finding.document_id || 'Document';
     if (sevEl) sevEl.textContent = severity;

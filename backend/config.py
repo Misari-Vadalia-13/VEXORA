@@ -59,6 +59,7 @@ class Config:
 
     # Feature Flags (V2 Additive Extensions)
     ENABLE_EVIDENCE_OVERLAY = os.environ.get('ENABLE_EVIDENCE_OVERLAY', 'false').lower() in ('true', '1', 'yes')
+    ENABLE_EXTENDED_FORENSICS = os.environ.get('ENABLE_EXTENDED_FORENSICS', 'false').lower() in ('true', '1', 'yes')
 
 class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
