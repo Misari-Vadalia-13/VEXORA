@@ -726,10 +726,52 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
    - **Forensic Dossier Canvas & Reports:** Embedded brand emblem in `#view-dossier` print canvas header, standalone HTML reports, and vector PDF reports generated via PyMuPDF.
    - **Flask Asset Serving:** Added `/images/<filename>` and `/favicon.ico` static asset routes to `backend/app.py`.
    - **Repository Documentation:** Centered the official logo banner and slogan at the top and footer of `README.md`.
+---
 
+## V2 Phase 0: System Safety Net & Contract Baseline
 
+### Implementation Date
+- **2026-11-02**
 
+### Phase Objectives
+1. Read and review the entire VEXORA architecture, roadmap, development logs, and source code across backend, frontend, schema, and tests.
+2. Confirm the active Flask index route versus the repository root static redirect wrapper.
+3. Establish `docs/EXISTING_CONTRACT.md` documenting every Flask route, table, column, rule ID, data shape, and frontend UI rendering hook.
+4. Establish `tests/test_v2_contract.py` testing database tables/columns, all registered Flask routes, response keys, rules, and NER categories.
+5. Establish and verify baseline test execution across both the original 39 unit tests and the 15 contract safety net tests (54 passing tests total).
+6. Perform an initial code-to-documentation audit noting any discrepancies between `README.md` and actual implementation.
 
+### Features & Safety Measures Implemented
+1. **Flask Served Index Verified:**
+   - Identified that `backend/app.py` serves `frontend/index.html` via `FRONTEND_DIR`.
+   - Identified that root `index.html` is an external static redirect wrapper (`meta refresh`) and is not served by Flask. Frozen as untouched.
+2. **Context-Aware Database Routing:**
+   - Updated `backend/database.py` with an internal `_last_active_db` tracker so that direct test invocations executed outside active Flask request contexts correctly target the active test database rather than defaulting to production SQLite storage.
+3. **Formal System Contract (`docs/EXISTING_CONTRACT.md`):**
+   - Documented all 7 relational tables and their columns.
+   - Documented all 44 endpoints (37 REST API routes + static asset handlers).
+   - Documented all 10 visual & contextual forensic rules (`RULE-VIS-001` through `005`, `RULE-CTX-001` through `005`) and risk score formulas.
+   - Documented data shapes for Findings, Extracted Entities, and Comparison Alignment Matrix records.
+   - Documented frontend DOM IDs and JavaScript rendering functions.
+4. **Automated Contract Safety Net (`tests/test_v2_contract.py`):**
+   - Implemented 15 automated contract tests validating database tables/columns, endpoint presence, GET response keys, served index content, forensic rule definitions, and entity categories.
 
+### Actual Testing Results
+- **Original Baseline Test Suite (`tests/test_backend.py`):** 39/39 tests passed in 15.49s (`OK`).
+- **Contract Safety Net Test Suite (`tests/test_v2_contract.py`):** 15/15 tests passed in 0.50s (`OK`).
+- **Combined Total:** 54 passing tests.
 
+### Code vs. Documentation Inconsistencies Discovered (Report Only)
+1. **spaCy Dependency Discrepancy:**
+   - `README.md` and `requirements.txt` state that Named Entity Recognition is powered by `spacy>=3.7.0` (`en_core_web_sm`).
+   - The actual implementation in `backend/ner.py` uses pure Python regular expressions (`PATTERNS` dictionary) without importing or calling spaCy.
+2. **MIME Validation Discrepancy:**
+   - `README.md` claims "MIME validation", but `backend/uploader.py` only performs extension checks (`ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}`) without MIME sniffing or magic byte verification.
+3. **Unexecuted Defined Rule:**
+   - `RULE-VIS-004` (Irregular Line Spacing Disparity) is defined in `backend/analyzer.py:RULES`, but is never executed or triggered in `analyze_visual_structure()`.
 
+### Suggested Git Commit Message
+`chore(phase-0): establish existing contract documentation, contract safety net tests, and baseline verification`
+
+### Approval Status
+- **Pending Review**: Ready for Phase 0 review and user approval before proceeding to Phase A.

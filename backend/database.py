@@ -10,22 +10,27 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 from backend.config import Config, SCHEMA_PATH, DATABASE_PATH
 
+_last_active_db = None
+
 def get_db(db_path=None):
     """
     Establishes and returns a connection to the SQLite database.
     Configures sqlite3.Row for dictionary-like column access and enables foreign keys.
     """
+    global _last_active_db
     if db_path is not None:
         path = db_path
+        _last_active_db = db_path
     else:
         try:
             from flask import current_app, has_app_context
             if has_app_context() and current_app and current_app.config.get('DATABASE'):
                 path = current_app.config.get('DATABASE')
+                _last_active_db = path
             else:
-                path = Config.DATABASE
+                path = _last_active_db or Config.DATABASE
         except Exception:
-            path = Config.DATABASE
+            path = _last_active_db or Config.DATABASE
     
     # Ensure the parent directory exists if using a filesystem path
     if path != ':memory:':
