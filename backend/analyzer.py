@@ -18,14 +18,6 @@ from backend.models import (
     save_document_findings,
     get_findings_by_document
 )
-from backend.pdf_forensics import analyze_pdf_forensics, PDF_FORENSIC_RULES
-from backend.image_forensics import analyze_image_forensics, IMAGE_FORENSIC_RULES
-from backend.llm_layer import (
-    extract_structured_fields_llm,
-    perform_contextual_math_check,
-    generate_finding_explanation_llm,
-    LLM_BADGE
-)
 
 # Rule Identifiers & Definitions
 RULES = {
@@ -35,7 +27,6 @@ RULES = {
         'category': 'Visual Formatting',
         'severity': 'Medium',
         'confidence': 0.88,
-        'rule_weight': 0.88,
         'recommendation': 'Inspect text block under high magnification to confirm whether characters were digitally inserted.'
     },
     'RULE-VIS-002': {
@@ -44,7 +35,6 @@ RULES = {
         'category': 'Structural Alignment',
         'severity': 'High',
         'confidence': 0.92,
-        'rule_weight': 0.92,
         'recommendation': 'Examine the bounding box for dual-layer text stamping or overwritten numerical figures.'
     },
     'RULE-VIS-003': {
@@ -53,7 +43,6 @@ RULES = {
         'category': 'Structural Alignment',
         'severity': 'Low',
         'confidence': 0.80,
-        'rule_weight': 0.80,
         'recommendation': 'Verify printable boundary margins against canonical document issuer template.'
     },
     'RULE-VIS-004': {
@@ -62,7 +51,6 @@ RULES = {
         'category': 'Visual Formatting',
         'severity': 'Low',
         'confidence': 0.75,
-        'rule_weight': 0.75,
         'recommendation': 'Cross-reference baseline alignment with surrounding paragraph structure.'
     },
     'RULE-VIS-005': {
@@ -71,7 +59,6 @@ RULES = {
         'category': 'Visual Formatting',
         'severity': 'Info',
         'confidence': 0.70,
-        'rule_weight': 0.70,
         'recommendation': 'Request original high-resolution master scan or vector PDF.'
     },
     'RULE-CTX-001': {
@@ -80,7 +67,6 @@ RULES = {
         'category': 'Contextual Inconsistency',
         'severity': 'Medium',
         'confidence': 0.90,
-        'rule_weight': 0.90,
         'recommendation': 'Verify whether document is a preliminary draft or omitted mandatory compliance identifiers.'
     },
     'RULE-CTX-002': {
@@ -89,7 +75,6 @@ RULES = {
         'category': 'Contextual Inconsistency',
         'severity': 'High',
         'confidence': 0.94,
-        'rule_weight': 0.94,
         'recommendation': 'Inspect whether secondary identifiers originate from reference purchase orders or composite document splicing.'
     },
     'RULE-CTX-003': {
@@ -98,7 +83,6 @@ RULES = {
         'category': 'Contextual Inconsistency',
         'severity': 'High',
         'confidence': 0.91,
-        'rule_weight': 0.91,
         'recommendation': 'Audit the timestamp sequence. Check for post-dated terms or reversed billing-due timelines.'
     },
     'RULE-CTX-004': {
@@ -107,7 +91,6 @@ RULES = {
         'category': 'Contextual Inconsistency',
         'severity': 'High',
         'confidence': 0.93,
-        'rule_weight': 0.93,
         'recommendation': 'Reconcile individual line-item sums against the stated grand total and verify currency consistency.'
     },
     'RULE-CTX-005': {
@@ -116,7 +99,6 @@ RULES = {
         'category': 'Contextual Inconsistency',
         'severity': 'Medium',
         'confidence': 0.78,
-        'rule_weight': 0.78,
         'recommendation': 'Compare PDF creation metadata against document body dates. Note that metadata can be updated on export or print.'
     }
 }
@@ -290,7 +272,7 @@ def analyze_visual_structure(file_path):
         # Check if coordinates extend beyond page or hug outer boundary (< 5 points from edge)
         if bbox[0] < 5 or bbox[1] < 5 or bbox[2] > rect.width - 5 or bbox[3] > rect.height - 5:
             # Skip running headers or footers at page margins
-            if len(span['text']) > 4 and span['size'] >= 7:
+            if len(span['text']) > 4 and span['size'] > 9:
                 rule = RULES['RULE-VIS-003']
                 findings.append({
                     'rule_id': rule['id'],
@@ -401,25 +383,17 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
     current_year = datetime.now().year
     parsed_dates = []
 
-    def _parse_date_robust(raw_val):
-        if not raw_val:
-            return None
-        raw_val = raw_val.strip().split('\n')[0]
-        for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d-%B-%Y', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d', '%b %d, %Y', '%B %d, %Y', '%d %b %Y', '%d %B %Y'):
+    for d in dates:
+        raw_val = d['value']
+        # Try ISO format
+        iso_match = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', raw_val)
+        if iso_match:
             try:
-                return datetime.strptime(raw_val, fmt)
+                y, m, day = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
+                if 1900 <= y <= 2100 and 1 <= m <= 12 and 1 <= day <= 31:
+                    parsed_dates.append((datetime(y, m, day), raw_val, d.get('page', 1)))
             except ValueError:
                 pass
-        m = re.search(r'\b(19\d\d|20\d\d)\b', raw_val)
-        if m:
-            return datetime(int(m.group(1)), 1, 1)
-        return None
-
-    for d in dates:
-        raw_val = d.get('value', '')
-        dt = _parse_date_robust(raw_val)
-        if dt:
-            parsed_dates.append((dt, raw_val, d.get('page', 1)))
 
     # Check future dates
     for dt, raw_str, p_num in parsed_dates:
@@ -439,29 +413,32 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
             })
 
     # Check for Due Date occurring before Invoice Date
-    due_pattern = re.search(r'(?:payment\s+due(?:\s+date)?|due(?:\s+date)?|payable\s+by)\s*[:]\s*([^\n\r]+)', text, re.IGNORECASE)
-    inv_pattern = re.search(r'(?:invoice\s+date|issue\s+date|dated)\s*[:]\s*([^\n\r]+)', text, re.IGNORECASE)
+    due_pattern = re.search(r'(?:due(?:\s+date)?|payment\s+date|payable\s+by)[:\s]+([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2})', text, re.IGNORECASE)
+    inv_pattern = re.search(r'(?:invoice\s+date|issue\s+date|dated)[:\s]+([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2})', text, re.IGNORECASE)
 
     if due_pattern and inv_pattern:
-        d_due = _parse_date_robust(due_pattern.group(1))
-        d_inv = _parse_date_robust(inv_pattern.group(1))
-        if d_due and d_inv and d_due < d_inv:
-            rule = RULES['RULE-CTX-003']
-            findings.append({
-                'rule_id': rule['id'],
-                'title': rule['title'],
-                'severity': 'Critical',
-                'category': rule['category'],
-                'status': 'Potential Anomaly',
-                'confidence': rule['confidence'],
-                'page_number': 1,
-                'coordinates': None,
-                'description': (
-                    f"Payment due date ({due_pattern.group(1).strip()}) is chronologically earlier than invoice issue date ({inv_pattern.group(1).strip()}). "
-                    "Reversed billing timeline detected."
-                ),
-                'evidence': f"Issue: {inv_pattern.group(1).strip()} vs Due: {due_pattern.group(1).strip()}"
-            })
+        try:
+            d_due = datetime.strptime(due_pattern.group(1).replace('/', '-'), '%Y-%m-%d')
+            d_inv = datetime.strptime(inv_pattern.group(1).replace('/', '-'), '%Y-%m-%d')
+            if d_due < d_inv:
+                rule = RULES['RULE-CTX-003']
+                findings.append({
+                    'rule_id': rule['id'],
+                    'title': rule['title'],
+                    'severity': 'Critical',
+                    'category': rule['category'],
+                    'status': 'Potential Anomaly',
+                    'confidence': rule['confidence'],
+                    'page_number': 1,
+                    'coordinates': None,
+                    'description': (
+                        f"Payment due date ({due_pattern.group(1)}) is chronologically earlier than invoice issue date ({inv_pattern.group(1)}). "
+                        "Reversed billing timeline detected."
+                    ),
+                    'evidence': f"Issue: {inv_pattern.group(1)} vs Due: {due_pattern.group(1)}"
+                })
+        except ValueError:
+            pass
 
     # Rule 4: Conflicting Monetary Values & Currencies (RULE-CTX-004)
     money_entries = entities.get('monetary_values', [])
@@ -472,7 +449,7 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
             if curr in val:
                 currencies_found.add(curr.replace('$', 'USD').replace('€', 'EUR').replace('£', 'GBP').replace('₹', 'INR'))
 
-    if len(currencies_found) > 1:
+    if len(currencies_found) > 1 and 'invoice' in category:
         rule = RULES['RULE-CTX-004']
         findings.append({
             'rule_id': rule['id'],
@@ -489,7 +466,7 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
 
     # Rule 5: Metadata vs. Document Content Mismatch (RULE-CTX-005)
     meta = doc_metadata or {}
-    meta_creation = meta.get('creationDate') or meta.get('creation_date')
+    meta_creation = meta.get('creationDate')
     if meta_creation and parsed_dates:
         # PyMuPDF creationDate is often D:YYYYMMDD... or YYYY-MM-DD
         meta_year_match = re.search(r'(?:D:)?(\d{4})', str(meta_creation))
@@ -640,33 +617,10 @@ def analyze_document(doc_id, user="System"):
         except Exception as e:
             return {'success': False, 'error': f"Failed to extract document for analysis: {str(e)}"}
 
-    # 1. Visual & Typographic Analysis
+    # 1. Visual & Structural Analysis
     visual_findings = analyze_visual_structure(file_path)
 
-    # 2. Specialized Forensic Engine Analysis (PDF vs Raster Scans)
-    ext = Path(file_path).suffix.lower().replace('.', '')
-    specialized_findings = []
-    if ext == 'pdf':
-        try:
-            specialized_findings = analyze_pdf_forensics(
-                file_path,
-                metadata=extraction_data.get('metadata'),
-                full_text=extracted_text
-            )
-        except Exception:
-            pass
-    elif ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp'):
-        try:
-            first_page_blocks = extraction_data.get('pages', [{}])[0].get('blocks', [])
-            specialized_findings = analyze_image_forensics(
-                file_path,
-                blocks=first_page_blocks,
-                full_text=extracted_text
-            )
-        except Exception:
-            pass
-
-    # 3. Contextual & Semantic Analysis
+    # 2. Contextual & Semantic Analysis
     context_findings = analyze_contextual_rules(
         doc.get('category'),
         extracted_text,
@@ -674,35 +628,13 @@ def analyze_document(doc_id, user="System"):
         extraction_data.get('metadata')
     )
 
-    # 4. LLM Layer Contextual Reasoning & Math Verification
-    structured_fields = {}
-    math_findings = []
-    try:
-        structured_fields = extract_structured_fields_llm(extracted_text)
-        math_findings = perform_contextual_math_check(structured_fields, extracted_text)
-    except Exception:
-        pass
+    all_findings = visual_findings + context_findings
 
-    # Combine all findings (baseline rules + PDF forensics + image heuristics + contextual math)
-    raw_findings = visual_findings + specialized_findings + context_findings + math_findings
+    # 3. Calculate Risk Assessment
+    assessment = calculate_risk_assessment(all_findings)
 
-    # Enrich each finding with AI traceable explanation quoting exact text
-    enriched_findings = []
-    for f in raw_findings:
-        f_copy = dict(f)
-        try:
-            f_copy['ai_explanation'] = generate_finding_explanation_llm(f_copy, extracted_text)
-            f_copy['ai_badge'] = LLM_BADGE
-        except Exception:
-            f_copy['ai_explanation'] = f_copy.get('description', '')
-            f_copy['ai_badge'] = LLM_BADGE
-        enriched_findings.append(f_copy)
-
-    # 5. Calculate Risk Assessment
-    assessment = calculate_risk_assessment(enriched_findings)
-
-    # 6. Persist findings to database
-    saved_records = save_document_findings(doc_id, enriched_findings, user=user)
+    # 4. Persist findings to database
+    saved_records = save_document_findings(doc_id, all_findings, user=user)
 
     return {
         'success': True,
@@ -714,8 +646,6 @@ def analyze_document(doc_id, user="System"):
         'risk_level': assessment['risk_level'],
         'severity_breakdown': assessment['severity_breakdown'],
         'summary': assessment['summary'],
-        'structured_fields': structured_fields,
-        'ai_badge': LLM_BADGE,
         'findings': saved_records,
         'analyzed_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }

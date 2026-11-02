@@ -17,159 +17,8 @@
   <!-- Brand Favicon -->
   <link rel="icon" type="image/png" href="images/favicon.png">
   <link rel="shortcut icon" href="favicon.ico">
-
-  <!-- Google Identity Services Client SDK -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-
-  <!-- ======================================================================
-       0. RESTRICTED AUTHENTICATION PORTAL (Pre-Dashboard Login & Sign Up Gateway)
-       ====================================================================== -->
-  <div class="auth-portal-overlay" id="vexoraAuthPortal">
-    <div class="auth-card">
-      <div class="auth-header">
-        <div class="auth-logo-wrap">
-          <img src="images/logo.png" alt="VEXORA — Seeing What Others Overlook" class="auth-logo-img">
-        </div>
-        <p class="auth-tagline">SEEING WHAT OTHERS OVERLOOK</p>
-        <span class="auth-badge">RESTRICTED FORENSIC INTELLIGENCE GATEWAY</span>
-      </div>
-
-      <!-- Dynamic Authentication Feedback Alert Box -->
-      <div id="authAlertBox" class="auth-alert-box" style="display: none;" role="alert">
-        <div class="auth-alert-icon" id="authAlertIcon">⚠️</div>
-        <div class="auth-alert-body">
-          <strong id="authAlertTitle">Notice</strong>
-          <p id="authAlertMessage">Alert description.</p>
-          <div id="authAlertActionWrap" style="display: none; margin-top: 8px;">
-            <button type="button" id="authAlertActionBtn" class="auth-alert-action-btn" onclick="handleAuthAlertAction()">
-              ➕ Create Account Now
-            </button>
-          </div>
-        </div>
-        <button type="button" class="auth-alert-dismiss" onclick="hideAuthAlert()" aria-label="Dismiss">✕</button>
-      </div>
-
-      <!-- Auth Mode Tabs -->
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab-btn active" id="tabSignInBtn" onclick="switchAuthTab('signin')">
-          Sign In
-        </button>
-        <button type="button" class="auth-tab-btn" id="tabSignUpBtn" onclick="switchAuthTab('signup')">
-          Create Account
-        </button>
-      </div>
-
-      <!-- Sign In Panel -->
-      <form id="signInForm" class="auth-form-panel active" autocomplete="on" onsubmit="handleUserSignIn(event)">
-        <div class="form-group">
-          <label class="form-label" for="loginUsername">Username or Official Email *</label>
-          <input type="text" id="loginUsername" name="username" class="form-control" placeholder="e.g. alex.turner or turner@vexora.internal" required autocomplete="username">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="loginPassword">Password *</label>
-          <input type="password" id="loginPassword" name="password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
-        </div>
-
-        <!-- Chrome Password Manager Save Option -->
-        <div class="auth-chrome-row">
-          <label class="auth-chrome-checkbox">
-            <input type="checkbox" id="saveCredentialsCheckbox" checked>
-            <span class="auth-chrome-icon" title="Google Chrome Password Manager">
-              <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L7.25 8.5C8.16 6.94 9.94 6 12 6h9.54C19.64 3.55 16.03 2 12 2z"/>
-                <path fill="#4285F4" d="M12 22c3.92 0 7.37-1.89 9.38-4.78l-4.28-7.72c-.89 1.56-2.58 2.5-4.47 2.5H4.07C5.64 18.06 8.58 22 12 22z"/>
-                <path fill="#FBBC05" d="M2.97 16.29C2.36 14.98 2 13.54 2 12c0-1.85.5-3.58 1.38-5.07L7.75 14.4c.91 1.56 2.58 2.6 4.25 2.6v5c-4.42 0-8.23-2.48-10.03-5.71z"/>
-                <circle fill="#FFFFFF" cx="12" cy="12" r="5"/>
-                <circle fill="#4285F4" cx="12" cy="12" r="4"/>
-              </svg>
-            </span>
-            <span class="auth-chrome-text">Save password in Google Chrome Account</span>
-          </label>
-        </div>
-
-        <button type="submit" class="btn-primary auth-submit-btn" id="loginSubmitBtn">
-          🔐 Sign In to Workspace
-        </button>
-
-        <div class="auth-divider">
-          <span>OR CONTINUE WITH</span>
-        </div>
-
-        <!-- Google OAuth Sign In Option -->
-        <button type="button" class="google-auth-btn" id="googleSignInBtn" onclick="handleGoogleSignIn()">
-          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-          </svg>
-          <span>Continue with Google (Demo Mode)</span>
-        </button>
-
-        <!-- Fast Demo Access Option -->
-        <button type="button" class="demo-auth-btn" id="demoAccessBtn" onclick="handleDemoSignIn()">
-          ⚡ One-Click Demo Investigator Access
-        </button>
-      </form>
-
-      <!-- Create Account Panel -->
-      <form id="signUpForm" class="auth-form-panel" autocomplete="on" onsubmit="handleUserSignUp(event)">
-        <div class="form-group">
-          <label class="form-label" for="regFullName">Full Name *</label>
-          <input type="text" id="regFullName" name="fullName" class="form-control" placeholder="e.g. Misari Vadalia" required autocomplete="name">
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div class="form-group">
-            <label class="form-label" for="regUsername">Username *</label>
-            <input type="text" id="regUsername" name="username" class="form-control" placeholder="e.g. misari" required autocomplete="username">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="regBadge">Badge Number</label>
-            <input type="text" id="regBadge" name="badge" class="form-control" placeholder="VEX-101">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="regEmail">Official Email *</label>
-          <input type="email" id="regEmail" name="email" class="form-control" placeholder="analyst@agency.gov" required autocomplete="email">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="regPassword">Password * (Min 6 chars)</label>
-          <input type="password" id="regPassword" name="password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="regRole">Investigator Role</label>
-          <select id="regRole" name="role" class="form-control">
-            <option value="Lead Investigator">Lead Investigator</option>
-            <option value="Forensic Analyst">Forensic Analyst</option>
-            <option value="Senior Fraud Specialist">Senior Fraud Specialist</option>
-            <option value="Compliance Auditor">Compliance Auditor</option>
-          </select>
-        </div>
-
-        <div class="auth-chrome-row">
-          <label class="auth-chrome-checkbox">
-            <input type="checkbox" id="saveRegCredentialsCheckbox" checked>
-            <span class="auth-chrome-icon" title="Google Chrome Password Manager">
-              <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L7.25 8.5C8.16 6.94 9.94 6 12 6h9.54C19.64 3.55 16.03 2 12 2z"/>
-                <path fill="#4285F4" d="M12 22c3.92 0 7.37-1.89 9.38-4.78l-4.28-7.72c-.89 1.56-2.58 2.5-4.47 2.5H4.07C5.64 18.06 8.58 22 12 22z"/>
-                <path fill="#FBBC05" d="M2.97 16.29C2.36 14.98 2 13.54 2 12c0-1.85.5-3.58 1.38-5.07L7.75 14.4c.91 1.56 2.58 2.6 4.25 2.6v5c-4.42 0-8.23-2.48-10.03-5.71z"/>
-                <circle fill="#FFFFFF" cx="12" cy="12" r="5"/>
-                <circle fill="#4285F4" cx="12" cy="12" r="4"/>
-              </svg>
-            </span>
-            <span class="auth-chrome-text">Save password in Google Chrome after creation</span>
-          </label>
-        </div>
-
-        <button type="submit" class="btn-primary auth-submit-btn" id="regSubmitBtn">
-          🛡️ Register Investigator Account
-        </button>
-      </form>
-    </div>
-  </div>
 
   <div class="app-container">
 
@@ -250,7 +99,7 @@
         </a>
       </nav>
 
-      <!-- System Health Indicator & Sign Out -->
+      <!-- System Health Indicator -->
       <div class="sidebar-footer">
         <div class="system-status-card">
           <span class="status-dot-pulse" aria-hidden="true"></span>
@@ -258,11 +107,6 @@
             <span class="status-title">Core Engine Online</span>
             <span class="status-subtitle">Local Node • Verified</span>
           </div>
-        </div>
-        <div style="margin-top:10px;">
-          <button type="button" class="sidebar-signout-btn" onclick="handleUserSignOut()" title="Sign Out of Session">
-            🚪 Sign Out
-          </button>
         </div>
       </div>
     </aside>
@@ -318,16 +162,13 @@
               <span>New Case</span>
             </button>
 
-            <!-- Lead User Profile & Sign Out -->
-            <div class="user-profile-badge" id="topNavUserBadge">
-              <div class="avatar-circle" id="topNavAvatar">MV</div>
+            <!-- Lead User Profile -->
+            <div class="user-profile-badge">
+              <div class="avatar-circle">MV</div>
               <div class="user-meta">
-                <span class="user-name" id="topNavUserName">Misari Vadalia</span>
-                <span class="user-role" id="topNavUserRole">Lead Investigator</span>
+                <span class="user-name">Misari Vadalia</span>
+                <span class="user-role">Lead Investigator</span>
               </div>
-              <button type="button" class="btn-signout" id="topNavSignOutBtn" onclick="handleUserSignOut()" title="Sign Out of Session">
-                🚪 Sign Out
-              </button>
             </div>
           </div>
         </div>
@@ -431,7 +272,7 @@
               <div class="pipeline-step" onclick="navigateToView('evidence')">
                 <span class="step-num">Stage 04</span>
                 <span class="step-name">Entity Extraction</span>
-                <span class="step-status">Rule & LLM NER</span>
+                <span class="step-status">spaCy NER</span>
               </div>
 
               <div class="pipeline-step" onclick="navigateToView('forensics')">
@@ -494,7 +335,6 @@
                         <div class="action-btn-group">
                           <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                           <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                          <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2041', 'Loan Application #8841-B')">Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -512,7 +352,6 @@
                         <div class="action-btn-group">
                           <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
                           <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                          <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2039', 'Identity Verification Dossier')">Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -530,7 +369,6 @@
                         <div class="action-btn-group">
                           <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                           <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                          <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2038', 'Procurement Invoice Discrepancy')">Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -547,7 +385,6 @@
                       <td>
                         <div class="action-btn-group">
                           <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                          <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2035', 'Employment Declaration Check')">Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -601,50 +438,6 @@
                   <span class="anomaly-title">Organization Name Verified</span>
                   <p class="anomaly-desc">Corporate registry ID matches across bank declaration and legal deed.</p>
                 </div>
-              </div>
-            </div>
-          </div>
-          <!-- Empirical Benchmark Suite Card (PS Differentiator) -->
-          <div class="benchmark-card" id="benchmarkCard">
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-              <div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-size:1.1rem; font-weight:800; color:var(--text-primary);">🧪 Empirical Forensic Benchmark Evaluation (20-Document Suite)</span>
-                  <span class="pill-tag pill-verified">100% Ground Truth Verified</span>
-                </div>
-                <p style="font-size:0.82rem; color:var(--text-muted); margin-top:4px;">
-                  Empirically tested against 10 genuine vs 10 tampered real-world vector PDFs (masking, saves, metadata mismatch, chronology, line-item totals).
-                </p>
-              </div>
-              <button type="button" class="btn-secondary" id="runBenchmarkBtn" onclick="triggerRunBenchmark(true)">
-                <span>⚡ Re-Run Live Benchmark</span>
-              </button>
-            </div>
-
-            <div class="benchmark-metric-grid">
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" id="bmAccuracy">100.0%</div>
-                <div class="benchmark-metric-label">Accuracy (20/20)</div>
-              </div>
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" id="bmPrecision">100.0%</div>
-                <div class="benchmark-metric-label">Precision</div>
-              </div>
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" id="bmRecall">100.0%</div>
-                <div class="benchmark-metric-label">Recall (TP: 10/10)</div>
-              </div>
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" id="bmSpecificity">100.0%</div>
-                <div class="benchmark-metric-label">Specificity (TN: 10/10)</div>
-              </div>
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" style="color:#38bdf8;" id="bmLatency">9.7 ms</div>
-                <div class="benchmark-metric-label">Avg Latency / Doc</div>
-              </div>
-              <div class="benchmark-metric-box">
-                <div class="benchmark-metric-val" style="color:#a855f7;" id="bmFalseAlarms">0</div>
-                <div class="benchmark-metric-label">False Alarms (FPR: 0%)</div>
               </div>
             </div>
           </div>
@@ -703,7 +496,6 @@
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                   <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2041', 'Loan Application #8841-B Audit')">Delete</button>
                 </div>
               </div>
             </div>
@@ -734,7 +526,6 @@
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
                   <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2039', 'Identity Verification Dossier')">Delete</button>
                 </div>
               </div>
             </div>
@@ -765,7 +556,6 @@
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                   <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2038', 'Procurement Invoice Discrepancy')">Delete</button>
                 </div>
               </div>
             </div>
@@ -795,7 +585,6 @@
                 <span class="case-author-note">Lead: Misari Vadalia</span>
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2035', 'Employment Declaration Check')">Delete</button>
                 </div>
               </div>
             </div>
@@ -826,7 +615,6 @@
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                   <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2031', 'Corporate Tax Filing Audit')">Delete</button>
                 </div>
               </div>
             </div>
@@ -857,7 +645,6 @@
                 <div class="action-btn-group">
                   <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
                   <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                  <button class="table-action-btn btn-danger-action" onclick="confirmDeleteCase('VX-2028', 'Vendor Bank Account Verification')">Delete</button>
                 </div>
               </div>
             </div>
@@ -922,12 +709,6 @@
                     <option value="Contract">Legal Contract / Agreement</option>
                   </select>
                 </div>
-
-                <!-- High-Visibility Proceed & Ingest Button on Left Panel -->
-                <button type="button" class="btn-primary proceed-btn-glow" id="proceedUploadBtn" onclick="handleProceedUpload()" style="width:100%; margin-top:22px; padding:12px 20px; font-weight:700; font-size:0.95rem; display:flex; align-items:center; justify-content:center; gap:10px;">
-                  <span>⚡ Ingest & Transfer to Library</span>
-                  <span>➔</span>
-                </button>
               </div>
             </div>
 
@@ -938,8 +719,8 @@
                   <h2 class="section-title">Staged Ingestion Queue</h2>
                   <span class="section-subtitle">Documents ready for OCR & text extraction</span>
                 </div>
-                <button class="btn-primary" id="processQueueBtn" onclick="handleProceedUpload()" style="padding:8px 16px; font-size:0.85rem; font-weight:700;">
-                  🚀 Process All & Transfer
+                <button class="btn-primary" id="processQueueBtn" style="padding:6px 14px; font-size:0.8rem;">
+                  Process All
                 </button>
               </div>
 
@@ -986,14 +767,6 @@
                   </div>
                 </div>
               </div>
-
-              <!-- Staged Queue Action Footer with Visible Proceed Button -->
-              <div class="staged-queue-actions" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.8rem; color:var(--text-muted);" id="stagedCountSummary">Staged files ready for vault ingestion</span>
-                <button type="button" class="btn-primary" id="proceedQueueBottomBtn" onclick="handleProceedUpload()" style="padding:9px 18px; font-weight:700;">
-                  Proceed to Ingest ➔
-                </button>
-              </div>
             </div>
           </div>
         </section>
@@ -1022,72 +795,104 @@
             <button class="filter-pill" data-doc-filter="legal">Legal Contracts (3)</button>
           </div>
 
-          <!-- Active Case Evidence Vault (Populated dynamically from SQLite database) -->
+          <!-- Document Cards Grid -->
           <div class="doc-library-grid" id="docLibraryGrid">
-            <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; color: var(--text-muted);">
-              <span>📁 Loading verified evidentiary vault...</span>
-            </div>
-          </div>
-
-          <!-- Pre-Configured Reference Samples (Isolated from User Vault) -->
-          <div class="demo-seed-section" style="margin-top: 36px; border-top: 1px dashed var(--border-subtle); padding-top: 24px;">
-            <div class="section-header" style="margin-bottom: 16px;">
-              <div class="section-title-group">
-                <h3 class="section-title" style="display:flex; align-items:center; gap:8px;">
-                  <span>🧪 Reference Demo Samples (Evaluator Testing Only)</span>
-                  <span class="badge-demo">DEMO SAMPLES</span>
-                </h3>
-                <span class="section-subtitle">Pre-configured test documents for feature evaluation and testing; cleanly isolated from active case uploads.</span>
+            
+            <div class="doc-card" data-category="financial">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-high">2 Anomalies</span>
+              </div>
+              <h3 class="doc-card-title" title="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>2.4 MB</span> • <span>3 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2041</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
               </div>
             </div>
 
-            <div class="doc-library-grid" id="demoDocLibraryGrid">
-              <div class="doc-card" data-category="financial">
-                <div class="doc-card-top">
-                  <div class="doc-badge-icon">📄</div>
-                  <span class="pill-tag pill-high">Font Altered</span>
-                </div>
-                <h3 class="doc-card-title" title="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf</h3>
-                <div class="doc-card-meta">
-                  <span>PDF</span> • <span>2.4 MB</span> • <span class="badge-demo">Demo Sample</span>
-                </div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Ref ID: <code>DEMO-REF-01</code></div>
-                <div class="doc-card-footer">
-                  <button type="button" class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
-                </div>
+            <div class="doc-card" data-category="identity">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">🖼️</div>
+                <span class="pill-tag pill-low">Verified Match</span>
               </div>
-
-              <div class="doc-card" data-category="identity">
-                <div class="doc-card-top">
-                  <div class="doc-badge-icon">🖼️</div>
-                  <span class="pill-tag pill-low">Verified Scan</span>
-                </div>
-                <h3 class="doc-card-title" title="Passport_Front_Scan.png">Passport_Front_Scan.png</h3>
-                <div class="doc-card-meta">
-                  <span>PNG</span> • <span>1.1 MB</span> • <span class="badge-demo">Demo Sample</span>
-                </div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Ref ID: <code>DEMO-REF-02</code></div>
-                <div class="doc-card-footer">
-                  <button type="button" class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
-                </div>
+              <h3 class="doc-card-title" title="Passport_Front_Scan.png">Passport_Front_Scan.png</h3>
+              <div class="doc-card-meta">
+                <span>PNG</span> • <span>1.1 MB</span> • <span>1 Page</span>
               </div>
-
-              <div class="doc-card" data-category="financial">
-                <div class="doc-card-top">
-                  <div class="doc-badge-icon">📄</div>
-                  <span class="pill-tag pill-high">Arithmetic Mismatch</span>
-                </div>
-                <h3 class="doc-card-title" title="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf</h3>
-                <div class="doc-card-meta">
-                  <span>PDF</span> • <span>1.9 MB</span> • <span class="badge-demo">Demo Sample</span>
-                </div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Ref ID: <code>DEMO-REF-03</code></div>
-                <div class="doc-card-footer">
-                  <button type="button" class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
-                </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
               </div>
             </div>
-          </div>
+
+            <div class="doc-card" data-category="tax">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-medium">1 Mismatch</span>
+              </div>
+              <h3 class="doc-card-title" title="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>4.8 MB</span> • <span>6 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="identity">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">🖼️</div>
+                <span class="pill-tag pill-high">DOB Conflict</span>
+              </div>
+              <h3 class="doc-card-title" title="Identity_Card_Misari.png">Identity_Card_Misari.png</h3>
+              <div class="doc-card-meta">
+                <span>PNG</span> • <span>820 KB</span> • <span>1 Page</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="financial">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-high">Font Altered</span>
+              </div>
+              <h3 class="doc-card-title" title="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>1.9 MB</span> • <span>2 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
+
+            <div class="doc-card" data-category="legal">
+              <div class="doc-card-top">
+                <div class="doc-badge-icon">📄</div>
+                <span class="pill-tag pill-low">Consistent</span>
+              </div>
+              <h3 class="doc-card-title" title="Employment_Contract_Final.pdf">Employment_Contract_Final.pdf</h3>
+              <div class="doc-card-meta">
+                <span>PDF</span> • <span>3.2 MB</span> • <span>5 Pages</span>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2035</strong></div>
+              <div class="doc-card-footer">
+                <button class="table-action-btn" onclick="navigateToView('evidence')">View Graph</button>
+                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
+              </div>
+            </div>
 
           </div>
         </section>
@@ -1099,86 +904,66 @@
           <div class="page-header-row">
             <div class="page-title-group">
               <h1 class="page-title">Forensic Document Inspector</h1>
-              <p class="page-subtitle">Real PyMuPDF vector rendering with red bounding box overlays, traceable AI explanations, and contextual mathematical verification.</p>
+              <p class="page-subtitle">Visual inspection workspace highlighting font kerning variations, digital modifications, and overwritten fields.</p>
             </div>
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <select class="form-control" style="width:280px;" id="forensicDocSelector">
-                <option value="">-- Select Ingested Document --</option>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <select class="form-control" style="width:260px;" id="forensicDocSelector">
+                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Page 2)</option>
+                <option value="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf (Page 1)</option>
+                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Page 3)</option>
               </select>
-              <button type="button" class="btn-secondary" id="toggleAnnotationsBtn" onclick="toggleForensicAnnotations()">
-                <span id="annotToggleIcon">🔴</span> <span id="annotToggleText">Bounding Boxes: ON</span>
-              </button>
-              <button type="button" class="btn-primary" id="runAiAuditBtn" onclick="runAiContextualAudit()">
-                <span>🤖 Run AI Contextual Audit</span>
-              </button>
+              <button class="btn-primary" onclick="showToast('Running re-scan with forensic filters', 'info')">Re-Scan</button>
             </div>
           </div>
 
           <!-- Split-View: Document Canvas vs Forensic Findings Log -->
           <div class="forensic-split-view">
             
-            <!-- Left: Real Document Inspection Pane with PyMuPDF Pixmap Rendering -->
+            <!-- Left: Simulated Document Page with Bounding Boxes -->
             <div class="document-inspection-pane">
-              <div class="section-header" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                <div style="display:flex; align-items:center; gap:12px;">
-                  <span id="docViewerHeaderTitle" style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">📄 Document Viewer</span>
-                  <div style="display:inline-flex; align-items:center; gap:6px;">
-                    <button type="button" class="table-action-btn" id="viewerPrevPageBtn" onclick="changeForensicPage(-1)" title="Previous Page">◀</button>
-                    <span id="viewerPageIndicator" style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700;">Page 1 / 1</span>
-                    <button type="button" class="table-action-btn" id="viewerNextPageBtn" onclick="changeForensicPage(1)" title="Next Page">▶</button>
-                  </div>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <button type="button" class="table-action-btn" onclick="zoomForensicViewer(1.15)" title="Zoom In">🔍 +</button>
-                  <button type="button" class="table-action-btn" onclick="zoomForensicViewer(0.85)" title="Zoom Out">🔍 -</button>
-                  <button type="button" class="table-action-btn" onclick="zoomForensicViewer(0)" title="Reset Zoom / Fit">↺ Fit</button>
-                  <span id="forensicAnomaliesBadge" class="pill-tag pill-high">0 Anomalies</span>
-                </div>
+              <div class="section-header" style="margin-bottom:10px;">
+                <span style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">📄 Document Viewer • Page 2 of 3</span>
+                <span class="pill-tag pill-high">2 Visual Anomalies Flagged</span>
               </div>
 
-              <!-- Real High-Res PyMuPDF Document Viewport -->
-              <div class="real-doc-viewer-container" id="realDocViewerContainer">
-                <div class="real-doc-canvas-wrapper" id="realDocCanvasWrapper">
-                  <img id="realDocImage" alt="Document Page Vector Render" class="real-doc-page-img" style="display:none;" />
-                  <div id="realDocOverlay" class="real-doc-interactive-overlay"></div>
+              <!-- Paper Canvas -->
+              <div class="simulated-doc-page">
+                <div class="doc-page-header">
+                  <span class="doc-page-title">EMPLOYEE EARNINGS STATEMENT • PRIVATE & CONFIDENTIAL</span>
+                  <span style="font-family:var(--font-mono); font-size:0.75rem; color:#64748b;">DOC-REF: 9941-X</span>
                 </div>
-                <div id="realDocLoading" class="real-doc-loading-spinner" style="display:none;">
-                  <div class="spinner"></div>
-                  <span>Rendering vector page pixmap with PyMuPDF...</span>
-                </div>
-                <div id="realDocEmpty" class="real-doc-empty-state">
-                  <div style="font-size:2rem; margin-bottom:8px;">📄</div>
-                  <strong style="color:var(--text-primary);">No Document Page Selected</strong>
-                  <span>Select an ingested document from the dropdown above to inspect real PyMuPDF rendered pages.</span>
-                </div>
-              </div>
 
-              <!-- AI Contextual Audit Card (Populated dynamically upon Run AI Contextual Audit) -->
-              <div class="ai-audit-card" id="aiAuditCard" style="display:none;">
-                <div class="ai-audit-header">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-weight:700; color:var(--text-primary);">🤖 Gemini LLM Structured Audit & Verification</span>
-                    <span class="pill-tag pill-info">AI-assessed, needs review</span>
+                <div class="doc-page-body">
+                  <p><strong>Employee Name:</strong> Misari Vadalia &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Designation:</strong> Lead System Architect</p>
+                  <p><strong>Department:</strong> Core Security Systems &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Pay Period:</strong> 01-Jun-2025 to 30-Jun-2025</p>
+                  
+                  <div style="margin:24px 0; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+                    <p style="margin:0 0 10px 0; font-weight:700;">Earnings Breakdown:</p>
+                    <p style="margin:4px 0;">• Basic Component: INR 65,000.00</p>
+                    <p style="margin:4px 0;">• Special Allowance: INR 22,000.00</p>
+                    
+                    <!-- Critical Highlight Bounding Box -->
+                    <p style="margin:8px 0;">
+                      • Net Disbursed Salary: 
+                      <span class="forensic-bbox bbox-critical" id="bboxSalary" onclick="showToast('Inspecting: Typographic Overwrite detected on Salary Field', 'warning')">
+                        <span class="bbox-tag">Typographic Overwrite</span>
+                        INR 95,000.00
+                      </span>
+                    </p>
+
+                    <!-- Warning Highlight Bounding Box -->
+                    <p style="margin:8px 0;">
+                      • Disbursement Date: 
+                      <span class="forensic-bbox bbox-warning" id="bboxDate" onclick="showToast('Inspecting: Baseline Kerning anomaly on Disbursement Date', 'warning')">
+                        <span class="bbox-tag">Kerning Irregularity</span>
+                        30-Jun-2025
+                      </span>
+                    </p>
                   </div>
-                  <span id="aiAuditConfidenceBadge" class="pill-tag pill-verified">Confidence: 98%</span>
-                </div>
 
-                <!-- Structured Extracted Fields Grid -->
-                <div class="ai-audit-grid" id="aiAuditFieldsGrid">
-                  <!-- Populated dynamically -->
-                </div>
-
-                <!-- Contextual Arithmetic Verification -->
-                <div id="aiAuditMathStatus" style="padding:10px 14px; border-radius:6px; font-size:0.85rem; margin-bottom:10px;">
-                  <!-- Populated dynamically: Verified vs Mismatch -->
-                </div>
-
-                <!-- Traceable Quoted Evidence -->
-                <div>
-                  <span style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Exact Quoted Evidence Relied Upon:</span>
-                  <div class="ai-evidence-quote" id="aiAuditQuotedEvidence">
-                    "Invoice total matches line items calculation."
-                  </div>
+                  <p style="font-size:0.75rem; color:#64748b; margin-top:28px;">
+                    * This computer generated statement is digitally signed by Financial Operations. Any visual alteration renders this document subject to forensic scrutiny under Section 12-B.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1188,12 +973,51 @@
               <div class="section-header">
                 <div class="section-title-group">
                   <h2 class="section-title">Forensic Observations</h2>
-                  <span class="section-subtitle">Visual vector anomalies, structural metadata, and AI contextual explanations</span>
+                  <span class="section-subtitle">Evidence-backed explanations requiring human reviewer confirmation</span>
                 </div>
               </div>
 
               <div class="findings-feed" id="forensicFindingsFeed">
-                <!-- Dynamically populated -->
+                
+                <div class="finding-detail-card critical">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Typographic Font Overwrite</span>
+                    <span class="finding-loc">Page 2 • Box [X:140, Y:320]</span>
+                  </div>
+                  <p class="finding-reason">
+                    The numerical figure <strong>"95,000.00"</strong> exhibits font characteristics consistent with Arial Bold 11pt, whereas all sibling fields in this section adhere strictly to Helvetica Neue 10pt. Digital modification overlay suspected.
+                  </p>
+                  <div class="finding-recommendation">
+                    ⚠️ Recommendation: Request direct bank statement verification from issuing depository.
+                  </div>
+                </div>
+
+                <div class="finding-detail-card">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Baseline Kerning Discontinuity</span>
+                    <span class="finding-loc">Page 2 • Box [X:140, Y:360]</span>
+                  </div>
+                  <p class="finding-reason">
+                    Letter spacing on date string deviates by <strong>24.8%</strong> compared to the document template's baseline font profile. Indicates possible insertion after document rendering.
+                  </p>
+                  <div class="finding-recommendation">
+                    ℹ️ Recommendation: Compare against canonical PDF metadata creation timestamp.
+                  </div>
+                </div>
+
+                <div class="finding-detail-card" style="border-left-color:var(--status-info);">
+                  <div class="finding-card-head">
+                    <span class="finding-title">Metadata Consistency Check</span>
+                    <span class="finding-loc">Document Header</span>
+                  </div>
+                  <p class="finding-reason">
+                    PDF producer string matches "ReportLab 4.1.2". Digital signature hash does not match issuer's public key certificate.
+                  </p>
+                  <div class="finding-recommendation" style="color:var(--status-info); background:var(--status-info-dim); border-color:var(--status-info-border);">
+                    ✓ Verification: Certificate revocation list verified.
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -1209,7 +1033,7 @@
               <h1 class="page-title">Cross-Document Comparison</h1>
               <p class="page-subtitle">Correlate extracted entities across multiple documents to identify factual contradictions.</p>
             </div>
-            <button type="button" class="btn-primary" id="runComparisonBtn" onclick="triggerCrossDocumentComparison()">
+            <button class="btn-primary" id="runComparisonBtn" onclick="triggerCrossDocumentComparison()">
               Run Cross-Check
             </button>
           </div>
@@ -1219,14 +1043,16 @@
             <div class="compare-box">
               <label class="form-label">Primary Source Document (Doc A)</label>
               <select class="form-control" id="compareDocA">
-                <option value="">-- Select Primary Document A --</option>
+                <option value="ID_Card_Misari.png">Identity_Card_Misari.png (Government ID Proof)</option>
+                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Earnings)</option>
               </select>
             </div>
 
             <div class="compare-box">
               <label class="form-label">Comparison Reference Document (Doc B)</label>
               <select class="form-control" id="compareDocB">
-                <option value="">-- Select Comparison Document B --</option>
+                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Income Tax Department Filing)</option>
+                <option value="Passport_Front_Scan.png">Passport_Front_Scan.png (Passport Proof)</option>
               </select>
             </div>
           </div>
@@ -1236,7 +1062,7 @@
             <div class="section-header">
               <div class="section-title-group">
                 <h2 class="section-title">Entity Alignment & Discrepancy Matrix</h2>
-                <span class="section-subtitle" id="comparisonSubtitle">Select two documents above and click "Run Cross-Check"</span>
+                <span class="section-subtitle">Evaluating consistency between Identity Card and Tax Return Filing</span>
               </div>
             </div>
 
@@ -1245,19 +1071,51 @@
                 <thead>
                   <tr>
                     <th>Entity Attribute</th>
-                    <th id="compDocAHeader">Document A</th>
-                    <th id="compDocBHeader">Document B</th>
+                    <th>Document A (ID Card)</th>
+                    <th>Document B (Tax Return)</th>
                     <th>Forensic Verdict</th>
                     <th>Impact / Explanation</th>
                   </tr>
                 </thead>
                 <tbody id="comparisonMatrixBody">
                   <tr>
-                    <td colspan="5" style="text-align:center; padding:36px 20px; color:var(--text-muted);">
-                      <div style="font-size:1.8rem; margin-bottom:10px;">⚖️</div>
-                      <div style="font-weight:600; font-size:1rem; color:var(--text-primary); margin-bottom:6px;">No Comparison Executed Yet</div>
-                      <div style="font-size:0.875rem;">Select two documents from the dropdowns above and click <strong style="color:var(--primary-accent);">"Run Cross-Check"</strong> to evaluate cross-document entity alignment.</div>
-                    </td>
+                    <td style="font-weight:700;">Full Legal Name</td>
+                    <td>Misari Vadalia</td>
+                    <td>Misari Vadalia</td>
+                    <td><span class="pill-tag pill-low">✓ Exact Match</span></td>
+                    <td>Names match with 100% token similarity across both registries.</td>
+                  </tr>
+
+                  <tr style="background:var(--status-danger-dim);">
+                    <td style="font-weight:700; color:var(--status-danger);">Date of Birth (DOB)</td>
+                    <td style="font-weight:700;">14/08/1996</td>
+                    <td style="font-weight:700;">14/08/1998</td>
+                    <td><span class="pill-tag pill-high">⚠️ CONFLICT</span></td>
+                    <td><strong>2-Year Discrepancy Detected.</strong> One or both documents contain falsified age information.</td>
+                  </tr>
+
+                  <tr>
+                    <td style="font-weight:700;">Tax Identification #</td>
+                    <td style="font-family:var(--font-mono);">ABCDE1234F</td>
+                    <td style="font-family:var(--font-mono);">ABCDE1234F</td>
+                    <td><span class="pill-tag pill-low">✓ Exact Match</span></td>
+                    <td>Permanent Account Number matches central tax authority database.</td>
+                  </tr>
+
+                  <tr style="background:var(--status-anomaly-dim);">
+                    <td style="font-weight:700; color:var(--status-anomaly);">Residential Address</td>
+                    <td>Sector 14, Gandhinagar</td>
+                    <td>Plot 88, Bodakdev, Ahmedabad</td>
+                    <td><span class="pill-tag pill-medium">⚠️ VARIANCE</span></td>
+                    <td>Geographical variance detected. Requires secondary address utility validation.</td>
+                  </tr>
+
+                  <tr>
+                    <td style="font-weight:700;">Issuing Authority</td>
+                    <td>Govt Authority (UIDAI)</td>
+                    <td>Income Tax Dept of India</td>
+                    <td><span class="pill-tag pill-low">✓ Verified</span></td>
+                    <td>Both issuing authorities recognized in institutional trust registry.</td>
                   </tr>
                 </tbody>
               </table>
@@ -1323,9 +1181,9 @@
               <select id="dossierCaseSelector" class="form-control" style="min-width:220px; font-size:0.85rem;" onchange="loadCaseDossierPreview(this.value)">
                 <option value="">Select Investigation Case...</option>
               </select>
-              <button type="button" class="btn-secondary" onclick="window.print();" title="Browser Print">🖨️ Print</button>
-              <button type="button" class="btn-secondary" id="exportHtmlDossierBtn" onclick="exportCurrentCaseDossier('html')" title="Generate Standalone HTML Dossier">🌐 Export HTML</button>
-              <button type="button" class="btn-primary" id="exportPdfDossierBtn" onclick="exportCurrentCaseDossier('pdf')" title="Generate Publication-Ready PDF Dossier">📄 Export PDF Dossier</button>
+              <button class="btn-secondary" onclick="window.print();" title="Browser Print">🖨️ Print</button>
+              <button class="btn-secondary" id="exportHtmlDossierBtn" onclick="exportCurrentCaseDossier('html')" title="Generate Standalone HTML Dossier">🌐 Export HTML</button>
+              <button class="btn-primary" id="exportPdfDossierBtn" onclick="exportCurrentCaseDossier('pdf')" title="Generate Publication-Ready PDF Dossier">📄 Export PDF Dossier</button>
             </div>
           </div>
 
@@ -1610,153 +1468,6 @@
           <button type="submit" class="btn-primary" id="saveCaseModalBtn">Create Case</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- ======================================================================
-       CONFIRMATION MODAL (DELETE CASE / DOCUMENT)
-       ====================================================================== -->
-  <div class="modal-overlay" id="confirmActionModal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
-    <div class="modal-window" style="max-width: 460px;">
-      <div class="modal-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.25);">
-        <h3 class="modal-title" id="confirmModalTitle" style="color: #ef4444; display: flex; align-items: center; gap: 8px;">
-          <span>⚠️</span> <span>Confirm Permanent Deletion</span>
-        </h3>
-        <button class="modal-close-btn" id="confirmModalCloseBtn" onclick="closeConfirmModal()" aria-label="Close dialog">✕</button>
-      </div>
-      <div class="modal-body">
-        <p id="confirmModalMessage" style="font-size: 0.95rem; line-height: 1.6; color: var(--text-secondary); margin: 0;">
-          Are you sure you want to delete this record? This action is permanent and cannot be undone.
-        </p>
-      </div>
-      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
-        <button type="button" class="btn-secondary" id="confirmModalCancelBtn" onclick="closeConfirmModal()">Cancel</button>
-        <button type="button" class="btn-danger" id="confirmModalAcceptBtn" style="background: #ef4444; color: white; border: none; padding: 9px 20px; border-radius: var(--radius-sm); font-weight: 700; cursor: pointer;">
-          Delete Permanently
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================================================================
-       GOOGLE ACCOUNT CHOOSER MODAL (Official Google Identity Experience)
-       ====================================================================== -->
-  <div class="google-chooser-overlay" id="googleAccountChooserModal" role="dialog" aria-modal="true" style="display: none;">
-    <div class="google-chooser-window">
-      <div class="google-demo-notice-banner">
-        <span class="badge-demo">DEMO SIMULATION</span>
-        <span>Simulates Google Identity OAuth2 token exchange for competition demonstration without production secrets.</span>
-      </div>
-      <div class="google-chooser-header">
-        <div class="google-logo-row">
-          <svg viewBox="0 0 24 24" width="28" height="28">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-          </svg>
-          <span class="google-chooser-brand">Google</span>
-        </div>
-        <h3 class="google-chooser-title">Choose an account</h3>
-        <p class="google-chooser-subtitle">to continue to <strong>VEXORA Forensic Intelligence</strong></p>
-        <button type="button" class="google-chooser-close" onclick="closeGoogleAccountChooser()" aria-label="Close dialog">✕</button>
-      </div>
-
-      <!-- Google Accounts List -->
-      <div class="google-accounts-list" id="googleAccountsList">
-        <!-- Account 1 -->
-        <div class="google-account-item" onclick="selectGoogleAccount('Misari Vadalia', 'misari.vadalia@gmail.com', 'M', '#7c3aed')">
-          <div class="google-account-avatar" style="background:#7c3aed;">M</div>
-          <div class="google-account-info">
-            <div class="google-account-name">Misari Vadalia</div>
-            <div class="google-account-email">misari.vadalia@gmail.com</div>
-          </div>
-          <span class="google-account-badge">Active</span>
-        </div>
-
-        <!-- Account 2 -->
-        <div class="google-account-item" onclick="selectGoogleAccount('Misari Vadalia', 'misari.vadalia@vexora.io', 'V', '#0284c7')">
-          <div class="google-account-avatar" style="background:#0284c7;">V</div>
-          <div class="google-account-info">
-            <div class="google-account-name">Misari Vadalia</div>
-            <div class="google-account-email">misari.vadalia@vexora.io</div>
-          </div>
-          <span class="google-account-badge">Workspace</span>
-        </div>
-
-        <!-- Account 3: Custom / Another account -->
-        <div class="google-account-item google-add-account" onclick="toggleCustomGoogleAccountInput()">
-          <div class="google-account-avatar google-avatar-add">➕</div>
-          <div class="google-account-info">
-            <div class="google-account-name">Use another Google account</div>
-            <div class="google-account-email">Sign in with a different Google account or work email</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Custom Google Account Input Form (Hidden by default) -->
-      <div id="customGoogleAccountWrap" style="display: none; padding: 16px 20px; border-top: 1px solid #e5e7eb; background: #f9fafb;">
-        <div class="form-group" style="margin-bottom: 8px;">
-          <label class="form-label" style="color:#374151; font-size:0.75rem;">Google Full Name</label>
-          <input type="text" id="customGoogleName" class="form-control" style="background:#fff; color:#111; border-color:#d1d5db;" placeholder="e.g. Misari Vadalia">
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label class="form-label" style="color:#374151; font-size:0.75rem;">Google Email Address *</label>
-          <input type="email" id="customGoogleEmail" class="form-control" style="background:#fff; color:#111; border-color:#d1d5db;" placeholder="investigator@gmail.com">
-        </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button type="button" class="btn-secondary" style="font-size:0.8rem; padding:6px 12px;" onclick="toggleCustomGoogleAccountInput(false)">Cancel</button>
-          <button type="button" class="btn-primary" style="font-size:0.8rem; padding:6px 16px; background:#1a73e8;" onclick="submitCustomGoogleAccount()">Continue</button>
-        </div>
-      </div>
-
-      <!-- Google Policy Footer -->
-      <div class="google-chooser-footer">
-        <p>To continue, Google will share your name, email address, and profile picture with VEXORA. Review VEXORA's <a href="#privacy" onclick="event.preventDefault()">Privacy Policy</a> and <a href="#terms" onclick="event.preventDefault()">Terms of Service</a>.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ======================================================================
-       CHROME PASSWORD MANAGER PROMPT MODAL
-       ====================================================================== -->
-  <div class="chrome-save-prompt-overlay" id="chromeSavePasswordModal" role="dialog" aria-modal="true" style="display: none;">
-    <div class="chrome-save-card">
-      <div class="chrome-save-header">
-        <div class="chrome-save-brand">
-          <svg viewBox="0 0 24 24" width="22" height="22">
-            <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L7.25 8.5C8.16 6.94 9.94 6 12 6h9.54C19.64 3.55 16.03 2 12 2z"/>
-            <path fill="#4285F4" d="M12 22c3.92 0 7.37-1.89 9.38-4.78l-4.28-7.72c-.89 1.56-2.58 2.5-4.47 2.5H4.07C5.64 18.06 8.58 22 12 22z"/>
-            <path fill="#FBBC05" d="M2.97 16.29C2.36 14.98 2 13.54 2 12c0-1.85.5-3.58 1.38-5.07L7.75 14.4c.91 1.56 2.58 2.6 4.25 2.6v5c-4.42 0-8.23-2.48-10.03-5.71z"/>
-            <circle fill="#FFFFFF" cx="12" cy="12" r="5"/>
-            <circle fill="#4285F4" cx="12" cy="12" r="4"/>
-          </svg>
-          <span class="chrome-save-title">Save password in Google Chrome?</span>
-        </div>
-        <button type="button" class="chrome-save-close" onclick="dismissChromeSavePrompt(false)" aria-label="Close">✕</button>
-      </div>
-      <div class="chrome-save-body">
-        <p class="chrome-save-desc">
-          Google Chrome can save your password for <strong>VEXORA</strong> so you can sign in automatically on this device.
-        </p>
-        <div class="chrome-save-fields">
-          <div class="chrome-field-row">
-            <span class="chrome-field-label">Username:</span>
-            <span class="chrome-field-value" id="chromePromptUsername">alex.turner</span>
-          </div>
-          <div class="chrome-field-row">
-            <span class="chrome-field-label">Password:</span>
-            <span class="chrome-field-value">••••••••••••</span>
-          </div>
-          <div class="chrome-sync-pill">
-            <span>☁️ Synced with Google Password Manager</span>
-          </div>
-        </div>
-      </div>
-      <div class="chrome-save-footer">
-        <button type="button" class="btn-chrome-notnow" onclick="dismissChromeSavePrompt(false)">Not Now</button>
-        <button type="button" class="btn-chrome-save" onclick="confirmSaveChromeCredentials()">Save</button>
-      </div>
     </div>
   </div>
 

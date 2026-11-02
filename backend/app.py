@@ -64,8 +64,6 @@ from backend.reporter import (
     generate_dossier_pdf,
     generate_dossier_html
 )
-from backend.visualizer import get_document_page_info, render_page_image, render_annotated_page_image
-from backend.llm_layer import extract_structured_fields_llm, perform_contextual_math_check, LLM_BADGE
 
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
@@ -270,7 +268,6 @@ def create_app(config_class=Config):
         Validates formats and sizes, hashes with SHA-256, classifies, and saves to disk and SQLite.
         """
         case_id = request.form.get('case_id') or request.args.get('case_id')
-        category = request.form.get('category') or request.args.get('category')
         user = session.get('username', 'alex.turner')
         upload_folder = app.config.get('UPLOAD_FOLDER')
 
@@ -291,7 +288,7 @@ def create_app(config_class=Config):
             if not f or not f.filename:
                 continue
             try:
-                doc = process_single_upload(f, case_id=case_id, category=category, user=user, upload_folder=upload_folder)
+                doc = process_single_upload(f, case_id=case_id, user=user, upload_folder=upload_folder)
                 uploaded_docs.append(doc)
             except ValidationError as ve:
                 errors.append({'filename': f.filename, 'error': ve.message, 'field': ve.field})
@@ -454,111 +451,6 @@ def create_app(config_class=Config):
             'document_id': doc_id,
             'count': len(findings),
             'data': findings
-        }), 200
-
-    @app.route('/api/documents/<doc_id>/pages', methods=['GET'])
-    def api_get_document_pages(doc_id):
-        """Returns total page count and dimensions for document rendering."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
-
-        upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
-        disk_filename = Path(doc['file_path']).name
-        target_file = upload_folder / disk_filename
-
-        if not target_file.exists():
-            return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' not found."}), 404
-
-        info = get_document_page_info(str(target_file))
-        return jsonify(info), 200
-
-    @app.route('/api/documents/<doc_id>/pages/<int:page_num>/image', methods=['GET'])
-    def api_get_page_image(doc_id, page_num):
-        """Renders raw document page to PNG image."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
-
-        upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
-        disk_filename = Path(doc['file_path']).name
-        target_file = upload_folder / disk_filename
-
-        if not target_file.exists():
-            return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' not found."}), 404
-
-        try:
-            png_bytes = render_page_image(str(target_file), page_num=page_num, zoom=2.0)
-            return Response(png_bytes, mimetype='image/png')
-        except Exception as e:
-            return jsonify({'success': False, 'error': f"Failed to render page: {str(e)}"}), 500
-
-    @app.route('/api/documents/<doc_id>/pages/<int:page_num>/annotated', methods=['GET'])
-    def api_get_annotated_page_image(doc_id, page_num):
-        """Renders document page with red bounding boxes drawn on detected anomalies."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
-
-        upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
-        disk_filename = Path(doc['file_path']).name
-        target_file = upload_folder / disk_filename
-
-        if not target_file.exists():
-            return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' not found."}), 404
-
-        # Retrieve findings and parse coordinates
-        raw_findings = get_findings_by_document(doc_id)
-        vis_findings = []
-        for f in raw_findings:
-            coords = f.get('coordinates')
-            if isinstance(coords, str):
-                try:
-                    coords = json.loads(coords)
-                except Exception:
-                    coords = None
-            if coords:
-                vis_findings.append({
-                    'rule_id': f.get('rule_id', 'ANOMALY'),
-                    'severity': f.get('severity', 'High'),
-                    'page_number': f.get('page_number', 1),
-                    'bounding_box': coords
-                })
-
-        try:
-            annotated_png = render_annotated_page_image(str(target_file), page_num=page_num, findings=vis_findings, zoom=2.0)
-            return Response(annotated_png, mimetype='image/png')
-        except Exception as e:
-            return jsonify({'success': False, 'error': f"Failed to render annotated page: {str(e)}"}), 500
-
-    @app.route('/api/documents/<doc_id>/ai-audit', methods=['POST'])
-    def api_ai_audit_document(doc_id):
-        """
-        Executes Google GenAI LLM Layer contextual analysis:
-        extracts structured fields with confidence and source quotes,
-        verifies line-item mathematical sums against grand total,
-        and provides traceable audit reasoning badged 'AI-assessed, needs review'.
-        """
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
-
-        extracted_text = doc.get('extracted_text') or ''
-        if not extracted_text:
-            # Try to get from extracted_data
-            data = get_document_extraction(doc_id)
-            if data and data.get('full_text'):
-                extracted_text = data['full_text']
-
-        structured = extract_structured_fields_llm(extracted_text)
-        math_anomalies = perform_contextual_math_check(structured, extracted_text)
-
-        return jsonify({
-            'success': True,
-            'document_id': doc_id,
-            'ai_badge': LLM_BADGE,
-            'structured_fields': structured,
-            'contextual_math_findings': math_anomalies
         }), 200
 
     # ==========================================
@@ -725,9 +617,8 @@ def create_app(config_class=Config):
             else:
                 result = generate_dossier_html(case_id, user=user)
 
-            host = request.host_url.rstrip('/')
-            result['download_url'] = f"{host}/api/reports/{result['report_id']}/download"
-            result['view_url'] = f"{host}/api/reports/{result['report_id']}/view"
+            result['download_url'] = f"/api/reports/{result['report_id']}/download"
+            result['view_url'] = f"/api/reports/{result['report_id']}/view"
             return jsonify(result), 201
         except Exception as e:
             app.logger.error(f"Report generation failed for case {case_id}: {str(e)}")
@@ -756,12 +647,11 @@ def create_app(config_class=Config):
         if not report:
             return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
 
-        host = request.host_url.rstrip('/')
         return jsonify({
             'success': True,
             'data': report,
-            'download_url': f"{host}/api/reports/{report_id}/download",
-            'view_url': f"{host}/api/reports/{report_id}/view"
+            'download_url': f"/api/reports/{report_id}/download",
+            'view_url': f"/api/reports/{report_id}/view"
         }), 200
 
     @app.route('/api/reports/<report_id>/download', methods=['GET'])
@@ -929,26 +819,6 @@ def create_app(config_class=Config):
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }), 200
 
-    @app.route('/api/eval/benchmark', methods=['GET'])
-    def api_get_benchmark_report():
-        """Returns the latest empirical benchmark evaluation metrics across 20 test vectors."""
-        rerun = request.args.get('rerun', '').lower() in ('1', 'true', 'yes')
-        report_path = PROJECT_ROOT / 'eval' / 'benchmark_report.json'
-        if rerun or not report_path.exists():
-            try:
-                from eval.run_benchmark import run_evaluation
-                run_evaluation()
-            except Exception as e:
-                app.logger.warning(f"Failed to rerun benchmark: {e}")
-        if not report_path.exists():
-            return jsonify({'success': False, 'error': 'Benchmark report not generated yet. Run python eval/run_benchmark.py.'}), 404
-        try:
-            with open(report_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return jsonify({'success': True, 'data': data}), 200
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
-
 
     # ==========================================
     # Authentication & Session Routes
@@ -957,27 +827,15 @@ def create_app(config_class=Config):
     def api_login():
         """Authenticates investigator credentials with scrypt verification."""
         payload = request.get_json(silent=True) or {}
-        username = (payload.get('username') or payload.get('email') or '').strip().lower()
+        username = payload.get('username', '').strip().lower()
         password = payload.get('password', '')
 
         if not username or not password:
-            return jsonify({'success': False, 'error': 'Username or email and password are required.'}), 400
+            return jsonify({'success': False, 'error': 'Username and password are required.'}), 400
 
         user = query_db("SELECT * FROM users WHERE username = ? OR email = ?", (username, username), one=True)
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Account not registered. Please create an account first.',
-                'not_registered': True,
-                'code': 'USER_NOT_REGISTERED'
-            }), 404
-
-        if not check_password_hash(user['password_hash'], password):
-            return jsonify({
-                'success': False,
-                'error': 'Incorrect password. Please verify your credentials and try again.',
-                'code': 'INVALID_PASSWORD'
-            }), 401
+        if not user or not check_password_hash(user['password_hash'], password):
+            return jsonify({'success': False, 'error': 'Invalid username or password.'}), 401
 
         session['user_id'] = user['id']
         session['username'] = user['username']
@@ -991,7 +849,6 @@ def create_app(config_class=Config):
             'user': {
                 'id': user['id'],
                 'username': user['username'],
-                'name': user['username'],
                 'email': user['email'],
                 'role': user['role'],
                 'badge_number': user['badge_number']
@@ -1021,14 +878,12 @@ def create_app(config_class=Config):
 
             log_audit("USER_REGISTER", "auth", str(user_id), f"New user '{validated['username']}' registered.", validated['username'])
 
-            display_name = payload.get('fullName') or payload.get('name') or validated['username']
             return jsonify({
                 'success': True,
                 'message': 'Investigator registered successfully.',
                 'user': {
                     'id': user_id,
                     'username': validated['username'],
-                    'name': display_name,
                     'email': validated['email'],
                     'role': validated['role'],
                     'badge_number': validated['badge_number']
@@ -1044,65 +899,19 @@ def create_app(config_class=Config):
         """Returns the current investigator's identity."""
         username = session.get('username')
         if not username:
-            return jsonify({'authenticated': False, 'user': None}), 200
+            # Default to baseline analyst profile if unauthenticated
+            return jsonify({
+                'authenticated': False,
+                'user': {
+                    'username': 'alex.turner',
+                    'email': 'turner@vexora.internal',
+                    'role': 'Senior Forensic Specialist',
+                    'badge_number': 'VEX-782'
+                }
+            }), 200
 
         user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = ?", (username,), one=True)
-        if not user:
-            return jsonify({'authenticated': False, 'user': None}), 200
         return jsonify({'authenticated': True, 'user': user}), 200
-
-    @app.route('/api/auth/logout', methods=['POST'])
-    def api_logout():
-        """Logs out the current investigator and clears the session."""
-        username = session.get('username', 'Anonymous')
-        session.clear()
-        log_audit("USER_LOGOUT", "auth", "session", f"Investigator '{username}' logged out.", username)
-        return jsonify({'success': True, 'message': 'Logged out successfully.'}), 200
-
-    @app.route('/api/auth/google', methods=['POST'])
-    def api_google_login():
-        """Authenticates or signs up an investigator using Google OAuth."""
-        payload = request.get_json(silent=True) or {}
-        email = payload.get('email', '').strip().lower() or 'investigator.google@vexora.internal'
-        name = payload.get('name', '').strip() or 'Google Verified Investigator'
-        google_id = payload.get('google_id', 'google_verified')
-
-        user = query_db("SELECT * FROM users WHERE email = ?", (email,), one=True)
-        if not user:
-            base_username = email.split('@')[0].replace('.', '_')
-            username = f"{base_username}_g"
-            existing_un = query_db("SELECT id FROM users WHERE username = ?", (username,), one=True)
-            if existing_un:
-                username = f"{username}_{int(datetime.now().timestamp()) % 1000}"
-
-            hashed_pw = generate_password_hash(f"google_oauth_{google_id}", method='scrypt')
-            user_id = execute_db(
-                "INSERT INTO users (username, email, password_hash, role, badge_number) VALUES (?, ?, ?, ?, ?)",
-                (username, email, hashed_pw, 'Forensic Investigator', f'GOOG-{datetime.now().strftime("%y%m")}')
-            )
-            user = query_db("SELECT * FROM users WHERE id = ?", (user_id,), one=True)
-            log_audit("USER_REGISTER", "auth", str(user_id), f"Google OAuth registered user '{username}'.", username)
-
-        session['user_id'] = user['id']
-        session['username'] = user['username']
-        session['role'] = user['role']
-
-        log_audit("USER_LOGIN", "auth", str(user['id']), f"Investigator '{user['username']}' authenticated via Google OAuth.", user['username'])
-
-        return jsonify({
-            'success': True,
-            'is_demo_mode': True,
-            'notice': 'Simulated Google OAuth2 authentication for demonstration purposes.',
-            'message': 'Google authentication successful (Demo Mode).',
-            'user': {
-                'id': user['id'],
-                'username': user['username'],
-                'name': name or user['username'],
-                'email': user['email'],
-                'role': user['role'],
-                'badge_number': user['badge_number']
-            }
-        }), 200
 
     # ==========================================
     # Global Error Handlers
