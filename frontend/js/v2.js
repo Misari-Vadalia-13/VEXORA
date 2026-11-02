@@ -30,6 +30,7 @@
               <span class="v2-evidence-meta-item">Class: <strong id="v2ModalClass">—</strong></span>
               <span class="v2-evidence-meta-item">Location: <strong id="v2ModalLocation">—</strong></span>
               <span class="v2-evidence-meta-item">Severity: <strong id="v2ModalSeverity">—</strong></span>
+              <span class="v2-evidence-meta-item">Rule Weight: <strong id="v2ModalRuleWeight">—</strong></span>
             </div>
 
             <div id="v2VisualCanvasContainer" class="v2-evidence-canvas-wrap">
@@ -196,6 +197,10 @@
     if (titleEl) titleEl.textContent = title;
     if (docNameEl) docNameEl.textContent = finding.document_filename || finding.document_id || 'Document';
     if (sevEl) sevEl.textContent = severity;
+    const weightEl = document.getElementById('v2ModalRuleWeight');
+    if (weightEl) {
+      weightEl.textContent = (finding.confidence !== undefined && finding.confidence !== null) ? String(finding.confidence) : '—';
+    }
     if (locEl) {
       locEl.textContent = coords ? `Page ${pageNum} • Box [${String(coords)}]` : `Page ${pageNum} • Contextual Check`;
     }

@@ -841,6 +841,12 @@ async function initBackendSync() {
                   <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
                     Case: <strong>${escapeHtml(doc.case_id || 'General Vault')}</strong>
                   </div>
+                  ${doc.extraction_mode === 'simulated_fallback' ? `
+                    <div style="margin-top:6px;">
+                      <span class="pill-tag pill-medium" style="font-size:0.7rem; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">
+                        ⚠️ Simulated Fallback (OCR Unavailable)
+                      </span>
+                    </div>` : ''}
                   <div class="doc-card-footer">
                     <button class="table-action-btn" onclick="triggerDocumentExtraction('${doc.id}')" title="Run OCR & Entity Extraction">⚡ Extract</button>
                     <button class="table-action-btn" onclick="analyzeDocumentAndInspect('${doc.id}')" title="Run Forensic & Contextual Analysis">🔬 Analyze</button>
@@ -1018,6 +1024,7 @@ function renderForensicFindings(findings) {
         <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
         <div>
           <span class="pill-tag ${evClassPill}" style="margin-right:6px; font-size:0.7rem;">${escapeHtml(evClass)}</span>
+          ${f.confidence !== undefined && f.confidence !== null ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-right:6px;">Rule Weight: <strong>${escapeHtml(String(f.confidence))}</strong></span>` : ''}
           <span class="finding-loc">${escapeHtml(locText)}</span>
         </div>
       </div>

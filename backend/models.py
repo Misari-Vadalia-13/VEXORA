@@ -330,19 +330,73 @@ def save_document_extraction(doc_id, extraction_data, user="System"):
     full_text = extraction_data.get('full_text', '')
     serialized_json = json.dumps(extraction_data)
 
-    execute_db(
-        """
-        UPDATE documents
-        SET extracted_text = ?, extracted_data = ?, status = 'Analyzed'
-        WHERE id = ?
-        """,
-        (full_text, serialized_json, doc_id)
-    )
+    extraction_mode = extraction_data.get('extraction_mode')
+    if not extraction_mode:
+        if doc.get('file_type') == 'pdf':
+            extraction_mode = 'digital_pdf'
+        else:
+            extraction_mode = 'simulated_fallback'
+
+    try:
+        execute_db(
+            """
+            UPDATE documents
+            SET extracted_text = ?, extracted_data = ?, extraction_mode = ?, status = 'Analyzed'
+            WHERE id = ?
+            """,
+            (full_text, serialized_json, extraction_mode, doc_id)
+        )
+    except Exception:
+        execute_db(
+            """
+            UPDATE documents
+            SET extracted_text = ?, extracted_data = ?, status = 'Analyzed'
+            WHERE id = ?
+            """,
+            (full_text, serialized_json, doc_id)
+        )
+
+    # Phase E: Save entities into entities table
+    save_document_entities(doc_id, doc.get('case_id'), extraction_data.get('entities', {}))
 
     page_count = extraction_data.get('page_count', 1)
     word_count = extraction_data.get('total_words', 0)
-    log_audit("DOCUMENT_EXTRACTED", "document", doc_id, f"Extracted {page_count} page(s), {word_count} word(s).", user)
+    log_audit("DOCUMENT_EXTRACTED", "document", doc_id, f"Extracted {page_count} page(s), {word_count} word(s). Mode: {extraction_mode}", user)
     return get_document_by_id(doc_id)
+
+def save_document_entities(doc_id, case_id, entities_dict):
+    """Additive persistence: inserts extracted entities and confidences into entities table."""
+    if not entities_dict or not isinstance(entities_dict, dict):
+        return
+    try:
+        import uuid
+        execute_db("DELETE FROM entities WHERE document_id = ?", (doc_id,))
+        for entity_type, items in entities_dict.items():
+            if isinstance(items, list):
+                for item in items:
+                    val = item.get('value', '').strip()
+                    if not val:
+                        continue
+                    ent_id = f"ENT-{uuid.uuid4().hex[:12].upper()}"
+                    conf = item.get('confidence')
+                    conf_str = str(conf) if conf is not None else None
+                    page_num = item.get('page', 1)
+                    execute_db(
+                        """
+                        INSERT INTO entities (id, document_id, case_id, entity_type, value, confidence, page_number)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (ent_id, doc_id, case_id, entity_type, val, conf_str, page_num)
+                    )
+    except Exception:
+        pass
+
+def get_entities_by_document(doc_id):
+    """Retrieves entity records with confidence values for a document."""
+    try:
+        return query_db("SELECT * FROM entities WHERE document_id = ? ORDER BY page_number ASC", (doc_id,))
+    except Exception:
+        return []
 
 def get_document_extraction(doc_id):
     """Retrieves and parses the structured extraction data for a document."""

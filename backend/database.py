@@ -61,6 +61,8 @@ def init_db(db_path=None):
             cursor.execute("ALTER TABLE documents ADD COLUMN extracted_text TEXT")
         if 'extracted_data' not in cols and len(cols) > 0:
             cursor.execute("ALTER TABLE documents ADD COLUMN extracted_data TEXT")
+        if 'extraction_mode' not in cols and len(cols) > 0:
+            cursor.execute("ALTER TABLE documents ADD COLUMN extraction_mode TEXT DEFAULT NULL")
 
         cursor.execute("PRAGMA table_info(findings)")
         f_cols = [row['name'] for row in cursor.fetchall()]
@@ -87,6 +89,28 @@ def init_db(db_path=None):
                 FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
             )
         """)
+
+        # Phase E: Extracted Entities table with nullable confidence column
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS entities (
+                id TEXT PRIMARY KEY,
+                document_id TEXT,
+                case_id TEXT,
+                entity_type TEXT NOT NULL,
+                value TEXT NOT NULL,
+                confidence TEXT,
+                page_number INTEGER DEFAULT 1,
+                coordinates TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("PRAGMA table_info(entities)")
+        e_cols = [row['name'] for row in cursor.fetchall()]
+        if 'confidence' not in e_cols and len(e_cols) > 0:
+            cursor.execute("ALTER TABLE entities ADD COLUMN confidence TEXT DEFAULT NULL")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entities_document ON entities(document_id)")
         conn.commit()
     finally:
         conn.close()

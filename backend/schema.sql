@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS documents (
     status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Processing', 'Analyzed', 'Flagged', 'Clean')),
     extracted_text TEXT,
     extracted_data TEXT,
+    extraction_mode TEXT DEFAULT NULL,
     uploaded_by TEXT DEFAULT 'Lead Investigator',
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL
@@ -124,4 +125,20 @@ CREATE INDEX IF NOT EXISTS idx_comparisons_case_id ON comparisons(case_id);
 CREATE INDEX IF NOT EXISTS idx_reports_case_id ON reports(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_ai_insights_doc ON ai_insights(document_id);
+
+-- 9. Extracted Entities Table (Phase E)
+CREATE TABLE IF NOT EXISTS entities (
+    id TEXT PRIMARY KEY,
+    document_id TEXT,
+    case_id TEXT,
+    entity_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    confidence TEXT,
+    page_number INTEGER DEFAULT 1,
+    coordinates TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_entities_document ON entities(document_id);
 

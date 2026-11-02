@@ -1006,3 +1006,70 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-d): implement image forensics module (IMG-001 ELA, IMG-002 sharpness, IMG-003 copy-move, IMG-004 signature check)`
+
+
+---
+
+## Phase E: Real Field-Level Confidence & Honest Extraction Modes
+**Date:** 2026-11-02
+**Status:** Completed
+**Branch:** feature/v2-phase-e (merged into main)
+
+### What Was Built
+1. **Real Field-Level Confidence & Per-Word OCR Averaging (`backend/extractor.py`, `backend/ner.py`):**
+   - Integrated `pytesseract.image_to_data` output dictionary parsing to obtain true per-word bounding box confidences (0-100 scale).
+   - Implemented `compute_entity_confidence` in `backend/ner.py`: averages the individual OCR word confidences corresponding to constituent tokens of extracted named entities (organizations, monetary values, dates, identifiers, persons).
+   - For native digital PDFs (`extract_pdf_document`), entities receive an explicit `confidence = "n/a (digital text)"`, honestly distinguishing directly extracted digital fonts from statistical OCR approximations.
+
+2. **Extracted Entities Relational Persistence (`backend/schema.sql`, `backend/database.py`, `backend/models.py`):**
+   - Created `entities` table with a nullable `confidence` column:
+     `id`, `document_id`, `case_id`, `entity_type`, `value`, `confidence`, `page_number`, `coordinates`, `created_at`.
+   - Added automatic schema migration in `init_db` with `idx_entities_document` index.
+   - Added `save_document_entities` and `get_entities_by_document` helper models in `backend/models.py` called automatically upon document extraction.
+
+3. **Extraction Mode Tracking & VEXORA_STRICT_OCR (`backend/config.py`, `backend/extractor.py`, `backend/models.py`):**
+   - Added `extraction_mode` column to `documents` table (`digital_pdf`, `tesseract_ocr`, `simulated_fallback`, `ocr_unavailable`).
+   - Added configuration flag `VEXORA_STRICT_OCR` (default off). When enabled and Tesseract binary is absent from PATH, returns an explicit `status = "OCR unavailable"` and `extraction_mode = "ocr_unavailable"` rather than synthetic text.
+   - When Tesseract is absent and `VEXORA_STRICT_OCR` is false, gracefully retains the simulated fallback text with `extraction_mode = "simulated_fallback"`.
+
+4. **Display Renaming: "Rule Weight" & Visible Warning Badges (`backend/reporter.py`, `frontend/js/app.js`, `frontend/js/v2.js`):**
+   - Renamed display labels for rule-based findings (e.g., `RULE-VIS-*`, `RULE-CTX-*`, `PDF-*`, `IMG-*`) from "Confidence" to **"Rule Weight"** in all user-facing presentations (HTML dossier, vector PDF dossier, finding feed cards, and the interactive Visual Evidence Modal).
+   - Preserved underlying database column `confidence` and API JSON keys for 100% backward compatibility.
+   - Added visible warning badges:
+     - Document library card: `⚠️ Simulated Fallback (OCR Unavailable)`
+     - HTML dossier inventory: `⚠️ SIMULATED FALLBACK (OCR UNAVAILABLE)`
+     - Vector PDF dossier table: `[⚠️ SIMULATED OCR]`
+
+5. **Unit & Integration Test Suite (`tests/test_v2_phase_e.py`):**
+   - 6 comprehensive tests:
+     - `test_digital_pdf_entity_confidence`: Verifies digital text entities have `'n/a (digital text)'` confidence.
+     - `test_ocr_word_confidence_and_entity_averaging`: Verifies `image_to_data` confidence parsing and entity averaging.
+     - `test_tesseract_missing_fallback`: Verifies graceful simulated_fallback mode when Tesseract is absent.
+     - `test_strict_ocr_flag_enabled`: Verifies explicit 'OCR unavailable' error under `VEXORA_STRICT_OCR=True`.
+     - `test_entities_table_persistence`: Verifies SQLite `entities` table population with confidence strings.
+     - `test_dossier_and_ui_display_rule_weight`: Verifies 'Rule Weight' display and warning badge rendering in dossiers.
+
+### Technologies Introduced
+- **Tesseract TSV / Dict Data Extraction:** Parsing raw bounding box confidences from `pytesseract.image_to_data` without executing intermediate file writes.
+- **Constituent Token Confidence Averaging:** Mapping entity substrings back to raw OCR tokens to generate mathematically grounded field confidence scores.
+- **Strict vs. Fallback Operational Modes:** Granular feature flags allowing production strictness or seamless offline demonstrations.
+
+### Actual Testing Results
+- **Phase E Confidence Suite (`tests/test_v2_phase_e.py`):** 6/6 passed (`OK`).
+- **Phase D Image Forensics Suite (`tests/test_v2_phase_d.py`):** 8/8 passed (`OK`).
+- **Phase C LLM Reasoning Suite (`tests/test_v2_phase_c.py`):** 9/9 passed (`OK`).
+- **Phase B PDF Forensics Suite (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Suite (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Suite (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Test Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 105/105 passing across all suites in 24.81s.
+
+### Known Limitations
+- When Tesseract is not installed on the host system, OCR confidence is unavailable, and documents explicitly report `extraction_mode="simulated_fallback"`.
+
+### Concepts Learned
+- **Distinguishing Probabilities from Rule Weights:** Calling a rule severity score (e.g. 0.85) a "confidence" misleads users into believing a statistical classifier made a probabilistic judgment. Clarifying it as "Rule Weight" maintains scientific integrity.
+- **Digital vs OCR Confidence:** In digital PDFs, characters are exact glyph codes in font maps (100% fidelity). Marking digital entities as `"n/a (digital text)"` prevents confusion with OCR character recognition scores.
+
+### Suggested Git Commit Message
+`feat(phase-e): implement field-level confidence, extraction modes, entities table, and rule weight display`

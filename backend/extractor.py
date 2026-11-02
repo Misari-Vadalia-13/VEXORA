@@ -1,5 +1,5 @@
 """
-VEXORA — Document Text & Layout Extraction Module
+VEXORA Document Text & Layout Extraction Module
 Extracts digital PDF text, block coordinates, metadata, and page layouts using PyMuPDF.
 Processes scanned images using Pillow and Tesseract OCR with robust fallback handling.
 """
@@ -73,7 +73,11 @@ def extract_pdf_document(source):
                         })
 
             # 3. Named Entity Recognition for this page
-            page_entities = extract_entities_from_text(page_text, page_number=page_num)
+            page_entities = extract_entities_from_text(
+                page_text,
+                page_number=page_num,
+                default_confidence="n/a (digital text)"
+            )
             page_entities_list.append(page_entities)
 
             words = page_text.split()
@@ -96,6 +100,7 @@ def extract_pdf_document(source):
         return {
             'success': True,
             'format': 'PDF',
+            'extraction_mode': 'digital_pdf',
             'page_count': page_count,
             'total_words': total_words,
             'total_characters': total_characters,
@@ -128,12 +133,80 @@ def extract_image_document(source, filename="scanned_artifact.png"):
     # Attempt OCR via pytesseract
     ocr_text = ""
     ocr_engine = "Tesseract-OCR"
+    extraction_mode = "tesseract_ocr"
+    word_confidences = []
+    avg_doc_conf = None
 
     try:
+        # Use image_to_data to capture per-word bounding boxes and confidences
+        ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        texts = ocr_data.get('text', [])
+        confs = ocr_data.get('conf', [])
+
+        valid_words = []
+        for w, c in zip(texts, confs):
+            clean_w = str(w).strip()
+            try:
+                c_num = float(c)
+            except (ValueError, TypeError):
+                c_num = -1.0
+            if clean_w and c_num >= 0:
+                valid_words.append((clean_w, c_num))
+                word_confidences.append({'word': clean_w.lower(), 'conf': c_num})
+
+        if valid_words:
+            avg_doc_conf = round(sum(c for _, c in valid_words) / len(valid_words), 1)
+
         ocr_text = pytesseract.image_to_string(img).strip()
+        if not ocr_text and valid_words:
+            ocr_text = " ".join(w for w, _ in valid_words)
+
     except (pytesseract.TesseractNotFoundError, Exception) as e:
+        # Check strict OCR flag
+        strict_ocr = False
+        try:
+            from flask import current_app, has_app_context
+            if has_app_context() and current_app:
+                strict_ocr = current_app.config.get('VEXORA_STRICT_OCR', False)
+        except Exception:
+            pass
+        if not strict_ocr:
+            from backend.config import Config
+            strict_ocr = getattr(Config, 'VEXORA_STRICT_OCR', False)
+
+        if strict_ocr:
+            return {
+                'success': False,
+                'status': 'OCR unavailable',
+                'extraction_mode': 'ocr_unavailable',
+                'ocr_engine': 'None',
+                'error': 'OCR unavailable',
+                'format': img_format,
+                'page_count': 1,
+                'total_words': 0,
+                'total_characters': 0,
+                'metadata': {
+                    'dimensions': f"{width}x{height}",
+                    'mode': mode,
+                    'format': img_format,
+                    'page_count': 1,
+                    'extraction_mode': 'ocr_unavailable'
+                },
+                'pages': [],
+                'entities': {
+                    'dates': [],
+                    'monetary_values': [],
+                    'organizations': [],
+                    'persons': [],
+                    'identifiers': [],
+                    'emails': []
+                },
+                'full_text': ''
+            }
+
         # Fallback when native tesseract-ocr executable is not installed on system
         ocr_engine = "Image Structural Analysis (OCR Binary Fallback)"
+        extraction_mode = "simulated_fallback"
         ocr_text = (
             f"[Visual Artifact Analysis]\n"
             f"Filename: {filename}\n"
@@ -141,7 +214,12 @@ def extract_image_document(source, filename="scanned_artifact.png"):
             f"Status: High-resolution raster artifact indexed. Forensic bounding coordinates mapped."
         )
 
-    entities = extract_entities_from_text(ocr_text, page_number=1)
+    entities = extract_entities_from_text(
+        ocr_text,
+        page_number=1,
+        word_confidences=word_confidences if word_confidences else None,
+        default_confidence=avg_doc_conf
+    )
     words = ocr_text.split()
 
     # Create primary visual block covering the image canvas
@@ -167,6 +245,7 @@ def extract_image_document(source, filename="scanned_artifact.png"):
         'success': True,
         'format': img_format,
         'ocr_engine': ocr_engine,
+        'extraction_mode': extraction_mode,
         'page_count': 1,
         'total_words': len(words),
         'total_characters': len(ocr_text),
@@ -174,7 +253,8 @@ def extract_image_document(source, filename="scanned_artifact.png"):
             'dimensions': f"{width}x{height}",
             'mode': mode,
             'format': img_format,
-            'page_count': 1
+            'page_count': 1,
+            'extraction_mode': extraction_mode
         },
         'pages': pages,
         'entities': entities,

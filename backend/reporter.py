@@ -102,6 +102,7 @@ def generate_case_dossier_data(case_id):
             'category': d.get('category') or 'Uncategorized',
             'classification_confidence': d.get('classification_confidence', 0.0),
             'status': d.get('status') or 'Pending',
+            'extraction_mode': d.get('extraction_mode') or ('digital_pdf' if (d.get('file_type') or '').lower() == 'pdf' else 'simulated_fallback'),
             'uploaded_at': d.get('uploaded_at') or ''
         })
 
@@ -132,6 +133,7 @@ def generate_case_dossier_data(case_id):
             'evidence': f.get('evidence') or '',
             'page_number': f.get('page_number', 1),
             'coordinates': f.get('coordinates') or '',
+            'confidence': f.get('confidence'),
             'status': f.get('status', 'Unresolved')
         })
 
@@ -380,8 +382,10 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
             page = create_page()
             y = 50.0
 
+        ext_mode = doc_item.get('extraction_mode', '')
+        mode_tag = " [⚠️ SIMULATED OCR]" if ext_mode == 'simulated_fallback' else ""
         page.insert_text(fitz.Point(MARGIN_LEFT + 4, y + 10), doc_item['id'], fontname="courier", fontsize=7, color=(15/255, 23/255, 42/255))
-        page.insert_text(fitz.Point(MARGIN_LEFT + 95, y + 10), doc_item['filename'][:24], fontname="hebo", fontsize=7.5, color=(15/255, 23/255, 42/255))
+        page.insert_text(fitz.Point(MARGIN_LEFT + 95, y + 10), (doc_item['filename'][:20] + mode_tag)[:28], fontname="hebo", fontsize=7.5, color=(15/255, 23/255, 42/255) if not mode_tag else (180/255, 83/255, 9/255))
         page.insert_text(fitz.Point(MARGIN_LEFT + 250, y + 10), doc_item['category'][:14], fontname="helv", fontsize=7.5, color=(71/255, 85/255, 105/255))
         hash_disp = doc_item['file_hash'][:16] + "..." if len(doc_item['file_hash']) > 16 else doc_item['file_hash']
         page.insert_text(fitz.Point(MARGIN_LEFT + 340, y + 10), hash_disp, fontname="courier", fontsize=7, color=(100/255, 116/255, 139/255))
@@ -419,7 +423,8 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
             page.insert_text(fitz.Point(MARGIN_RIGHT - 110, y + 10), f"Severity: {sev.upper()}", fontname="hebo", fontsize=7.5, color=badge_color)
 
             ev_class = f.get('evidence_class') or 'Observation'
-            loc_text = f"Page {f['page_number']}" + (f" • Box [{f['coordinates']}]" if f['coordinates'] else "") + f" • Class: {ev_class}"
+            weight_str = f" • Rule Weight: {f.get('confidence')}" if f.get('confidence') is not None else ""
+            loc_text = f"Page {f['page_number']}" + (f" • Box [{f['coordinates']}]" if f['coordinates'] else "") + f" • Class: {ev_class}" + weight_str
             page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 21), loc_text, fontname="courier", fontsize=7, color=(100/255, 116/255, 139/255))
 
             desc_text = f['description'][:100] + "..." if len(f['description']) > 100 else f['description']
@@ -586,10 +591,17 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
     doc_rows = ""
     for d in data['documents']:
         status_color = "#ef4444" if d['status'] == 'Flagged' else "#10b981"
+        ext_mode = d.get('extraction_mode', '')
+        mode_badge = ""
+        if ext_mode == 'simulated_fallback':
+            mode_badge = "<br><span style='font-size:10px; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:3px; font-weight:700;'>⚠️ SIMULATED FALLBACK (OCR UNAVAILABLE)</span>"
+        elif ext_mode == 'ocr_unavailable':
+            mode_badge = "<br><span style='font-size:10px; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:3px; font-weight:700;'>❌ OCR UNAVAILABLE</span>"
+
         doc_rows += f"""
         <tr>
             <td><code>{d['id']}</code></td>
-            <td><strong>{d['filename']}</strong></td>
+            <td><strong>{d['filename']}</strong>{mode_badge}</td>
             <td>{d['category']}</td>
             <td><code>{d['file_hash'][:16]}...</code></td>
             <td>{d['file_size_formatted']}</td>
@@ -607,6 +619,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
             sev_class = "critical" if sev in ('Critical', 'High') else "warning" if sev == 'Medium' else "info"
             border_color = "#ef4444" if sev in ('Critical', 'High') else "#f59e0b" if sev == 'Medium' else "#64748b"
             coord_str = f" • BBox: <code>[{f['coordinates']}]</code>" if f['coordinates'] else ""
+            weight_str = f" • Rule Weight: <strong>{f['confidence']}</strong>" if f.get('confidence') is not None else ""
 
             finding_cards += f"""
             <div style="border-left: 4px solid {border_color}; background:#f8fafc; padding:12px 16px; margin-bottom:12px; border-radius:4px;">
@@ -618,7 +631,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
                     </span>
                 </div>
                 <div style="font-size:0.8rem; color:#64748b; margin-bottom:6px;">
-                    Source Document: <code>{f.get('document_id', 'Unknown')}</code> • Page {f.get('page_number', 1)}{coord_str}
+                    Source Document: <code>{f.get('document_id', 'Unknown')}</code> • Page {f.get('page_number', 1)}{coord_str}{weight_str}
                 </div>
                 <p style="font-size:0.85rem; color:#334155; margin:0 0 6px 0;">{f['description']}</p>
                 {f'<div style="font-size:0.8rem; color:#0369a1; background:#f0f9ff; padding:4px 8px; border-radius:3px;">🔍 <strong>Evidence:</strong> {f["evidence"]}</div>' if f.get('evidence') else ''}
