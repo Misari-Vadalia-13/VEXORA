@@ -447,6 +447,38 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     page.draw_line(fitz.Point(MARGIN_RIGHT - 160, y + 36), fitz.Point(MARGIN_RIGHT - 12, y + 36), color=(148/255, 163/255, 184/255), width=0.75)
     page.insert_text(fitz.Point(MARGIN_RIGHT - 140, y + 46), "Analyst Signature & Seal", fontname="helv", fontsize=7, color=(148/255, 163/255, 184/255))
 
+    # Phase A Hook: Embed Visual Evidence Overlays when ENABLE_EVIDENCE_OVERLAY is True
+    if getattr(Config, 'ENABLE_EVIDENCE_OVERLAY', False):
+        try:
+            from backend.evidence import get_finding_evidence_image
+            visual_findings = [f for f in data.get('findings', []) if f.get('coordinates')][:2]
+            if visual_findings:
+                ev_page = create_page()
+                ev_y = 35.0
+                ev_page.draw_rect(fitz.Rect(MARGIN_LEFT, ev_y, MARGIN_RIGHT, ev_y + 20), color=None, fill=(241/255, 245/255, 249/255))
+                ev_page.insert_text(fitz.Point(MARGIN_LEFT + 6, ev_y + 14), "APPENDIX: VISUAL FORENSIC EVIDENCE OVERLAYS", fontname="hebo", fontsize=9.5, color=(30/255, 41/255, 59/255))
+                ev_y += 30.0
+
+                for vf in visual_findings:
+                    if ev_y > 520:
+                        ev_page = create_page()
+                        ev_y = 40.0
+
+                    ev_page.insert_text(fitz.Point(MARGIN_LEFT, ev_y + 10), f"Finding [{vf['rule_id']}] • {vf['title']} (Page {vf.get('page_number', 1)})", fontname="hebo", fontsize=8, color=(15/255, 23/255, 42/255))
+                    ev_y += 16.0
+
+                    img_bytes, err = get_finding_evidence_image(vf['id'], zoom=1.5)
+                    if img_bytes:
+                        img_rect = fitz.Rect(MARGIN_LEFT, ev_y, MARGIN_LEFT + 280, ev_y + 175)
+                        ev_page.insert_image(img_rect, stream=img_bytes)
+                        ev_page.draw_rect(img_rect, color=(203/255, 213/255, 225/255), width=0.5)
+                        ev_y += 190.0
+                    else:
+                        ev_y += 10.0
+        except Exception:
+            # Defensive guard: report generation must never fail due to optional evidence overlays
+            pass
+
     # Add running footers to all pages
     total_pages = len(doc)
     for p_idx in range(total_pages):

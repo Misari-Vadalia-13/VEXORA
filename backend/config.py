@@ -28,6 +28,24 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024
 
 TEST_DATABASE_PATH = BACKEND_DIR / 'test_vexora.db'
 
+# Environment variable and threading safety guard for Windows OpenBLAS
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+
+# Optional .env loader for local development secrets
+_env_file = BASE_DIR / '.env'
+if _env_file.exists():
+    try:
+        with open(_env_file, 'r', encoding='utf-8') as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith('#') and '=' in _line:
+                    _k, _v = _line.split('=', 1)
+                    _k, _v = _k.strip(), _v.strip().strip('"\'')
+                    if _k and _k not in os.environ:
+                        os.environ[_k] = _v
+    except Exception:
+        pass
+
 class Config:
     """Base application configuration class."""
     SECRET_KEY = os.environ.get('SECRET_KEY', 'vexora-forensics-dev-secret-key-2026')
@@ -39,8 +57,12 @@ class Config:
     JSON_SORT_KEYS = False
     DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() in ('true', '1', 't')
 
+    # Feature Flags (V2 Additive Extensions)
+    ENABLE_EVIDENCE_OVERLAY = os.environ.get('ENABLE_EVIDENCE_OVERLAY', 'false').lower() in ('true', '1', 'yes')
+
 class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
     TESTING = True
     DATABASE = str(TEST_DATABASE_PATH)  # Isolated SQLite file for repeatable tests
+
 

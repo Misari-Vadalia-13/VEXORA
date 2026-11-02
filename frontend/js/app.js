@@ -1019,6 +1019,15 @@ function renderForensicFindings(findings) {
       ${f.evidence ? `<div class="finding-recommendation">🔍 Evidence: <strong>${escapeHtml(f.evidence)}</strong></div>` : ''}
     `;
     feed.appendChild(card);
+
+    // V2 Phase A Hook: Attach Visual Evidence Overlay trigger
+    try {
+      if (window.v2RenderFindingEvidenceButton) {
+        window.v2RenderFindingEvidenceButton(card, f);
+      }
+    } catch (v2Err) {
+      console.warn('[V2 Phase A Hook Error]', v2Err);
+    }
   });
 }
 
@@ -1274,6 +1283,15 @@ window.loadCaseDossierPreview = async function(caseId) {
             ${f.evidence ? `<small style="color:var(--text-muted);">Evidence: ${escapeHtml(f.evidence)}</small>` : ''}
           `;
           findingsEl.appendChild(card);
+
+          // V2 Phase A Hook: Attach Visual Evidence Overlay trigger
+          try {
+            if (window.v2RenderFindingEvidenceButton) {
+              window.v2RenderFindingEvidenceButton(card, f);
+            }
+          } catch (v2Err) {
+            console.warn('[V2 Phase A Hook Error]', v2Err);
+          }
         });
       }
     }

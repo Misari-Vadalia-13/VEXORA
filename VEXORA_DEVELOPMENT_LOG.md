@@ -775,3 +775,59 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Approval Status
 - **Pending Review**: Ready for Phase 0 review and user approval before proceeding to Phase A.
+---
+
+## V2 Phase A: Visual Evidence Overlay & Bounding-Box Tracing
+
+### Implementation Date
+- **2026-11-02**
+
+### Phase Objectives
+1. Implement high-resolution visual evidence rendering that maps finding bounding boxes directly onto document page images.
+2. Provide dedicated REST API endpoints to serve highlighted evidence images for individual findings and full-page overlays.
+3. Integrate an interactive "View Evidence" modal in the frontend UI without external libraries.
+4. Add an optional visual evidence gallery appendix to publication dossiers behind the `ENABLE_EVIDENCE_OVERLAY` feature flag.
+5. Guarantee zero regression on existing features and maintain 100% pass rate on all existing unit and contract tests.
+
+### Features Implemented
+1. **Visual Evidence Overlay Engine (`backend/evidence.py`):**
+   - `parse_coordinates(coords_raw)`: Robust parser supporting Python lists, JSON array strings, and comma-separated coordinate strings, extracting `[x0, y0, x1, y1]`.
+   - `render_page_overlay(file_path, page_number, findings, zoom=2.0)`: Renders PDF pages with PyMuPDF pixmaps at 144 DPI (2.0x scale) or raster images with Pillow, computes exact coordinate transformations, and applies red semi-transparent bounding boxes with rule identifier badges (`RULE-VIS-XXX`).
+   - `get_finding_evidence_image(finding_id, zoom=2.0)`: Look up finding, resolves document path, checks coordinates, and returns PNG bytes or structured error details.
+   - `get_document_page_overlay(doc_id, page_number, zoom=2.0)`: Renders full page overlay for all findings on a given page.
+2. **REST API Evidence Routes (`backend/app.py`):**
+   - `GET /api/findings/<id>/evidence-image`: Serves a 200 `image/png` image with the specific finding boxed in red. If no bounding box coordinates exist (contextual finding), returns a structured 200 JSON explanation (`NO_COORDINATES`), preventing broken image icons in the UI.
+   - `GET /api/documents/<id>/pages/<n>/overlay`: Serves a 200 `image/png` image showing all findings present on that page.
+3. **Frontend Visual Evidence Modal & Buttons (`frontend/css/v2.css`, `frontend/js/v2.js`):**
+   - Injected sleek `🔍 View Evidence` action buttons onto finding cards in both the Forensic Inspection feed and Dossier preview.
+   - Built a lightweight, accessible evidence modal (`#v2EvidenceModal`) featuring:
+     - High-contrast visual canvas with pan/zoom controls (50% to 300%) and direct "Open Full Resolution" tab link.
+     - Severity and Rule ID pills.
+     - Explanatory informational banner for contextual / non-visual findings.
+     - Smooth backdrop transitions and ESC key dismissal.
+4. **Dossier Report Appendix (`backend/reporter.py`):**
+   - When feature flag `ENABLE_EVIDENCE_OVERLAY` is enabled, appends a dedicated "APPENDIX: VISUAL FORENSIC EVIDENCE OVERLAYS" section to generated PDF dossiers with embedded high-resolution evidence boxes.
+   - Wrapped inside `try/except` so report generation can never fail if image embedding encounters an issue.
+   - Old report generation remains completely unchanged when the flag is off.
+
+### Technologies Introduced
+- **PyMuPDF to Pillow Composite Pipeline:** High-speed rendering of vector PDF page primitives to raster buffers (`page.get_pixmap`), followed by RGBA alpha compositing in Pillow for crisp, anti-aliased visual annotations.
+- **Coordinate Transformation Normalization:** Scaling fractional PDF point coordinates (72 DPI) to high-definition rendering pixel space (144 DPI).
+
+### Actual Testing Results
+- **Original Baseline Tests (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Contract Safety Net Tests (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Phase A Overlay Tests (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Combined Test Total:** 65/65 passing in 15.67s.
+- **Live Endpoint Verification:** Verified `GET /api/findings/FND-2026-006/evidence-image` returned HTTP 200 with 80,342-byte PNG image.
+- **Contextual Fallback Verification:** Verified `GET /api/findings/FND-2026-007/evidence-image` returned HTTP 200 with `application/json` message (`NO_COORDINATES`).
+
+### Known Limitations
+- Bounding boxes require valid typographic or geometric coordinates. Contextual findings (e.g. date inconsistencies or missing invoice fields) do not have spatial coordinates and display a contextual notification card instead.
+
+### Concepts Learned
+1. **Traceability in Forensic AI:** Merely telling an investigator that a font is mismatched or text overlaps is insufficient. Visually boxing the exact suspicious region directly on the original document turns abstract telemetry into compelling, audit-ready evidence.
+2. **Defensive Endpoint Fallbacks:** An image endpoint should never return an HTTP 500 or broken binary image when an anomaly has no bounding box. Returning a structured JSON response with informative text enables the UI to explain why a finding is contextual rather than visual.
+
+### Suggested Git Commit Message
+`feat(phase-a): implement visual evidence overlay rendering, evidence image endpoints, and interactive UI inspection modal`

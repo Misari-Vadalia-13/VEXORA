@@ -914,6 +914,45 @@ def create_app(config_class=Config):
         return jsonify({'authenticated': True, 'user': user}), 200
 
     # ==========================================
+    # Phase A: Visual Evidence Overlay Routes
+    # ==========================================
+    @app.route('/api/findings/<finding_id>/evidence-image', methods=['GET'])
+    def api_get_finding_evidence_image(finding_id):
+        """
+        Renders the document page where this finding was detected, highlighting its
+        bounding box in red with its rule ID badge.
+        If the finding has no bounding box coordinates, returns a clear JSON message.
+        """
+        try:
+            from backend.evidence import get_finding_evidence_image
+            zoom = request.args.get('zoom', 2.0, type=float)
+            png_bytes, error_dict = get_finding_evidence_image(finding_id, zoom=zoom)
+            if error_dict:
+                status_code = 404 if error_dict.get('code') in ('NOT_FOUND', 'DOCUMENT_NOT_FOUND', 'FILE_NOT_FOUND') else 200
+                return jsonify(error_dict), status_code
+            return Response(png_bytes, mimetype='image/png')
+        except Exception as e:
+            app.logger.error(f"Error serving evidence image for finding {finding_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to render evidence image: {str(e)}"}), 500
+
+    @app.route('/api/documents/<doc_id>/pages/<int:page_num>/overlay', methods=['GET'])
+    def api_get_document_page_overlay(doc_id, page_num):
+        """
+        Renders a document page with all forensic findings on that page highlighted.
+        """
+        try:
+            from backend.evidence import get_document_page_overlay
+            zoom = request.args.get('zoom', 2.0, type=float)
+            png_bytes, error_dict = get_document_page_overlay(doc_id, page_number=page_num, zoom=zoom)
+            if error_dict:
+                status_code = 404 if error_dict.get('code') in ('DOCUMENT_NOT_FOUND', 'FILE_NOT_FOUND') else 400
+                return jsonify(error_dict), status_code
+            return Response(png_bytes, mimetype='image/png')
+        except Exception as e:
+            app.logger.error(f"Error serving page overlay for document {doc_id} page {page_num}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to render page overlay: {str(e)}"}), 500
+
+    # ==========================================
     # Global Error Handlers
     # ==========================================
     @app.errorhandler(404)

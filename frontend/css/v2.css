@@ -1,0 +1,259 @@
+/**
+ * VEXORA — V2 Extension Stylesheet
+ * Phase A: Visual Evidence Overlay Modal & Controls
+ */
+
+/* 1. View Evidence Button */
+.v2-btn-evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-cyan-dim, rgba(6, 182, 212, 0.12));
+  color: var(--accent-cyan, #06b6d4);
+  border: 1px solid var(--accent-cyan-border, rgba(6, 182, 212, 0.35));
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 8px;
+  text-decoration: none;
+}
+
+.v2-btn-evidence:hover {
+  background: var(--accent-cyan, #06b6d4);
+  color: #0b1120;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25);
+}
+
+.v2-btn-evidence:active {
+  transform: translateY(0);
+}
+
+/* 2. Visual Evidence Modal Backdrop */
+.v2-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 29, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+  padding: 20px;
+}
+
+.v2-modal-backdrop.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 3. Evidence Modal Window */
+.v2-modal-window {
+  background: var(--bg-card, #111827);
+  border: 1px solid var(--border-default, #1f2937);
+  border-radius: 8px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(6, 182, 212, 0.2);
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.95) translateY(10px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.v2-modal-backdrop.active .v2-modal-window {
+  transform: scale(1) translateY(0);
+}
+
+/* 4. Modal Header */
+.v2-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-default, #1f2937);
+  background: var(--bg-card-header, rgba(17, 24, 39, 0.95));
+}
+
+.v2-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.v2-modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary, #f9fafb);
+  margin: 0;
+}
+
+.v2-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #9ca3af);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.v2-modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* 5. Modal Body */
+.v2-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Metadata Bar */
+.v2-evidence-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--bg-main, #0b1120);
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #1e293b);
+  font-size: 0.8rem;
+}
+
+.v2-evidence-meta-item {
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.v2-evidence-meta-item strong {
+  color: var(--text-primary, #ffffff);
+}
+
+/* Image Display Canvas Container */
+.v2-evidence-canvas-wrap {
+  position: relative;
+  background: #050811;
+  border: 1px solid var(--border-subtle, #1e293b);
+  border-radius: 6px;
+  min-height: 380px;
+  max-height: 520px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.v2-evidence-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+  transition: transform 0.2s ease;
+  transform-origin: center center;
+}
+
+/* Overlay Toolbar */
+.v2-evidence-toolbar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 10;
+}
+
+.v2-tool-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.v2-tool-btn:hover {
+  background: var(--accent-cyan, #06b6d4);
+  color: #0b1120;
+}
+
+/* No Coordinates State */
+.v2-no-coords-card {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 18px 20px;
+  color: var(--text-primary, #f9fafb);
+}
+
+.v2-no-coords-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-bottom: 8px;
+}
+
+/* Finding Detail Box below Image */
+.v2-finding-details-box {
+  background: var(--bg-main, #0b1120);
+  border: 1px solid var(--border-subtle, #1e293b);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+}
+
+.v2-finding-desc {
+  margin: 0 0 6px 0;
+  color: var(--text-secondary, #cbd5e1);
+  line-height: 1.45;
+}
+
+.v2-finding-evidence-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  color: var(--accent-cyan, #06b6d4);
+  background: rgba(6, 182, 212, 0.08);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* Modal Footer */
+.v2-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-default, #1f2937);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--bg-card-header, rgba(17, 24, 39, 0.95));
+}
