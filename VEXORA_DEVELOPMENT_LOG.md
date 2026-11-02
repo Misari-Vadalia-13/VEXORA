@@ -887,3 +887,59 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-b): implement deeper PDF forensic rules PDF-001 through PDF-005 and evidence classification`
+
+
+---
+
+## Phase C: LLM Reasoning & Explainability Layer
+**Date:** 2026-11-02
+**Status:** Completed
+**Branch:** feature/v2-phase-c (merged into main)
+
+### What Was Built
+1. **Universal HTTPS LLM Dispatcher (`backend/llm.py`):**
+   - Pure HTTPS integration using `requests` without heavyweight SDK dependencies.
+   - Multi-provider support: Google Gemini (`gemini-1.5-flash`), OpenAI (`gpt-4o-mini`), and Anthropic Claude (`claude-3-haiku-20240307`).
+   - Graceful degradation: returns `None` on any error, missing key, timeout, or bad JSON, allowing the app to seamlessly continue with rule-based outputs.
+   - PII privacy masking (`redact_text_for_llm`): automatically redacts email addresses (`[REDACTED_EMAIL]`), phone numbers (`[REDACTED_PHONE]`), and long digit strings >= 10 digits (`[REDACTED_DIGITS]`) before dispatching text to external APIs when `VEXORA_LLM_REDACT` is enabled (default on).
+2. **Strict Anti-Hallucination Grounding (`verify_source_quote`):**
+   - For every extracted field or claim, checks whether the claimed verbatim `source_quote` actually exists within the original document text (case-insensitive and punctuation-normalized substring search).
+   - Automatically drops any field or claim that cannot be verified in the source text, permanently preventing LLM hallucinations from polluting investigative cases.
+3. **Core Reasoning Capabilities:**
+   - **`extract_fields_llm(text, doc_type, document_id)`:** Extracts vendor, invoice number, dates, totals, line items, and parties with individual confidence scores and verified source quotes. Saves grounded data to the `ai_insights` table.
+   - **`explain_finding(finding, nearby_text)`:** Produces a 2-4 sentence plain-language explanation of why a technical observation warrants review, identifies plausible innocent alternative hypotheses (e.g., software upgrade, template change, batch scanning), and gives one concrete verification step for human investigators.
+   - **`contextual_crosscheck(case_documents, case_id)`:** Performs multi-document reasoning to detect contextual inconsistencies (totals vs. itemized line items, mismatched parties, impossible timelines). Generated findings are categorized as `LLM-001+`, tagged as `Contextual Intelligence` with `evidence_class="Inconsistency"`, and marked with the mandatory disclaimer: `AI-assessed, requires human review`.
+4. **New API Endpoints (`backend/app.py`):**
+   - `GET /api/system/ai-status`: Reports provider, model, whether API key is present, and redaction status (never exposes the key).
+   - `POST /api/documents/<id>/ai-extract`: Triggers structured field extraction with anti-hallucination verification.
+   - `POST /api/findings/<id>/explain`: Generates plain-language explanation and innocent alternative hypotheses.
+   - `POST /api/cases/<id>/ai-crosscheck`: Executes cross-document contextual anomaly discovery.
+5. **Database Storage & Audit Trail (`backend/database.py`, `backend/models.py`, `backend/schema.sql`):**
+   - Added `ai_insights` table with index on `document_id`.
+   - Logged immutable audit trail records (`AI_FIELD_EXTRACTION`, `AI_FINDING_EXPLAINED`, `AI_CROSSCHECK_COMPLETED`) without exposing API keys.
+6. **Reporter & UI Integration (`backend/reporter.py`, `frontend/js/v2.js`, `frontend/css/v2.css`):**
+   - Added optional "AI-Assisted Investigation Summary" section to both HTML and PDF dossiers when AI data is present.
+   - Added `🤖 Explain with AI` button and contextual reasoning card directly inside the interactive Visual Evidence Modal.
+
+### Technologies Introduced
+- **Plain HTTPS LLM REST API Client:** Zero-dependency REST calls to Gemini, OpenAI, and Claude APIs with robust JSON block extraction and error handling.
+- **Substring Citation Grounding Verification:** Case-insensitive, whitespace-normalized, and punctuation-invariant string matching to strictly verify source quotes against document transcripts.
+- **Regex PII Privacy Anonymization:** Pre-dispatch redaction of emails, phones, and sensitive long account numbers.
+
+### Actual Testing Results
+- **Phase C Unit & Integration Tests (`tests/test_v2_phase_c.py`):** 9/9 passed (`OK`).
+- **Phase B PDF Forensics Tests (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Tests (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Tests (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 91/91 passing across all suites in 22.07s.
+
+### Known Limitations
+- When `ENABLE_LLM` is false or no API key is provided, LLM endpoints return graceful fallback responses with `{success: false, message: "AI reasoning service unavailable or disabled."}`.
+
+### Concepts Learned
+1. **Anti-Hallucination Through Mandatory Source Quotation:** LLMs can generate plausible-sounding vendor names and amounts that do not exist in the document. By requiring verbatim source quotes and verifying them in code before saving, hallucinations are systematically eliminated.
+2. **Defensive Auditability:** In forensic investigations, an AI explanation must never assert guilt or call something "confirmed fraud". Highlighting plausible innocent explanations protects investigative neutrality while guiding human reviewers to concrete verification steps.
+
+### Suggested Git Commit Message
+`feat(phase-c): implement LLM reasoning layer, anti-hallucination quote verification, finding explanations, and contextual cross-check`

@@ -60,6 +60,10 @@ class Config:
     # Feature Flags (V2 Additive Extensions)
     ENABLE_EVIDENCE_OVERLAY = os.environ.get('ENABLE_EVIDENCE_OVERLAY', 'false').lower() in ('true', '1', 'yes')
     ENABLE_EXTENDED_FORENSICS = os.environ.get('ENABLE_EXTENDED_FORENSICS', 'false').lower() in ('true', '1', 'yes')
+    ENABLE_LLM = os.environ.get('ENABLE_LLM', 'false').lower() in ('true', '1', 'yes')
+    VEXORA_LLM_PROVIDER = os.environ.get('VEXORA_LLM_PROVIDER', 'gemini').lower()
+    VEXORA_LLM_API_KEY = os.environ.get('VEXORA_LLM_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY') or ''
+    VEXORA_LLM_REDACT = os.environ.get('VEXORA_LLM_REDACT', 'true').lower() in ('true', '1', 'yes')
 
 class TestConfig(Config):
     """Configuration used specifically for automated test suites."""

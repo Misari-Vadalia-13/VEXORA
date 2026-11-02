@@ -74,6 +74,19 @@ def init_db(db_path=None):
             cursor.execute("ALTER TABLE findings ADD COLUMN evidence TEXT")
         if 'evidence_class' not in f_cols and len(f_cols) > 0:
             cursor.execute("ALTER TABLE findings ADD COLUMN evidence_class TEXT DEFAULT NULL")
+
+        # Phase C: Add ai_insights table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_insights (
+                id TEXT PRIMARY KEY,
+                document_id TEXT,
+                insight_type TEXT,
+                data TEXT,
+                model_provider TEXT,
+                created_at TEXT,
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+            )
+        """)
         conn.commit()
     finally:
         conn.close()

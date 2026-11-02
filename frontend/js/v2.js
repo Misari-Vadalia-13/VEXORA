@@ -63,8 +63,20 @@
                 <span class="v2-finding-evidence-text" id="v2ModalEvidence"></span>
               </div>
             </div>
+
+            <!-- Phase C: AI Contextual Reasoning Box -->
+            <div id="v2AiExplanationBox" class="v2-ai-explanation-box" style="display:none;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <strong style="color:#38bdf8; font-size:0.85rem;">🤖 AI Contextual Reasoning</strong>
+                <span style="font-size:0.75rem; color:#94a3b8; font-style:italic;">AI-assessed, requires human review</span>
+              </div>
+              <p id="v2AiExplanationText" style="font-size:0.85rem; color:var(--text-secondary, #cbd5e1); margin:0 0 8px 0; line-height:1.5;"></p>
+              <div id="v2AiInnocentHypotheses" style="font-size:0.8rem; color:#38bdf8; background:rgba(2,132,199,0.12); border:1px solid rgba(2,132,199,0.25); padding:6px 10px; border-radius:4px; margin-bottom:6px; display:none;"></div>
+              <div id="v2AiNextStep" style="font-size:0.8rem; color:#34d399; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.25); padding:6px 10px; border-radius:4px; display:none;"></div>
+            </div>
           </div>
           <div class="v2-modal-footer">
+            <button id="v2ExplainWithAiBtn" type="button" class="v2-btn-ai" style="margin-right:auto;">🤖 Explain with AI</button>
             <button id="v2ModalDismissBtn" type="button" class="btn btn-secondary" style="padding:6px 14px; font-size:0.85rem;">Close Preview</button>
           </div>
         </div>
@@ -195,6 +207,57 @@
       if (evText) evText.textContent = `Evidence Trace: ${finding.evidence}`;
     } else {
       if (evContainer) evContainer.style.display = 'none';
+    }
+
+    // Phase C: Reset and wire AI explanation trigger
+    const aiBox = document.getElementById('v2AiExplanationBox');
+    const aiText = document.getElementById('v2AiExplanationText');
+    const aiHypotheses = document.getElementById('v2AiInnocentHypotheses');
+    const aiNextStep = document.getElementById('v2AiNextStep');
+    const explainBtn = document.getElementById('v2ExplainWithAiBtn');
+
+    if (aiBox) aiBox.style.display = 'none';
+    if (aiText) aiText.textContent = '';
+    if (aiHypotheses) aiHypotheses.style.display = 'none';
+    if (aiNextStep) aiNextStep.style.display = 'none';
+    if (explainBtn) {
+      explainBtn.disabled = false;
+      explainBtn.innerHTML = '🤖 Explain with AI';
+      explainBtn.onclick = function () {
+        explainBtn.disabled = true;
+        explainBtn.innerHTML = '⏳ Analyzing...';
+        fetch(`/api/findings/${encodeURIComponent(finding.id)}/explain`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.explanation) {
+              if (aiText) aiText.textContent = data.explanation;
+              if (data.innocent_hypotheses && data.innocent_hypotheses.length > 0 && aiHypotheses) {
+                aiHypotheses.innerHTML = '<strong>Plausible Alternative:</strong> ' + data.innocent_hypotheses.join('; ');
+                aiHypotheses.style.display = 'block';
+              }
+              if (data.next_verification_step && aiNextStep) {
+                aiNextStep.innerHTML = '<strong>Next Verification Step:</strong> ' + data.next_verification_step;
+                aiNextStep.style.display = 'block';
+              }
+              if (aiBox) aiBox.style.display = 'block';
+              explainBtn.innerHTML = '✓ Explained';
+            } else {
+              if (aiText) aiText.textContent = data.message || 'AI reasoning is currently unavailable or disabled on this server.';
+              if (aiBox) aiBox.style.display = 'block';
+              explainBtn.innerHTML = '🤖 Explain with AI';
+              explainBtn.disabled = false;
+            }
+          })
+          .catch(err => {
+            if (aiText) aiText.textContent = 'Failed to connect to AI reasoning endpoint.';
+            if (aiBox) aiBox.style.display = 'block';
+            explainBtn.innerHTML = '🤖 Explain with AI';
+            explainBtn.disabled = false;
+          });
+      };
     }
 
     // Determine if visual coordinates exist

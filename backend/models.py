@@ -694,3 +694,45 @@ def get_all_reports(limit=50):
     """Retrieves all generated reports across cases in descending order."""
     return query_db("SELECT * FROM reports ORDER BY created_at DESC LIMIT ?", (limit,))
 
+
+# ==========================================
+# 8. AI Insights (Phase C)
+# ==========================================
+
+def get_ai_insights_by_document(document_id):
+    """Retrieves all AI insight records for a specific document."""
+    rows = query_db("SELECT * FROM ai_insights WHERE document_id = ? ORDER BY created_at DESC", (document_id,))
+    results = []
+    for r in rows:
+        item = dict(r)
+        if item.get('data') and isinstance(item['data'], str):
+            try:
+                item['data'] = json.loads(item['data'])
+            except Exception:
+                pass
+        results.append(item)
+    return results
+
+def get_ai_insights_by_case(case_id):
+    """Retrieves all AI insight records for documents within a specific case."""
+    rows = query_db(
+        """
+        SELECT ai.* FROM ai_insights ai
+        JOIN documents d ON ai.document_id = d.id
+        WHERE d.case_id = ?
+        ORDER BY ai.created_at DESC
+        """,
+        (case_id,)
+    )
+    results = []
+    for r in rows:
+        item = dict(r)
+        if item.get('data') and isinstance(item['data'], str):
+            try:
+                item['data'] = json.loads(item['data'])
+            except Exception:
+                pass
+        results.append(item)
+    return results
+
+

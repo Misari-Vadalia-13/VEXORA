@@ -257,3 +257,33 @@
   gap: 10px;
   background: var(--bg-card-header, rgba(17, 24, 39, 0.95));
 }
+
+/* Phase C: AI Explainability Box & Controls */
+.v2-ai-explanation-box {
+  background: rgba(14, 165, 233, 0.06);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.v2-btn-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.v2-btn-ai:hover {
+  background: #0284c7;
+  color: #ffffff;
+}
+

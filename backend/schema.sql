@@ -103,6 +103,17 @@ CREATE TABLE IF NOT EXISTS reports (
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
 );
 
+-- 8. AI Insights Table (Phase C)
+CREATE TABLE IF NOT EXISTS ai_insights (
+    id TEXT PRIMARY KEY,
+    document_id TEXT,
+    insight_type TEXT,
+    data TEXT,
+    model_provider TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
 -- Indexes for optimal querying performance
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_priority ON cases(priority);
@@ -112,4 +123,5 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_comparisons_case_id ON comparisons(case_id);
 CREATE INDEX IF NOT EXISTS idx_reports_case_id ON reports(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ai_insights_doc ON ai_insights(document_id);
 

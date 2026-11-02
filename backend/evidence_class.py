@@ -52,6 +52,8 @@ def get_evidence_class(rule_id, existing_class=None):
         return DEFAULT_EVIDENCE_CLASS
 
     clean_id = rule_id.strip()
+    if clean_id.startswith('LLM-'):
+        return 'Inconsistency'
     return RULE_EVIDENCE_CLASS_MAP.get(clean_id, DEFAULT_EVIDENCE_CLASS)
 
 

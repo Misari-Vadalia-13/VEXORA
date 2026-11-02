@@ -194,6 +194,17 @@ def generate_case_dossier_data(case_id):
     hash_seed = f"{case_id}-{case['title']}-{len(doc_inventory)}-{total_findings_count}-{disc_count}"
     dossier_hash = hashlib.sha256(hash_seed.encode('utf-8')).hexdigest()[:16].upper()
 
+    # Phase C: AI-Assisted Intelligence Data
+    ai_insights = []
+    try:
+        from backend.models import get_ai_insights_by_case
+        ai_insights = get_ai_insights_by_case(case_id)
+    except Exception:
+        ai_insights = []
+
+    ai_findings = [f for f in findings_list if f.get('rule_id', '').startswith('LLM-')]
+    has_ai_data = bool(ai_insights or ai_findings)
+
     return {
         'case': {
             'id': case['id'],
@@ -223,6 +234,13 @@ def generate_case_dossier_data(case_id):
         'findings': findings_list,
         'cross_document_comparison': cross_comparison,
         'provenance_nodes': provenance_nodes,
+        'ai_summary': {
+            'has_ai_data': has_ai_data,
+            'insights_count': len(ai_insights),
+            'ai_findings_count': len(ai_findings),
+            'disclaimer': 'AI-assessed, requires human review',
+            'insights': ai_insights
+        } if has_ai_data else None,
         'mandatory_disclaimer': MANDATORY_DISCLAIMER,
         'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -436,6 +454,30 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
 
     y += 14.0
 
+    # Phase C: Optional AI-Assisted Investigation Summary (PDF)
+    if data.get('ai_summary') and data['ai_summary'].get('has_ai_data'):
+        ai_s = data['ai_summary']
+        if y > 620:
+            page = create_page()
+            y = 50.0
+
+        page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 18), color=None, fill=(240/255, 253/255, 244/255))
+        page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 13), "AI-ASSISTED INVESTIGATION SUMMARY (AI-assessed, requires human review)", fontname="hebo", fontsize=8.5, color=(21/255, 128/255, 61/255))
+        y += 24.0
+
+        page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 36), color=(187/255, 247/255, 208/255), fill=(240/255, 253/255, 244/255), width=0.5)
+        page.insert_text(
+            fitz.Point(MARGIN_LEFT + 6, y + 12),
+            f"Contextual AI reasoning identified {ai_s['ai_findings_count']} cross-document observations and {ai_s['insights_count']} structured entity insights.",
+            fontname="helv", fontsize=7.5, color=(22/255, 101/255, 52/255)
+        )
+        page.insert_text(
+            fitz.Point(MARGIN_LEFT + 6, y + 26),
+            "NOTICE: Every AI finding was grounded against verbatim document quotes. Formal verification by lead human reviewer required.",
+            fontname="hebo", fontsize=7.0, color=(22/255, 101/255, 52/255)
+        )
+        y += 44.0
+
     # 7. Investigator Formal Sign-off & Verification Code
     if y > 640:
         page = create_page()
@@ -596,6 +638,26 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
                 <p style="font-size:0.85rem; color:#334155; margin:4px 0 0 0;">{d.get('message', '')}</p>
             </div>
             """
+
+    # Build Phase C AI Summary section (if AI data exists)
+    ai_section_html = ""
+    if data.get('ai_summary') and data['ai_summary'].get('has_ai_data'):
+        ai_s = data['ai_summary']
+        ai_section_html = f"""
+        <div class="section-title">5. AI-Assisted Investigation Summary</div>
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:16px; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="color:#15803d; font-size:14px;">🤖 Contextual AI Intelligence Analysis</strong>
+                <span style="font-size:11px; background:#dcfce7; color:#166534; padding:3px 8px; border-radius:4px; font-weight:700;">{ai_s['disclaimer']}</span>
+            </div>
+            <p style="font-size:13px; color:#334155; margin:0 0 8px 0; line-height:1.5;">
+                Contextual reasoning engine evaluated case records: flagged <strong>{ai_s['ai_findings_count']}</strong> contextual multi-document observations and <strong>{ai_s['insights_count']}</strong> structured entity insights.
+            </p>
+            <div style="font-size:12px; color:#166534; background:#dcfce7; padding:6px 10px; border-radius:4px; font-weight:600;">
+                NOTICE: AI-assisted insights were grounded against document source text quotes. Findings require verification by the human lead investigator.
+            </div>
+        </div>
+        """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -780,6 +842,8 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
 
         <div class="section-title">4. Cross-Document Discrepancy Matrix</div>
         {disc_cards}
+
+        {ai_section_html}
 
         <div class="signoff-box">
             <div>

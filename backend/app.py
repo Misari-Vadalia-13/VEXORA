@@ -953,6 +953,123 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to render page overlay: {str(e)}"}), 500
 
     # ==========================================
+    # Phase C: LLM Reasoning Layer Routes
+    # ==========================================
+    @app.route('/api/system/ai-status', methods=['GET'])
+    def api_get_ai_status():
+        """
+        Reports LLM reasoning engine telemetry without exposing secrets:
+        enabled, provider, model, has_api_key, and privacy redaction status.
+        """
+        try:
+            from backend.llm import get_ai_status
+            return jsonify(get_ai_status()), 200
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/documents/<doc_id>/ai-extract', methods=['POST'])
+    def api_document_ai_extract(doc_id):
+        """
+        Executes LLM-based structured field extraction with anti-hallucination quote verification.
+        Saves verified fields in ai_insights table. Drops any ungrounded fields.
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        try:
+            from backend.llm import extract_fields_llm
+            text = doc.get('extracted_text')
+            if not text:
+                try:
+                    from backend.extractor import extract_document_content
+                    ext_res = extract_document_content(doc['file_path'])
+                    text = ext_res.get('text', '')
+                except Exception:
+                    text = ""
+
+            if not text:
+                return jsonify({'success': False, 'error': 'No extractable text found in document.'}), 400
+
+            user = session.get('username', 'Lead Investigator')
+            result = extract_fields_llm(text, doc_type=doc.get('category', 'Document'), document_id=doc_id, user=user)
+            if result is None:
+                return jsonify({
+                    'success': False,
+                    'message': 'AI reasoning service unavailable or disabled. Verify VEXORA_LLM_API_KEY and ENABLE_LLM.',
+                    'disclaimer': 'AI-assessed, requires human review'
+                }), 200
+
+            return jsonify(result), 200
+        except Exception as e:
+            app.logger.error(f"AI extraction error for {doc_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"AI extraction failed: {str(e)}"}), 500
+
+    @app.route('/api/findings/<finding_id>/explain', methods=['POST'])
+    def api_explain_finding(finding_id):
+        """
+        Generates a 2-4 sentence plain-language explanation of why this finding warrants review,
+        identifying plausible innocent alternative hypotheses and next verification steps.
+        """
+        finding = get_finding_by_id(finding_id)
+        if not finding:
+            return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
+
+        try:
+            nearby_text = ""
+            doc_id = finding.get('document_id')
+            if doc_id:
+                doc = get_document_by_id(doc_id)
+                if doc:
+                    nearby_text = doc.get('extracted_text') or ""
+
+            from backend.llm import explain_finding
+            user = session.get('username', 'Lead Investigator')
+            result = explain_finding(finding, nearby_text=nearby_text, document_id=doc_id, user=user)
+            if result is None:
+                return jsonify({
+                    'success': False,
+                    'message': 'AI explanation unavailable or disabled. Verify VEXORA_LLM_API_KEY and ENABLE_LLM.',
+                    'finding_id': finding_id,
+                    'disclaimer': 'AI-assessed, requires human review'
+                }), 200
+
+            return jsonify({'success': True, **result}), 200
+        except Exception as e:
+            app.logger.error(f"AI explain error for {finding_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"AI explanation failed: {str(e)}"}), 500
+
+    @app.route('/api/cases/<case_id>/ai-crosscheck', methods=['POST'])
+    def api_case_ai_crosscheck(case_id):
+        """
+        Executes multi-document contextual cross-examination to identify logical,
+        chronological, and arithmetic inconsistencies across case records.
+        """
+        case = get_case_by_id(case_id)
+        if not case:
+            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+
+        try:
+            docs = get_all_documents(case_id=case_id)
+            if not docs:
+                return jsonify({'success': False, 'error': f"Case '{case_id}' has no uploaded documents."}), 400
+
+            from backend.llm import contextual_crosscheck
+            user = session.get('username', 'Lead Investigator')
+            findings = contextual_crosscheck(docs, case_id=case_id, user=user)
+
+            return jsonify({
+                'success': True,
+                'case_id': case_id,
+                'count': len(findings),
+                'findings': findings,
+                'disclaimer': 'AI-assessed, requires human review'
+            }), 200
+        except Exception as e:
+            app.logger.error(f"AI crosscheck error for {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"AI crosscheck failed: {str(e)}"}), 500
+
+    # ==========================================
     # Global Error Handlers
     # ==========================================
     @app.errorhandler(404)
