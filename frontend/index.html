@@ -1365,6 +1365,12 @@
                 <label class="form-label">Department / Unit</label>
                 <input type="text" class="form-control" value="Digital Security & Document Forensics">
               </div>
+              <div class="form-group" style="margin-top:12px;">
+                <label class="form-label">Single Sign-On (SSO)</label>
+                <button type="button" class="btn-secondary" style="width:100%; font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="fetch('/api/auth/google').then(r=>r.json()).then(d=>showToast(d.message + ' [' + d.auth_mode + ']', 'info'))">
+                  <span>🔐</span> Google SSO <span style="font-size:0.75rem; color:var(--text-muted);">(Demo Login - Not Verified)</span>
+                </button>
+              </div>
             </div>
 
             <!-- Forensic Parameters -->

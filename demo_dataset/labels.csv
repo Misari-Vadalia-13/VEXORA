@@ -1,0 +1,21 @@
+filename,is_tampered,tampering_type,expected_rules
+genuine_01_invoice.pdf,0,None,None
+genuine_02_invoice.pdf,0,None,None
+genuine_03_bank_statement.pdf,0,None,None
+genuine_04_bank_statement.pdf,0,None,None
+genuine_05_purchase_order.pdf,0,None,None
+genuine_06_contract.pdf,0,None,None
+genuine_07_tax_return.pdf,0,None,None
+genuine_08_receipt.png,0,None,None
+genuine_09_id_card.png,0,None,None
+genuine_10_audit_report.pdf,0,None,None
+tampered_01_font_shift.pdf,1,Font / Typographic Alteration,"RULE-VIS-002,PDF-002"
+tampered_02_whitebox_patch.png,1,Whitebox Redaction / Patching,IMG-001
+tampered_03_reversed_dates.pdf,1,Reversed Date Timeline,RULE-CTX-003
+tampered_04_duplicate_inv_a.pdf,1,Duplicate ID Pair A,RULE-CTX-004
+tampered_05_duplicate_inv_b.pdf,1,Duplicate ID Pair B with Conflicting Total,RULE-CTX-004
+tampered_06_bank_mismatch.pdf,1,Cross-Document Bank Payment Conflict,RULE-CTX-004
+tampered_07_photoshop_meta.pdf,1,Disallowed Editing Software Metadata,PDF-003
+tampered_08_copymove_stamp.png,1,Copy-Move Stamp Duplication,IMG-003
+tampered_09_future_timeline.pdf,1,Futuristic Date Anomaly,RULE-CTX-001
+tampered_10_divergent_timestamps.pdf,1,Historical PDF Modification Divergence,"RULE-CTX-005,PDF-001"

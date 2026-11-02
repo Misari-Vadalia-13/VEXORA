@@ -1140,3 +1140,73 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-f): implement correlator, relationship graph SVG, and content-based classification fallback`
+
+---
+
+## Phase G — Proof, Documentation, and Honesty Fixes Log
+
+- **Completion Date:** 2026-11-02
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Demonstration Dataset Generator (`tools/make_samples.py`):**
+   - Programmatically generates 20 benchmark documents in `demo_dataset/`:
+     - 10 Genuine Documents (invoices, bank statements, purchase orders, contracts, Form 1040 tax return, digital receipt, identity badge, audit report).
+     - 10 Tampered Documents featuring realistic synthetic distortions:
+       - Font / typographical baseline alterations
+       - Whitebox text redaction / pasting
+       - Chronological reversed timeline (due date preceding issue date)
+       - Duplicate invoice ID pair with conflicting totals
+       - Cross-document bank payment contradictions
+       - Disallowed photo-editing software metadata (Adobe Photoshop 2024)
+       - Copy-move stamp and signature duplication
+       - Futuristic date timeline anomaly
+       - Incremental PDF revision timestamp divergence
+   - Generated `demo_dataset/labels.csv` ground-truth table (`filename,is_tampered,tampering_type,expected_rules`).
+
+2. **Automated Forensic Evaluation Engine (`tools/evaluate.py`):**
+   - Runs full document analysis, OCR, visual heuristics, PDF primitives, and image forensics across the benchmark dataset.
+   - Computes and prints an unvarnished forensic performance table:
+     - True Positives, False Negatives, True Negatives, False Positives
+     - Overall Accuracy, Precision, Recall (Detection Rate), Specificity, and F1-Score
+     - Per-rule activation frequency counts.
+   - Reports honest numbers without synthetic inflation (highlighting false alarms on flat digital graphics and cross-document pair requirements).
+
+3. **Complete Architectural & Forensic Documentation:**
+   - **`docs/ARCHITECTURE.md`:** Comprehensive end-to-end architecture breakdown with an exhaustive Mermaid diagram detailing document intake, extraction, NER, visual rules, PDF primitives, image forensics, LLM grounding, cross-comparison, dossiers, and immutable audit logs.
+   - **`docs/CAPABILITIES.md`:** Thorough capabilities matrix mapping all 7 Hackathon evaluation categories with explicit statuses (`Implemented`, `Unsupported`, `Planned`), technical mechanisms, and operational constraints. Explicitly states that Handwriting Recognition and Non-Latin Multilingual OCR are unsupported.
+   - **`docs/LIMITATIONS.md`:** Transparent disclosure of operational assumptions, edge cases, synthetic image ELA sensitivity, date ambiguities, and investigator guidelines.
+
+4. **Honesty Corrections & Documentation Alignment (`README.md`):**
+   - Corrected historical inaccuracies: clarifies that VEXORA uses deterministic regex NER (`ner.py`) rather than spaCy, extension-based and SHA-256 validation rather than binary MIME sniffing, and PyMuPDF (`pymupdf`) for PDF extraction and rendering.
+   - Added comprehensive "V2 Forensic Extensions & Additions" section detailing Phases A through G.
+   - Reaffirmed core forensic principle: the system never declares "confirmed fraud"; findings represent heuristic observations or potential anomalies requiring human review.
+
+5. **Security Hardening & Demo SSO:**
+   - Configured `SECRET_KEY` fallback from environment.
+   - Restricted CORS to `VEXORA_CORS_ORIGINS` (`http://127.0.0.1:5000,http://localhost:5000,http://127.0.0.1:5500,http://localhost:3000`).
+   - Implemented `@app.route('/api/auth/google')` endpoint and UI button explicitly labeled as `"demo login (not verified)"`.
+
+6. **Unit & Integration Test Suite (`tests/test_v2_phase_g.py`):**
+   - 6 automated tests:
+     - `test_01_demo_dataset_and_labels_exist`: Verifies 20+ dataset files and `labels.csv` schema.
+     - `test_02_evaluation_pipeline_execution`: Verifies successful execution of `tools/evaluate.py`.
+     - `test_03_documentation_files_exist_and_contain_required_sections`: Verifies Mermaid diagrams in ARCHITECTURE.md, and honesty notes in CAPABILITIES.md and LIMITATIONS.md.
+     - `test_04_readme_corrections_and_v2_additions`: Verifies V2 additions and accurate NER descriptions in README.md.
+     - `test_05_demo_google_login_endpoint`: Verifies `/api/auth/google` returns demo unverified status.
+     - `test_06_cors_configuration`: Verifies CORS origin restrictions.
+
+### Actual Testing Results
+- **Phase G Proof & Docs Suite (`tests/test_v2_phase_g.py`):** 6/6 passed (`OK`).
+- **Phase F Correlator Suite (`tests/test_v2_phase_f.py`):** 9/9 passed (`OK`).
+- **Phase E Confidence Suite (`tests/test_v2_phase_e.py`):** 6/6 passed (`OK`).
+- **Phase D Image Forensics Suite (`tests/test_v2_phase_d.py`):** 8/8 passed (`OK`).
+- **Phase C LLM Reasoning Suite (`tests/test_v2_phase_c.py`):** 9/9 passed (`OK`).
+- **Phase B PDF Forensics Suite (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Suite (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Suite (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Test Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 120/120 passing across all 9 test suites in 28.16s.
+
+### Suggested Git Commit Message
+`feat(phase-g): implement evaluation benchmark, proof dataset, architecture documentation, and honesty fixes`

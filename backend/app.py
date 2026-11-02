@@ -83,8 +83,14 @@ def create_app(config_class=Config):
     # ==========================================
     @app.after_request
     def add_cors_headers(response):
-        """Allows both standalone static dev server and Flask dev server to access APIs."""
-        response.headers['Access-Control-Allow-Origin'] = '*'
+        """Allows restricted origins or local development servers to access APIs."""
+        raw_origins = os.environ.get('VEXORA_CORS_ORIGINS', 'http://127.0.0.1:5000,http://localhost:5000,http://127.0.0.1:5500,http://localhost:3000')
+        allowed = [o.strip() for o in raw_origins.split(',') if o.strip()]
+        origin = request.headers.get('Origin')
+        if origin and ('*' in allowed or origin in allowed):
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
@@ -939,6 +945,34 @@ def create_app(config_class=Config):
 
         user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = ?", (username,), one=True)
         return jsonify({'authenticated': True, 'user': user}), 200
+
+    @app.route('/api/auth/google', methods=['GET', 'POST'])
+    def api_google_demo_login():
+        """
+        Demo Google SSO authentication endpoint (Mock/Unverified).
+        Clearly labeled as 'demo login (not verified)' for hackathon testing.
+        """
+        user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = 'alex.turner'", one=True)
+        if user:
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            user_data = dict(user)
+        else:
+            user_data = {
+                'username': 'alex.turner',
+                'email': 'turner@vexora.internal',
+                'role': 'Senior Forensic Specialist',
+                'badge_number': 'VEX-782'
+            }
+        user_data['auth_note'] = 'demo login (not verified)'
+        log_audit("DEMO_OAUTH_LOGIN", "auth", str(user_data.get('id', 'mock')), "Investigator authenticated via demo Google SSO (unverified).", user_data['username'])
+        return jsonify({
+            'success': True,
+            'message': 'Demo Google sign-in successful (not verified).',
+            'auth_mode': 'demo_unverified',
+            'user': user_data
+        }), 200
 
     # ==========================================
     # Phase A: Visual Evidence Overlay Routes

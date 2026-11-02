@@ -54,9 +54,9 @@ VEXORA uses a beginner-friendly technology stack.
 - **SQLite** – Stores investigation records and application data.
 
 ### Document Processing & Analysis
-- **PyMuPDF** – Extracts text and page information from PDF documents.
-- **Tesseract OCR** – Recognizes text from scanned documents.
-- **spaCy / Regex NER** – Identifies entities such as names, dates and organizations.
+- **PyMuPDF (`pymupdf`)** – Extracts text, character glyph coordinates, font matrices, and renders page bitmaps from PDF documents.
+- **Tesseract OCR (`pytesseract`)** – Recognizes text from scanned documents with word-level confidence extraction.
+- **Pure Regex & Deterministic NER (`backend/ner.py`)** – Identifies entities (identifiers, dates, monetary values, organizations, tax IDs) without heavy external NLP runtime dependencies.
 
 ### Development Tools
 - **Visual Studio Code / Antigravity** – Development environment.
@@ -182,7 +182,7 @@ The comprehensive automated test suite covers:
 
 - Frontend navigation, interactive UI components, and theme switching.
 - Backend REST API routes and SQLite database transactions.
-- Secure document uploads, MIME validation, SHA-256 integrity hashing, and metadata tracking.
+- Secure document uploads, extension validation, SHA-256 cryptographic integrity hashing, and metadata tracking.
 - PyMuPDF digital text extraction, bounding-box layout parsing, and OCR fallback.
 - Named entity recognition (names, dates, financial sums, organizations).
 - Forensic heuristics (unusual dates, round amounts, duplicate references, layout anomalies).
@@ -191,11 +191,32 @@ The comprehensive automated test suite covers:
 - Audit trail logging with parameterized filtering, RFC 4180 CSV / JSON exports, and system diagnostics self-test.
 - Complete end-to-end investigation lifecycle verification.
 
-All 39 automated tests execute cleanly against an isolated test database:
+All 114 automated tests execute cleanly against isolated test databases:
 
 ```bash
-.\.venv\Scripts\python -m unittest tests/test_backend.py
+.\.venv\Scripts\python -m unittest tests/test_backend.py tests/test_v2_contract.py tests/test_v2_phase_a.py tests/test_v2_phase_b.py tests/test_v2_phase_c.py tests/test_v2_phase_d.py tests/test_v2_phase_e.py tests/test_v2_phase_f.py
 ```
+
+## ⚡ V2 Forensic Extensions & Additions
+
+The platform has been significantly deepened through seven additive phases (Phases A through G), introducing advanced forensic capabilities:
+
+- **Phase A — Visual Evidence Overlays:** Interactive modal viewer highlighting physical document bounding boxes in red via `/api/findings/<id>/evidence-image` with 2D zoom/pan controls.
+- **Phase B — Deeper PDF Forensics:** Extends analysis beyond OCR with rules `PDF-001` through `PDF-005` (incremental update / timestamp divergence, embedded font subset anomalies, editing software metadata signatures like Photoshop/GIMP, optional content hidden layers `/OCProperties`, and multi-source page geometry variance). Findings are classified into `Observation`, `Inconsistency`, and `Potential Manipulation`.
+- **Phase C — Grounded AI Reasoning Layer:** Pure HTTPS LLM integration (`backend/llm.py`) supporting Google Gemini, Anthropic Claude, and OpenAI. Built with mandatory anti-hallucination source quote verification (claims failing verbatim substring checks are dropped) and automated PII redaction.
+- **Phase D — Image Forensics for Scans & Photos:** Rules `IMG-001` through `IMG-004` implementing Error Level Analysis (ELA at 90% quality), Laplacian sharpness variance tiling, OpenCV ORB keypoint descriptor matching for copy-move cloned stamps/signatures, and contour aspect ratio analysis.
+- **Phase E — Real Field-Level Confidence:** Extracts per-word confidences from `pytesseract.image_to_data` and mathematically computes averages for extracted entities. Digital text is explicitly labeled `"n/a (digital text)"`. UI and dossiers display heuristic weights as **"Rule Weight"** to prevent confusing rule thresholds with statistical probabilities.
+- **Phase F — Cross-Document Correlation & Relationship Graph:** Multi-document correlation engine (`backend/correlator.py`) connecting shared invoice numbers, matching financial totals, fuzzy counterparties (via corporate suffix normalization), and chronological conflicts. Visualized via an interactive vanilla SVG relationship graph with zero external JavaScript charting libraries. Includes content-based semantic classification fallback (`backend/classifier_content.py`).
+- **Phase G — Benchmark Evaluation & Proof:** Programmatic generator (`tools/make_samples.py`) creating a 20-file benchmark dataset (`demo_dataset/`) with ground-truth `labels.csv`, evaluated via `tools/evaluate.py` to produce unvarnished precision, recall, and false alarm performance metrics.
+
+## 🔬 Technical Corrections & Honesty Notes
+
+To maintain forensic and scientific accuracy, the following technical facts are explicitly clarified:
+
+1. **Entity Extraction (NER):** VEXORA utilizes deterministic, high-efficiency regular expressions and pattern extractors in `backend/ner.py`, rather than spaCy or heavy statistical NLP language models.
+2. **File Validation:** Document ingestion validates file extensions against an allowed list and computes SHA-256 cryptographic hashes for tamper resistance; it does not invoke binary MIME `libmagic` sniffing.
+3. **PDF Libraries:** Text extraction, glyph coordinates, and page bitmap rasterization are performed via PyMuPDF (`pymupdf`). Vector PDF dossiers are constructed via PyMuPDF and ReportLab primitives.
+4. **Honesty in Forensics:** The system never declares "confirmed fraud." Every automated finding is classified as a heuristic observation or potential anomaly requiring qualified human investigator review.
 
 ## ⚠️ Important Disclaimer
 

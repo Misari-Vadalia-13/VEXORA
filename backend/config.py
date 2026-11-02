@@ -67,6 +67,7 @@ class Config:
     VEXORA_LLM_REDACT = os.environ.get('VEXORA_LLM_REDACT', 'true').lower() in ('true', '1', 'yes')
     VEXORA_STRICT_OCR = os.environ.get('VEXORA_STRICT_OCR', 'false').lower() in ('true', '1', 'yes')
     ENABLE_CORRELATOR = os.environ.get('ENABLE_CORRELATOR', 'false').lower() in ('true', '1', 'yes')
+    VEXORA_CORS_ORIGINS = os.environ.get('VEXORA_CORS_ORIGINS', 'http://127.0.0.1:5000,http://localhost:5000,http://127.0.0.1:5500,http://localhost:3000')
 
 class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
