@@ -347,11 +347,290 @@
     cardElement.appendChild(btn);
   };
 
+  // =========================================================================
+  // Phase F: Cross-Document Relationship Graph SVG Visualization
+  // =========================================================================
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  window.v2LoadRelationshipGraph = function (caseId) {
+    const container = document.getElementById('relationshipGraphContainer');
+    if (!container) return;
+
+    if (!caseId) {
+      const select = document.getElementById('relGraphCaseSelect');
+      caseId = select ? select.value : 'CAS-2026-0891';
+    }
+
+    container.innerHTML = `
+      <div style="color:var(--text-muted); font-size:0.85rem; padding:40px; text-align:center;">
+        <div style="font-size:1.4rem; margin-bottom:8px;">🔄</div>
+        Loading cross-document relationship graph for ${escapeHtml(caseId)}...
+      </div>
+    `;
+
+    fetch(`/api/cases/${encodeURIComponent(caseId)}/relationships`)
+      .then(res => {
+        if (res.status === 403) {
+          throw new Error('CORRELATOR_DISABLED');
+        }
+        return res.json();
+      })
+      .then(data => {
+        const graphData = data.data || data;
+        window.v2RenderRelationshipGraph(graphData, 'relationshipGraphContainer');
+      })
+      .catch(err => {
+        if (err.message === 'CORRELATOR_DISABLED') {
+          container.innerHTML = `
+            <div style="padding:32px; text-align:center; color:var(--text-secondary); max-width:480px; margin:0 auto;">
+              <div style="font-size:1.5rem; margin-bottom:8px;">🔒</div>
+              <strong style="color:var(--status-anomaly, #f59e0b);">Cross-Document Correlator Offline</strong>
+              <p style="margin:8px 0 0 0; font-size:0.85rem; line-height:1.5;">
+                The cross-document correlation engine is protected by feature flag. Enable with <code>ENABLE_CORRELATOR=true</code> in your environment to visualize entity relationships and chronological conflict edges.
+              </p>
+            </div>
+          `;
+        } else {
+          container.innerHTML = `
+            <div style="padding:32px; text-align:center; color:var(--status-danger);">
+              <div style="font-size:1.5rem; margin-bottom:8px;">⚠️</div>
+              Failed to load relationship graph: ${escapeHtml(err.message || 'Unknown network error')}
+            </div>
+          `;
+        }
+      });
+  };
+
+  window.v2ReloadCurrentRelationshipGraph = function () {
+    const select = document.getElementById('relGraphCaseSelect');
+    const caseId = select ? select.value : 'CAS-2026-0891';
+    window.v2LoadRelationshipGraph(caseId);
+  };
+
+  window.v2RenderRelationshipGraph = function (graph, containerId) {
+    const container = document.getElementById(containerId || 'relationshipGraphContainer');
+    if (!container) return;
+
+    const nodes = (graph && graph.nodes) || [];
+    const edges = (graph && graph.edges) || [];
+
+    if (nodes.length === 0) {
+      container.innerHTML = `
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-size:0.85rem;">
+          <div style="font-size:1.5rem; margin-bottom:8px;">📂</div>
+          No documents or correlated entities found for this case. Upload and analyze documents to populate the relationship graph.
+        </div>
+      `;
+      return;
+    }
+
+    const svgWidth = 840;
+    const svgHeight = 440;
+    const centerX = svgWidth / 2;
+    const centerY = svgHeight / 2;
+
+    const docNodes = nodes.filter(n => n.type === 'document');
+    const entNodes = nodes.filter(n => n.type === 'entity');
+
+    const nodePositions = {};
+
+    // Layout document nodes on outer ellipse
+    const docCount = docNodes.length;
+    const rDocX = 300;
+    const rDocY = 160;
+    docNodes.forEach((node, idx) => {
+      const angle = (idx / Math.max(docCount, 1)) * 2 * Math.PI - Math.PI / 2;
+      nodePositions[node.id] = {
+        x: centerX + rDocX * Math.cos(angle),
+        y: centerY + rDocY * Math.sin(angle),
+        node: node
+      };
+    });
+
+    // Layout entity nodes on inner ellipse
+    const entCount = entNodes.length;
+    const rEntX = 170;
+    const rEntY = 90;
+    entNodes.forEach((node, idx) => {
+      const angle = (idx / Math.max(entCount, 1)) * 2 * Math.PI + (docCount > 0 ? (Math.PI / docCount) : 0);
+      nodePositions[node.id] = {
+        x: centerX + rEntX * Math.cos(angle),
+        y: centerY + rEntY * Math.sin(angle),
+        node: node
+      };
+    });
+
+    // Edge colors and styles
+    function getEdgeStyle(relation) {
+      switch (relation) {
+        case 'shared_invoice_id':
+          return { color: '#10b981', dash: '', label: 'Invoice #' };
+        case 'shared_amount':
+          return { color: '#f59e0b', dash: '', label: 'Amount Match' };
+        case 'shared_party':
+          return { color: '#8b5cf6', dash: '', label: 'Party Match' };
+        case 'date_conflict':
+          return { color: '#ef4444', dash: '5,5', label: 'Date Conflict' };
+        case 'bank_payment_match':
+          return { color: '#06b6d4', dash: '', label: 'Bank Payment' };
+        default:
+          return { color: '#64748b', dash: '', label: relation };
+      }
+    }
+
+    // Build SVG markup
+    let svgHtml = `
+      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" style="width:100%; height:100%; min-height:440px; display:block; user-select:none;" id="v2RelationshipSvg">
+        <defs>
+          <filter id="glow-filter" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+        <g id="v2GraphEdges">
+    `;
+
+    // Render Edges
+    edges.forEach((edge, idx) => {
+      const p1 = nodePositions[edge.source];
+      const p2 = nodePositions[edge.target];
+      if (!p1 || !p2) return;
+
+      const style = getEdgeStyle(edge.relation);
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+
+      svgHtml += `
+        <g class="v2-edge-group" data-edge-index="${idx}" style="cursor:pointer;">
+          <line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"
+            stroke="${style.color}" stroke-width="2" stroke-dasharray="${style.dash}" opacity="0.75" />
+          <rect x="${midX - 35}" y="${midY - 9}" width="70" height="18" rx="4" fill="#0f172a" stroke="${style.color}" stroke-width="1" opacity="0.9" />
+          <text x="${midX}" y="${midY + 3}" fill="${style.color}" font-size="9" text-anchor="middle" font-weight="600">${style.label}</text>
+        </g>
+      `;
+    });
+
+    svgHtml += `</g><g id="v2GraphNodes">`;
+
+    // Render Nodes
+    Object.values(nodePositions).forEach(pos => {
+      const node = pos.node;
+      const isDoc = node.type === 'document';
+
+      if (isDoc) {
+        const docLabel = (node.label || 'Document').length > 18 ? (node.label.substring(0, 16) + '…') : node.label;
+        svgHtml += `
+          <g class="v2-node-group" data-node-id="${node.id}" style="cursor:pointer;">
+            <circle cx="${pos.x}" cy="${pos.y}" r="26" fill="#0c4a6e" stroke="#38bdf8" stroke-width="2.5" />
+            <text x="${pos.x}" y="${pos.y + 4}" fill="#ffffff" font-size="14" text-anchor="middle">📄</text>
+            <text x="${pos.x}" y="${pos.y + 40}" fill="#e2e8f0" font-size="10" text-anchor="middle" font-weight="600">${escapeHtml(docLabel)}</text>
+            <text x="${pos.x}" y="${pos.y + 51}" fill="#94a3b8" font-size="8.5" text-anchor="middle">${escapeHtml(node.category || '')}</text>
+          </g>
+        `;
+      } else {
+        let entColor = '#10b981';
+        let entIcon = '#';
+        if (node.entity_type === 'monetary_value') {
+          entColor = '#f59e0b';
+          entIcon = '$';
+        } else if (node.entity_type === 'organization') {
+          entColor = '#8b5cf6';
+          entIcon = '🏢';
+        }
+
+        const entLabel = (node.label || 'Entity').length > 18 ? (node.label.substring(0, 16) + '…') : node.label;
+        svgHtml += `
+          <g class="v2-node-group" data-node-id="${node.id}" style="cursor:pointer;">
+            <circle cx="${pos.x}" cy="${pos.y}" r="18" fill="#1e293b" stroke="${entColor}" stroke-width="2" />
+            <text x="${pos.x}" y="${pos.y + 4}" fill="${entColor}" font-size="11" text-anchor="middle" font-weight="bold">${entIcon}</text>
+            <text x="${pos.x}" y="${pos.y + 30}" fill="#cbd5e1" font-size="9" text-anchor="middle" font-weight="500">${escapeHtml(entLabel)}</text>
+          </g>
+        `;
+      }
+    });
+
+    svgHtml += `</g></svg>`;
+
+    container.innerHTML = svgHtml;
+
+    // Attach click handlers to nodes & edges
+    const detailsCard = document.getElementById('relGraphDetailsCard');
+    const detailsTitle = document.getElementById('relGraphDetailsTitle');
+    const detailsContent = document.getElementById('relGraphDetailsContent');
+
+    container.querySelectorAll('.v2-node-group').forEach(el => {
+      el.addEventListener('click', () => {
+        const nodeId = el.getAttribute('data-node-id');
+        const pos = nodePositions[nodeId];
+        if (!pos) return;
+        const n = pos.node;
+
+        if (detailsCard && detailsTitle && detailsContent) {
+          detailsCard.style.display = 'block';
+          if (n.type === 'document') {
+            detailsTitle.textContent = `Document: ${n.label}`;
+            const relatedEdges = edges.filter(e => e.source === n.id || e.target === n.id);
+            detailsContent.innerHTML = `
+              <div><strong>Category:</strong> ${escapeHtml(n.category || 'General Document')} | <strong>Status:</strong> ${escapeHtml(n.status || 'Pending')}</div>
+              <div style="margin-top:6px;"><strong>Active Correlations (${relatedEdges.length}):</strong></div>
+              <ul style="margin:4px 0 0 16px; padding:0;">
+                ${relatedEdges.map(e => `<li><strong style="color:var(--accent-primary);">${escapeHtml(e.relation)}</strong>: ${escapeHtml(e.evidence)}</li>`).join('')}
+              </ul>
+            `;
+          } else {
+            detailsTitle.textContent = `Entity: ${n.label}`;
+            const relatedEdges = edges.filter(e => e.source === n.id || e.target === n.id);
+            detailsContent.innerHTML = `
+              <div><strong>Entity Type:</strong> ${escapeHtml(n.entity_type || 'Unknown')}</div>
+              <div style="margin-top:6px;"><strong>Cross-Document Links (${relatedEdges.length}):</strong></div>
+              <ul style="margin:4px 0 0 16px; padding:0;">
+                ${relatedEdges.map(e => `<li><strong style="color:var(--accent-primary);">${escapeHtml(e.relation)}</strong>: ${escapeHtml(e.evidence)}</li>`).join('')}
+              </ul>
+            `;
+          }
+        }
+      });
+    });
+
+    container.querySelectorAll('.v2-edge-group').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.getAttribute('data-edge-index'), 10);
+        const edge = edges[idx];
+        if (!edge) return;
+
+        if (detailsCard && detailsTitle && detailsContent) {
+          detailsCard.style.display = 'block';
+          detailsTitle.textContent = `Relationship: ${edge.relation}`;
+          detailsContent.innerHTML = `
+            <div><strong>Verbatim Evidence:</strong> "${escapeHtml(edge.evidence)}"</div>
+            <div style="margin-top:4px;"><strong>Location / Page:</strong> Page ${edge.page || 1} | <strong>Correlation Confidence:</strong> ${Math.round((edge.confidence || 1.0) * 100)}%</div>
+          `;
+        }
+      });
+    });
+  };
+
   // Pre-initialize on load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ensureEvidenceModal);
-  } else {
+  function initAllV2() {
     ensureEvidenceModal();
+    const select = document.getElementById('relGraphCaseSelect');
+    if (select) {
+      window.v2LoadRelationshipGraph(select.value || 'CAS-2026-0891');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAllV2);
+  } else {
+    initAllV2();
   }
 
 })();

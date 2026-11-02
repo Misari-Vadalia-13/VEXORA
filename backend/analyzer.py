@@ -617,6 +617,19 @@ def analyze_document(doc_id, user="System"):
         except Exception as e:
             return {'success': False, 'error': f"Failed to extract document for analysis: {str(e)}"}
 
+    # Phase F Hook: Content-Based Classification Fallback (used strictly if 'General Document' or 'Uncategorized')
+    if (doc.get('category') in ('General Document', 'Uncategorized', None)) and extracted_text:
+        try:
+            from backend.classifier_content import classify_by_content
+            new_cat, new_conf = classify_by_content(extracted_text, file_type=doc.get('file_type', 'pdf'))
+            if new_cat and new_cat != 'General Document':
+                doc['category'] = new_cat
+                doc['classification_confidence'] = new_conf
+                from backend.models import update_document_category
+                update_document_category(doc_id, new_cat, new_conf, user=user)
+        except Exception:
+            pass
+
     # 1. Visual & Structural Analysis
     visual_findings = analyze_visual_structure(file_path)
 

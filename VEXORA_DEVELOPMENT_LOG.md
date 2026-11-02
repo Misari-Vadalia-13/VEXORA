@@ -1073,3 +1073,70 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-e): implement field-level confidence, extraction modes, entities table, and rule weight display`
+
+---
+
+## Phase F — Cross-Document Correlation & Relationship Graph Log
+
+- **Completion Date:** 2026-11-02
+- **Status:** **Completed** (Pushed to GitHub `main` branch)
+
+### Features Implemented
+1. **Cross-Document Correlation Engine (`backend/correlator.py`):**
+   - Protected under feature flag `ENABLE_CORRELATOR = os.environ.get('ENABLE_CORRELATOR', 'false')`.
+   - **Label-Aware Monetary Totals:** Implemented `extract_labeled_invoice_totals` using regex pattern detection for grand totals, net payables, amounts due, and invoice balances, distinguishing totals from intermediary line items.
+   - **Bank Transaction Payment Matching:** Scans bank statement lines for reference notes and matches transaction debits directly against related invoices in the same case.
+   - **Normalized Fuzzy Counterparty Comparison:** Strips corporate entity suffixes (`Inc`, `LLC`, `Corp`, `Ltd`, `Industries`, `Ventures`, `Technologies`, etc.) and calculates token subset overlap and sequence similarity via `difflib.SequenceMatcher`.
+   - **Chronological Sequence Conflict Detection:** Parses robust date formats and flags chronological anomalies (e.g. an invoice dated after a settlement or bank statement date).
+   - **Relationship Graph Construction (`build_case_relationship_graph`):** Assembles a graph containing document nodes and extracted entity nodes linked by typed relation edges (`shared_invoice_id`, `shared_amount`, `shared_party`, `date_conflict`, `bank_payment_match`), each carrying verbatim textual evidence quotes and page references.
+
+2. **Content-Based Classification Fallback (`backend/classifier_content.py`, `backend/analyzer.py`, `backend/models.py`):**
+   - Implemented `classify_by_content` with domain vocabularies covering `Invoice`, `Bank Statement`, `Purchase Order`, `Tax Return`, `Employment Contract`, `Financial Audit`, and `Identity Record`.
+   - Strictly utilized as a secondary fallback: invoked ONLY when existing filename-based classification returns `General Document` or `Uncategorized`. All existing non-General classifications remain 100% untouched.
+   - Refined categories automatically update SQLite `documents` table via `update_document_category`.
+
+3. **REST API Endpoint (`backend/app.py`):**
+   - Added `GET /api/cases/<case_id>/relationships`:
+     - Returns 403 Forbidden with actionable message if `ENABLE_CORRELATOR` is disabled.
+     - Returns 200 with structured nodes, edges, metrics, and data envelope when enabled.
+
+4. **Frontend Vanilla SVG Visualization (`frontend/index.html`, `frontend/js/v2.js`):**
+   - Added Cross-Document Relationship Graph card in the Cross-Document Comparison view (`#view-comparison`).
+   - Includes case selector dropdown and refresh controls.
+   - Renders interactive vanilla SVG graph with color-coded nodes (Documents, Identifiers, Monetary Amounts, Organizations) and edge types (Invoice matches, Amount matches, Party matches, and dashed Red Date Conflicts).
+   - Built interactive node and edge inspection card (`#relGraphDetailsCard`) displaying full verbatim evidence quotes and page provenance on click.
+
+5. **Unit & Integration Test Suite (`tests/test_v2_phase_f.py`):**
+   - 9 automated tests:
+     - `test_01_classify_by_content_invoice`: Verifies invoice semantic classification.
+     - `test_02_classify_by_content_bank_statement`: Verifies bank statement classification.
+     - `test_03_classify_by_content_purchase_order`: Verifies purchase order classification.
+     - `test_04_classify_by_content_fallback_general`: Verifies general document fallback.
+     - `test_05_label_aware_totals_extraction`: Verifies label-aware invoice total extraction.
+     - `test_06_fuzzy_party_normalization_and_similarity`: Verifies party suffix normalization and fuzzy matching.
+     - `test_07_build_case_relationship_graph`: Verifies complete multi-document graph generation.
+     - `test_08_api_case_relationships_disabled`: Verifies 403 status when feature flag is off.
+     - `test_09_api_case_relationships_enabled`: Verifies 200 status and schema compliance when feature flag is on.
+
+### Technologies Introduced
+- **Vanilla SVG Radial/Concentric Layout:** Clean, zero-dependency graph rendering directly in the DOM without D3 or heavy graph bundles.
+- **Label-Aware Entity Parsing:** Distinguishing stated document totals and balances from arbitrary numerical tokens.
+- **Fuzzy Token Normalization:** Corporate entity suffix stripping and subset matching via Python standard library `difflib`.
+
+### Actual Testing Results
+- **Phase F Correlator Suite (`tests/test_v2_phase_f.py`):** 9/9 passed (`OK`).
+- **Phase E Confidence Suite (`tests/test_v2_phase_e.py`):** 6/6 passed (`OK`).
+- **Phase D Image Forensics Suite (`tests/test_v2_phase_d.py`):** 8/8 passed (`OK`).
+- **Phase C LLM Reasoning Suite (`tests/test_v2_phase_c.py`):** 9/9 passed (`OK`).
+- **Phase B PDF Forensics Suite (`tests/test_v2_phase_b.py`):** 17/17 passed (`OK`).
+- **Phase A Overlay Suite (`tests/test_v2_phase_a.py`):** 11/11 passed (`OK`).
+- **Contract Safety Net Suite (`tests/test_v2_contract.py`):** 15/15 passed (`OK`).
+- **Baseline Test Suite (`tests/test_backend.py`):** 39/39 passed (`OK`).
+- **Combined Test Total:** 114/114 passing across all 8 test files in 28.45s.
+
+### Concepts Learned
+- **Deterministic Radial Graph Geometry:** Using trigonometric layout equations `(cx + r * cos(θ), cy + r * sin(θ))` eliminates the layout jitter, nondeterminism, and external dependencies of force-directed graph engines.
+- **Correlating Across Financial Domains:** Cross-correlating banking payment memos with invoice identifiers reveals circular transactions and timeline anomalies without speculative assumptions.
+
+### Suggested Git Commit Message
+`feat(phase-f): implement correlator, relationship graph SVG, and content-based classification fallback`

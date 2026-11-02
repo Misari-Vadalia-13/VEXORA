@@ -570,6 +570,33 @@ def create_app(config_class=Config):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/cases/<case_id>/relationships', methods=['GET'])
+    def api_case_relationships(case_id):
+        """
+        Phase F: Cross-document correlation & relationship graph.
+        Protected by ENABLE_CORRELATOR feature flag.
+        """
+        from backend.config import Config
+        enabled = getattr(Config, 'ENABLE_CORRELATOR', False) or app.config.get('ENABLE_CORRELATOR', False)
+        if not enabled:
+            return jsonify({
+                'success': False,
+                'error': 'Cross-document correlator is disabled. Enable via ENABLE_CORRELATOR=true.'
+            }), 403
+
+        try:
+            from backend.correlator import build_case_relationship_graph
+            graph = build_case_relationship_graph(case_id)
+            graph['data'] = {
+                'nodes': graph.get('nodes', []),
+                'edges': graph.get('edges', []),
+                'metrics': graph.get('metrics', {})
+            }
+            return jsonify(graph), 200
+        except Exception as e:
+            app.logger.error(f"Failed to build relationship graph for case {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to build relationship graph: {str(e)}"}), 500
+
     # ==========================================
     # Investigation Dossier & Report Routes (Phase 8)
     # ==========================================

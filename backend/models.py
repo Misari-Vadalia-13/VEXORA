@@ -321,6 +321,15 @@ def update_document_status(doc_id, new_status, user="System"):
     log_audit("DOCUMENT_STATUS_UPDATED", "document", doc_id, f"Status updated to: {new_status}", user)
     return get_document_by_id(doc_id)
 
+def update_document_category(doc_id, category, confidence=90.0, user="System"):
+    """Updates document category and classification confidence in SQLite."""
+    execute_db(
+        "UPDATE documents SET category = ?, classification_confidence = ? WHERE id = ?",
+        (category, confidence, doc_id)
+    )
+    log_audit("DOCUMENT_CLASSIFIED", "document", doc_id, f"Category refined to '{category}' (confidence: {confidence}%)", user)
+    return get_document_by_id(doc_id)
+
 def save_document_extraction(doc_id, extraction_data, user="System"):
     """Saves structured extraction results and full text into SQLite."""
     doc = query_db("SELECT * FROM documents WHERE id = ?", (doc_id,), one=True)

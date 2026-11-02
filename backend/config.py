@@ -66,6 +66,7 @@ class Config:
     VEXORA_LLM_API_KEY = os.environ.get('VEXORA_LLM_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY') or ''
     VEXORA_LLM_REDACT = os.environ.get('VEXORA_LLM_REDACT', 'true').lower() in ('true', '1', 'yes')
     VEXORA_STRICT_OCR = os.environ.get('VEXORA_STRICT_OCR', 'false').lower() in ('true', '1', 'yes')
+    ENABLE_CORRELATOR = os.environ.get('ENABLE_CORRELATOR', 'false').lower() in ('true', '1', 'yes')
 
 class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
