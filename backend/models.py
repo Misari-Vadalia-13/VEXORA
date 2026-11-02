@@ -71,7 +71,7 @@ def validate_user_registration(data):
     if not isinstance(data, dict):
         raise ValidationError("Request payload must be a JSON object.")
 
-    username = data.get('username')
+    username = data.get('username') or data.get('name') or data.get('fullName')
     if not username or not isinstance(username, str) or len(username.strip()) < 3:
         raise ValidationError("Username must be at least 3 characters long.", field="username")
 
@@ -88,7 +88,7 @@ def validate_user_registration(data):
         'username': username.strip().lower(),
         'email': email.strip().lower(),
         'password': password,
-        'role': data.get('role', 'Forensic Analyst').strip(),
+        'role': data.get('role', 'Lead Investigator').strip(),
         'badge_number': data.get('badge_number', 'VEX-000').strip()
     }
 
@@ -215,11 +215,15 @@ def update_case(case_id, update_data, user="System"):
     return get_case_by_id(case_id)
 
 def delete_case(case_id, user="System"):
-    """Deletes or archives a case."""
+    """Deletes an investigation case and cascades to child documents, findings, reports, and comparisons."""
     existing = query_db("SELECT * FROM cases WHERE id = ?", (case_id,), one=True)
     if not existing:
         return False
 
+    execute_db("DELETE FROM findings WHERE case_id = ? OR document_id IN (SELECT id FROM documents WHERE case_id = ?)", (case_id, case_id))
+    execute_db("DELETE FROM reports WHERE case_id = ?", (case_id,))
+    execute_db("DELETE FROM comparisons WHERE case_id = ?", (case_id,))
+    execute_db("DELETE FROM documents WHERE case_id = ?", (case_id,))
     execute_db("DELETE FROM cases WHERE id = ?", (case_id,))
     log_audit("CASE_DELETED", "case", case_id, f"Case '{existing['title']}' deleted from system.", user)
     return True
@@ -305,10 +309,11 @@ def create_document(data, user="System"):
     return get_document_by_id(doc_id)
 
 def delete_document(doc_id, user="System"):
-    """Deletes a document record from SQLite."""
+    """Deletes a document record from SQLite and cleans up associated findings."""
     doc = query_db("SELECT * FROM documents WHERE id = ?", (doc_id,), one=True)
     if not doc:
         return False
+    execute_db("DELETE FROM findings WHERE document_id = ?", (doc_id,))
     execute_db("DELETE FROM documents WHERE id = ?", (doc_id,))
     log_audit("DOCUMENT_DELETED", "document", doc_id, f"Document '{doc['filename']}' deleted from system.", user)
     return True
@@ -425,6 +430,8 @@ def create_finding(data, user="System"):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     coords = data.get('coordinates')
+    if coords is None:
+        coords = data.get('bounding_box')
     if isinstance(coords, (list, dict)):
         coords = json.dumps(coords)
 

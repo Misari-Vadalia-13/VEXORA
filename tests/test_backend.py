@@ -26,9 +26,13 @@ class VexoraBackendTestCase(unittest.TestCase):
 
         self.app = create_app(TestConfig)
         self.client = self.app.test_client()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
 
     def tearDown(self):
         """Cleans up the test database file after each test execution."""
+        if hasattr(self, 'ctx') and self.ctx:
+            self.ctx.pop()
         test_db = Path(TestConfig.DATABASE)
         if test_db.exists():
             try:

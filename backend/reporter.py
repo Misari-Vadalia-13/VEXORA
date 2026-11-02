@@ -28,6 +28,8 @@ from backend.models import (
     log_audit
 )
 from backend.comparator import compare_case_documents, get_evidence_provenance_nodes
+from backend.llm_layer import generate_dossier_summary_llm, LLM_BADGE
+from backend.visualizer import render_annotated_page_image
 
 MANDATORY_DISCLAIMER = (
     "MANDATORY INVESTIGATION DISCLAIMER: All findings, metrics, and anomaly indicators presented in "
@@ -189,6 +191,16 @@ def generate_case_dossier_data(case_id):
             f"and entity/counterparty shifts requiring human reviewer cross-examination."
         )
 
+    # Generate LLM Contextual Executive Summary (Job 3)
+    interim_data = {
+        'title': case['title'],
+        'documents': doc_inventory,
+        'findings': findings_list,
+        'risk_score': risk_score,
+        'discrepancies': cross_comparison.get('discrepancies', []) if cross_comparison.get('success') else []
+    }
+    ai_summary = generate_dossier_summary_llm(interim_data)
+
     # Unique Verification Hash for Dossier Authenticity
     hash_seed = f"{case_id}-{case['title']}-{len(doc_inventory)}-{total_findings_count}-{disc_count}"
     dossier_hash = hashlib.sha256(hash_seed.encode('utf-8')).hexdigest()[:16].upper()
@@ -207,6 +219,8 @@ def generate_case_dossier_data(case_id):
         },
         'executive_summary': {
             'narrative': narrative,
+            'ai_summary': ai_summary,
+            'ai_badge': LLM_BADGE,
             'risk_score': risk_score,
             'risk_level': risk_level,
             'document_count': len(doc_inventory),
@@ -434,13 +448,82 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
 
     y += 14.0
 
-    # 7. Investigator Formal Sign-off & Verification Code
-    if y > 640:
-        page = create_page()
-        y = 50.0
+    # 5. Visual Forensic Evidence Attachment (Rendered Pages with Highlighted Bounding Boxes)
+    docs_for_case = get_all_documents(case_id=case_id)
+    rendered_visual_pages = 0
+
+    for d in docs_for_case:
+        # Check if this document has findings with bounding boxes
+        doc_findings = [f for f in data['findings'] if f.get('document_id') == d['id'] and f.get('coordinates')]
+        if not doc_findings:
+            continue
+
+        raw_path = d.get('file_path')
+        if not raw_path:
+            continue
+        p_path = Path(raw_path)
+        if not p_path.exists():
+            upload_p = Path(Config.UPLOAD_FOLDER) / p_path.name
+            if upload_p.exists():
+                p_path = upload_p
+            else:
+                continue
+
+        # Render annotated page 1 image
+        try:
+            # Format findings for visualizer
+            vis_findings = []
+            for df in doc_findings:
+                coords = df.get('coordinates')
+                if isinstance(coords, str):
+                    try:
+                        coords = json.loads(coords)
+                    except Exception:
+                        coords = None
+                if coords:
+                    vis_findings.append({
+                        'rule_id': df.get('rule_id', 'ANOMALY'),
+                        'severity': df.get('severity', 'High'),
+                        'page_number': df.get('page_number', 1),
+                        'bounding_box': coords
+                    })
+
+            target_page_num = vis_findings[0]['page_number'] if vis_findings else 1
+            annotated_png = render_annotated_page_image(str(p_path), page_num=target_page_num, findings=vis_findings, zoom=1.3)
+
+            # Insert dedicated evidence page in PDF dossier
+            ev_page = create_page()
+            ev_page.draw_rect(fitz.Rect(MARGIN_LEFT, 50, MARGIN_RIGHT, 72), color=None, fill=(241/255, 245/255, 249/255))
+            ev_page.insert_text(fitz.Point(MARGIN_LEFT + 6, 65), f"5. VISUAL EVIDENCE ATTACHMENT: {d['filename']} (PAGE {target_page_num})", fontname="hebo", fontsize=9.0, color=(30/255, 41/255, 59/255))
+            ev_page.insert_text(fitz.Point(MARGIN_LEFT + 6, 80), f"Red bounding boxes indicate automated forensic detections. Stamped: [{LLM_BADGE}]", fontname="helv", fontsize=7.5, color=(220/255, 38/255, 38/255))
+
+            # Embed annotated page image
+            img_rect = fitz.Rect(MARGIN_LEFT, 90, MARGIN_RIGHT, 710)
+            ev_page.insert_image(img_rect, stream=annotated_png)
+            rendered_visual_pages += 1
+            if rendered_visual_pages >= 3:
+                break  # Cap to top 3 visual evidence attachments to keep dossier performant
+        except Exception:
+            continue
+
+    # 6. Investigator Formal Sign-off & Verification Code
+    page = create_page()
+    y = 50.0
+
+    # Include LLM Contextual Summary callout on final summary page
+    if summary.get('ai_summary'):
+        page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 80), color=(186/255, 230/255, 253/255), fill=(240/255, 249/255, 255/255), width=0.75)
+        page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 14), f"AI CONTEXTUAL REASONING SUMMARY [{LLM_BADGE}]", fontname="hebo", fontsize=8.5, color=(3/255, 105/255, 161/255))
+        ai_lines = summary['ai_summary'].split('\n')
+        curr_ai_y = y + 26
+        for ln in ai_lines[:4]:
+            if ln.strip():
+                page.insert_text(fitz.Point(MARGIN_LEFT + 8, curr_ai_y), ln.strip()[:115], fontname="helv", fontsize=7.2, color=(15/255, 23/255, 42/255))
+                curr_ai_y += 12
+        y += 94.0
 
     page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 54), color=(203/255, 213/255, 225/255), fill=(248/255, 250/255, 252/255), width=0.75)
-    page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 14), "5. INVESTIGATION FORMAL SIGN-OFF", fontname="hebo", fontsize=8.5, color=(30/255, 41/255, 59/255))
+    page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 14), "6. INVESTIGATION FORMAL SIGN-OFF", fontname="hebo", fontsize=8.5, color=(30/255, 41/255, 59/255))
     page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 28), f"Lead Reviewer: {user}", fontname="hebo", fontsize=8, color=(51/255, 65/255, 85/255))
     page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 42), f"Dossier Verification Hash: {summary['dossier_verification_code']}", fontname="courier", fontsize=7.5, color=(100/255, 116/255, 139/255))
 

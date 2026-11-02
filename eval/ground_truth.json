@@ -1,0 +1,142 @@
+[
+  {
+    "filename": "GEN-001-invoice-acme.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-002-bank-statement-chase.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-003-payslip-aarav.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-004-tax-receipt-irs.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-005-purchase-order-supply.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-006-consulting-contract.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-007-utility-bill-electric.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-008-lease-agreement.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-009-medical-reimbursement.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "GEN-010-vendor-receipt-hardware.pdf",
+    "ground_truth": "genuine",
+    "expected_tampered": false,
+    "expected_anomaly_rule": null,
+    "description": "Clean baseline document without alterations."
+  },
+  {
+    "filename": "TAM-001-whiteout-invoice.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "PDF-R101",
+    "description": "Opaque white rectangle masking over subtotal text."
+  },
+  {
+    "filename": "TAM-002-incremental-save-bank.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "PDF-R102",
+    "description": "Multiple %%EOF markers indicating post-creation revision edit."
+  },
+  {
+    "filename": "TAM-003-canva-tax-receipt.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "PDF-R103",
+    "description": "Official tax assessment generated via Canva consumer editing software."
+  },
+  {
+    "filename": "TAM-004-arithmetic-mismatch-invoice.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "LLM-CTX-101",
+    "description": "Line items sum to $1,450.00 but stated total is manipulated to $3,950.00."
+  },
+  {
+    "filename": "TAM-005-font-overwrite-salary.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-VIS-001",
+    "description": "Net salary figure typed in Arial Bold 13pt on Courier template."
+  },
+  {
+    "filename": "TAM-006-conflicting-currencies.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-CTX-004",
+    "description": "Conflicting $ and \u20ac currencies inside single invoice."
+  },
+  {
+    "filename": "TAM-007-overlapping-text-po.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-VIS-002",
+    "description": "Overlapping text blocks at identical coordinates."
+  },
+  {
+    "filename": "TAM-008-chronological-inversion.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-CTX-003",
+    "description": "Invoice date 2026 is chronologically after payment due date 2024."
+  },
+  {
+    "filename": "TAM-009-out-of-bounds-text.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-VIS-003",
+    "description": "Text placed outside printable boundary margins."
+  },
+  {
+    "filename": "TAM-010-post-dated-metadata.pdf",
+    "ground_truth": "tampered",
+    "expected_tampered": true,
+    "expected_anomaly_rule": "RULE-CTX-005",
+    "description": "Body claims 2017 while PDF creation timestamp is 2026."
+  }
+]
