@@ -260,3 +260,57 @@ VEXORA is being developed as a learning-focused software project with an emphasi
   <b>VEXORA</b><br>
   <i>Seeing What Others Overlook</i>
 </p>
+
+
+## ⚙️ Setup and Enabling V2 Features
+
+### 1. Installation Steps
+1. Clone the repository and navigate to the project directory:
+   ```powershell
+   git clone https://github.com/Misari-Vadalia-13/VEXORA.git
+   cd VEXORA
+   ```
+2. Create and activate a Python virtual environment:
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+3. Install required Python dependencies:
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+### 2. Tesseract OCR Installation Note for Windows
+- VEXORA utilizes Google Tesseract OCR via `pytesseract` for optical character recognition of scanned raster documents.
+- On Windows, install the official 64-bit binary from the UB Mannheim repository (`https://github.com/UB-Mannheim/tesseract/wiki`).
+- Standard installation directory: `C:\Program Files\Tesseract-OCR\tesseract.exe`.
+- Ensure `C:\Program Files\Tesseract-OCR` is added to your Windows system `PATH` environment variable.
+- When `VEXORA_STRICT_OCR=true` is set, image uploads require native Tesseract OCR and report `OCR unavailable` if the binary is absent. If strict OCR is false, VEXORA falls back to simulated structural image metadata analysis.
+
+### 3. Enabling Feature Flags (.env Configuration)
+All V2 capabilities are safely gated behind feature flags. To enable them:
+1. Copy the sample environment template:
+   ```powershell
+   copy .env.example .env
+   ```
+2. Open `.env` and configure the desired flags:
+   - `ENABLE_EVIDENCE_OVERLAY=true`: Enables forensic bounding box highlights and coordinate visual overlays.
+   - `ENABLE_EXTENDED_FORENSICS=true`: Enables structural PDF forensic rules (PDF-001 through PDF-005).
+   - `ENABLE_IMAGE_FORENSICS=true`: Enables pixel-level image forensics (IMG-001 ELA, IMG-002 Sharpness, IMG-003 Copy-Move, IMG-004 Signature check). Strictly gated to standalone raster files and embedded PDF images.
+   - `ENABLE_CORRELATOR=true`: Enables multi-document transaction graph and relationship correlation across cases.
+   - `ENABLE_LLM=false`: Controls the optional AI reasoning layer (set to `true` and supply `VEXORA_LLM_API_KEY` to activate).
+   - `VEXORA_LLM_PROVIDER=gemini`: Specifies the active LLM provider (`gemini` or `openai`).
+   - `VEXORA_LLM_MODEL=gemini-1.5-flash`: Specifies the provider model name.
+   - `VEXORA_LLM_API_KEY`: API credential key for the chosen LLM provider.
+   - `VEXORA_LLM_REDACT=true`: Enforces client-side regex redaction of PII (names, emails, accounts) before LLM prompt transmission.
+   - `VEXORA_STRICT_OCR=true`: Disables simulated text generation when native Tesseract OCR is not installed.
+   - `VEXORA_CORS_ORIGINS`: Whitelist of approved cross-origin web origins.
+   - `SECRET_KEY`: Cryptographic signing secret for Flask session authentication.
+
+### 4. Open-Source Library Licensing Assumptions
+- **PyMuPDF / fitz**: AGPLv3 / Commercial dual license (used for PDF parsing, text bounding boxes, and embedded image extraction).
+- **OpenCV (opencv-python-headless)**: Apache 2.0 license (used for block Laplacian sharpness, ORB feature matching, and connected component analysis).
+- **Pillow (PIL)**: Historical Permission Notice and Disclaimer (HPND) license (used for image loading and ELA JPEG recompression).
+- **NumPy**: BSD 3-Clause license (used for array variance and coordinate clustering).
+- **Tesseract OCR & pytesseract**: Apache 2.0 license (used for optical character recognition).
+- **Flask & Werkzeug**: BSD 3-Clause license (web server and routing framework).

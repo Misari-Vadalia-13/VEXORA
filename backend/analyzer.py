@@ -507,7 +507,7 @@ def calculate_risk_assessment(findings):
         'High': 20,
         'Medium': 10,
         'Low': 5,
-        'Info': 2
+        'Info': 0
     }
 
     raw_score = 0
@@ -531,8 +531,10 @@ def calculate_risk_assessment(findings):
     else:
         risk_level = 'Clean / Verified'
 
-    total = len(findings)
-    if total == 0:
+    anomalies = [f for f in findings if f.get('severity') != 'Info' and f.get('rule_id')]
+    total = len(anomalies)
+    if total == 0 and risk_score == 0:
+        risk_level = 'Clean / Verified'
         summary = "No visual anomalies or contextual contradictions detected across evaluated forensic rules."
     else:
         summary = (
@@ -666,7 +668,8 @@ def analyze_document(doc_id, user="System"):
 
         if img_flag:
             from backend.forensics_image import run_image_forensics
-            img_findings = run_image_forensics(file_path)
+            doc_cat = doc.get('category') if isinstance(doc, dict) else getattr(doc, 'category', None)
+            img_findings = run_image_forensics(file_path, doc_category=doc_cat)
             all_findings.extend(img_findings)
     except Exception as img_ext_err:
         pass

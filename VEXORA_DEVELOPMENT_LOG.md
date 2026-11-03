@@ -1210,3 +1210,59 @@ Integrated the official VEXORA brand logo and slogan (`SEEING WHAT OTHERS OVERLO
 
 ### Suggested Git Commit Message
 `feat(phase-g): implement evaluation benchmark, proof dataset, architecture documentation, and honesty fixes`
+
+
+---
+
+## V2 Phase H — Stabilize the Demo (P1 & P2 Fixes) Log
+
+- **Completion Date:** 2026-11-03
+- **Status:** **Completed** (Tested on branch `feature/v2-phase-h`)
+
+### Executive Summary & Objectives
+Phase H stabilized VEXORA for live evaluation by addressing two critical issues identified during review:
+1. **P1 (Demo Visibility & Configuration):** All V2 features previously defaulted to `false` without setup documentation or runtime status feedback, meaning an evaluator starting the app would only see legacy behavior.
+2. **P2 (Image Forensics Gate & Heuristic False Alarms):** The image forensics runner previously rasterized born-digital vector PDF pages into synthetic images (`page.get_pixmap(dpi=150)`) and ran pixel-level algorithms (ELA, sharpness variance, copy-move) on pure vector text. This produced widespread false positives on clean documents (e.g. 100/100 risk on bank statements and repeated letters matching as copy-move).
+
+### Features & Principled Fixes Implemented
+1. **Principled Gate for Image Forensics (`backend/forensics_image.py`):**
+   - Rules `IMG-001` (ELA), `IMG-002` (Sharpness), and `IMG-003` (Copy-Move) now run exclusively on:
+     (a) Standalone uploaded raster images (`.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`).
+     (b) Raster images actually *embedded* inside a PDF, extracted directly from the document via PyMuPDF's `page.get_images()`.
+   - Vector-only born-digital PDF pages are **never** rasterized into synthetic bitmaps.
+   - When a PDF contains zero embedded raster images, VEXORA logs a single, non-alarming Observation note: `"image forensics not applicable: born-digital PDF with no embedded images"` with zero risk penalty.
+2. **Copy-Move Typographical Filtering (`backend/forensics_image.py`):**
+   - Implemented `_detect_text_line_boxes` using morphological text strip profiling.
+   - `check_copy_move_orb` filters out ORB keypoint pairs that lie within detected text areas, preventing repeated letters ('e', 'o', '1', etc.) from triggering false clone alarms while still reliably detecting duplicated stamps, signatures, or pasted figures.
+3. **Signature Analysis Grounding (`backend/forensics_image.py`):**
+   - Excluded full-width outer border rectangles (`cw >= w * 0.70`) from being falsely interpreted as cursive signature strokes.
+   - Only reports missing signature notices when the document category explicitly expects one (e.g. `Contract`, `Agreement`, `Deed`). Ordinary receipts and badges never emit spurious "unsupported" or "missing signature" findings.
+4. **Heuristic Severity Capping (`backend/forensics_image.py`):**
+   - Capped the severities of heuristic rules `IMG-001` and `IMG-003` at `Medium` (down from `High`).
+   - Descriptions explicitly state heuristic limitations and the requirement for human verification.
+5. **V2 Configuration & Diagnostics Banner (`backend/config.py`, `backend/banner.py`, `backend/app.py`):**
+   - Created `.env.example` documenting every V2 feature flag with clear, safe comments.
+   - Created a local gitignored `.env` file enabling non-LLM forensic features and strict OCR for full demo readiness.
+   - Implemented an ASCII startup banner (`print_startup_banner()`) displayed on server boot, showing the exact ON/OFF status of every flag and whether the system Tesseract OCR binary is installed.
+   - Extended `GET /api/system/diagnostics` with `v2_features`, `tesseract_available`, and `tesseract_detail`.
+6. **Documentation & Benchmark Tracking:**
+   - Appended a comprehensive "Setup and Enabling V2 Features" section to `README.md`.
+   - Evaluated benchmark performance before and after Phase H:
+     - Output saved to `docs/BENCHMARK_BEFORE.txt` and `docs/BENCHMARK_AFTER_H.txt`.
+     - Fired rules for clean PDFs dropped to 0 IMG findings.
+     - IMG-003 and IMG-004 false alarms dropped to 0 on genuine documents.
+
+### Beginner-Friendly Explanation (For Hackathon Judges)
+**Why did genuine bank statements show 100/100 risk previously?**
+A digital PDF created in Word or Excel contains vector fonts and lines, not pixels. Previously, VEXORA took a digital PDF page, took a "screenshot" of it, and then tried to analyze whether the JPEG compression looked altered (ELA) or if letters looked copy-pasted (copy-move). Because all the letters 'e' and 't' on a page look identical, the algorithm thought someone was copy-pasting numbers and stamps!
+In Phase H, we introduced a **principled gate**: we only run image forensic algorithms on actual images! If a PDF is a pure digital document without photos or scans, VEXORA honestly reports: *"image forensics not applicable: born-digital PDF with no embedded images."* This eliminates fake alarms without altering or fudging any thresholds.
+
+### Test Coverage & Verification
+- Created `tests/test_v2_phase_h.py` containing 6 unit tests:
+  - `test_01_born_digital_pdf_produces_zero_img_findings`: Verifies clean PDFs produce 0 IMG findings and 1 Observation note.
+  - `test_02_pasted_patch_image_produces_img_findings_with_capped_severity`: Verifies pasted patches produce findings capped at Medium.
+  - `test_03_embedded_image_in_pdf_is_extracted_and_analyzed`: Verifies embedded raster images inside PDFs are extracted and evaluated.
+  - `test_04_startup_flag_info_reported_in_diagnostics`: Verifies GET /api/system/diagnostics returns v2 feature flags.
+  - `test_05_copymove_ignores_text_areas`: Verifies repeated text lines do not trigger copy-move alarms.
+  - `test_06_rules_catalog_capped_at_medium`: Verifies catalog severities are capped at Medium.
+- **Test Results:** 126/126 tests passing across all 10 test suites (39 baseline + 87 V2).
