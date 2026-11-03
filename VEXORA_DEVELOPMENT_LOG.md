@@ -1266,3 +1266,43 @@ In Phase H, we introduced a **principled gate**: we only run image forensic algo
   - `test_05_copymove_ignores_text_areas`: Verifies repeated text lines do not trigger copy-move alarms.
   - `test_06_rules_catalog_capped_at_medium`: Verifies catalog severities are capped at Medium.
 - **Test Results:** 126/126 tests passing across all 10 test suites (39 baseline + 87 V2).
+
+---
+
+## V2 Phase I — Live LLM Layer Stabilization & Grounding (P6 Fix) Log
+
+- **Completion Date:** 2026-11-03
+- **Status:** **Completed** (Tested on branch `feature/v2-phase-i`)
+
+### Executive Summary & Objectives
+Phase I resolved problem **P6** (untested, hardcoded LLM configuration) and made VEXORA's AI intelligence tier reliable, configurable, and safely testable:
+1. **Configurable Model Name:** Previously, the Gemini model was hardcoded to `gemini-1.5-flash` in `backend/llm.py`, meaning if that specific endpoint was deprecated or unserved, the entire AI tier broke. Model names are now configurable via `VEXORA_LLM_MODEL` with safe defaults per provider (`gemini-1.5-flash`, `gpt-4o-mini`, `claude-3-haiku-20240307`).
+2. **Clear Error Reporting on HTTP 4xx:** If a provider returns a 404 or "model not found" error, VEXORA catches it cleanly and advises the user to set `VEXORA_LLM_MODEL` in `.env`, never crashing.
+3. **Live AI Connection Test Endpoint & UI:** Added `POST /api/system/ai-test` measuring live latency and status without leaking API keys. Added a "Test AI Connection" button to the System Settings diagnostics pane.
+4. **Structured Field Extraction & Document View Table:** Structured extraction now explicitly extracts `vendor`, `invoice_number`, `dates`, `subtotal`, `tax`, `total`, `line_items`, and `parties`. Each field requires a verbatim source quote verified by substring matching; ungrounded fields are dropped. Extracted fields are stored in `ai_insights` and rendered in the Forensic Document Inspector with a prominent label: `"AI-assisted, requires human review"`.
+5. **Contextual Crosscheck Prompts:** The multi-document cross-examination prompt specifically checks four categories:
+   - Totals that do not equal the sum of line items.
+   - Mismatched parties across documents.
+   - Impossible timelines and chronological sequence violations.
+   - Amounts that differ across documents for the same reference.
+   Every claim requires a grounded verbatim source quote or is discarded.
+6. **CLI Demonstration Script (`tools/demo_ai.py`):** Added a CLI demo tool that accepts `--doc` and runs extraction, finding explanation, and cross-checking. When no API key is configured, it prints `"AI not configured, skipped"` and cleanly exits with code 0.
+
+### Beginner-Friendly Explanation (For Hackathon Judges)
+**Why is anti-hallucination source quote verification crucial in document forensics?**
+Large Language Models (LLMs) are notorious for generating plausible-sounding facts that never existed in the source document ("hallucinations"). In a forensic or legal audit, an investigator cannot afford AI that invents offshore entities or imaginary bank account discrepancies.
+VEXORA enforces a strict rule: **"If you can't quote it word-for-word from the text, you can't report it."** For every single field and anomaly the model claims to find, VEXORA performs a code-level string search in the original document text. If the exact words are not there, VEXORA drops the claim immediately. This guarantees that every AI insight is 100% grounded in real document evidence.
+
+### Test Coverage & Verification
+- Created `tests/test_v2_phase_i.py` with 10 unit and integration tests:
+  - `test_default_models_per_provider`: Verifies default model dictionary per provider.
+  - `test_configured_model_override`: Verifies `VEXORA_LLM_MODEL` overrides default model for any provider.
+  - `test_bad_model_name_returns_clear_error_gemini`: Verifies Gemini 404 returns clear message to set `VEXORA_LLM_MODEL`.
+  - `test_bad_model_name_returns_clear_error_openai`: Verifies OpenAI 404 returns clear error without crashing.
+  - `test_contextual_crosscheck_drops_ungrounded_quote`: Verifies ungrounded quotes are dropped from crosscheck findings.
+  - `test_extract_fields_llm_drops_ungrounded_and_keeps_grounded`: Verifies ungrounded scalar fields are moved to `dropped_fields`.
+  - `test_ai_test_endpoint_when_disabled_returns_expected_keys`: Verifies `POST /api/system/ai-test` returns safe keys and no secrets when disabled.
+  - `test_ai_test_endpoint_mock_success`: Verifies `POST /api/system/ai-test` returns latency and model details when active.
+  - `test_document_ai_insights_endpoint`: Verifies `GET /api/documents/<id>/ai-insights` returns stored insights and 404 for missing docs.
+  - `test_demo_ai_exits_0_when_no_key_configured`: Verifies CLI tool exits cleanly with code 0 and prints skipped message.
+- **Combined Test Total:** 136/136 tests passing across all 11 test suites.

@@ -618,12 +618,297 @@
     });
   };
 
+  // =========================================================================
+  // Phase I: LLM Integration — AI Test Connection & Extracted Fields UI
+  // =========================================================================
+
+  /**
+   * Injects "Test AI Connection" button into System Settings diagnostics panel
+   */
+  window.v2SetupAiTestButton = function () {
+    const summaryEl = document.getElementById('settingsDiagnosticsSummary');
+    if (!summaryEl) return;
+    if (document.getElementById('v2AiTestBtn')) return;
+
+    const btnWrap = document.createElement('div');
+    btnWrap.style.marginTop = '12px';
+
+    const aiBtn = document.createElement('button');
+    aiBtn.id = 'v2AiTestBtn';
+    aiBtn.type = 'button';
+    aiBtn.className = 'btn-secondary';
+    aiBtn.style.fontSize = '0.82rem';
+    aiBtn.style.padding = '6px 14px';
+    aiBtn.innerHTML = '🤖 Test AI Connection';
+
+    const statusSpan = document.createElement('span');
+    statusSpan.id = 'v2AiTestStatus';
+    statusSpan.style.marginLeft = '10px';
+    statusSpan.style.fontSize = '0.8rem';
+    statusSpan.style.color = 'var(--text-muted)';
+
+    btnWrap.appendChild(aiBtn);
+    btnWrap.appendChild(statusSpan);
+
+    if (summaryEl.parentElement) {
+      summaryEl.parentElement.appendChild(btnWrap);
+    }
+
+    aiBtn.addEventListener('click', async () => {
+      aiBtn.disabled = true;
+      aiBtn.innerHTML = '⏳ Testing AI...';
+      statusSpan.textContent = 'Contacting configured provider...';
+      try {
+        const res = await fetch('/api/system/ai-test', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          statusSpan.style.color = 'var(--status-verified, #10b981)';
+          statusSpan.textContent = `✓ Connected (${data.provider} / ${data.model}) — ${data.latency_ms}ms`;
+          if (typeof window.showToast === 'function') {
+            window.showToast(`AI Connection OK (${data.provider} / ${data.model}) - Latency: ${data.latency_ms}ms`, 'success');
+          }
+        } else {
+          statusSpan.style.color = 'var(--status-danger, #ef4444)';
+          statusSpan.textContent = `⚠️ Failed: ${data.error || 'Unavailable'}`;
+          if (typeof window.showToast === 'function') {
+            window.showToast(`AI Test Failed: ${data.error || 'Check configuration'}`, 'danger');
+          }
+        }
+      } catch (err) {
+        statusSpan.style.color = 'var(--status-danger, #ef4444)';
+        statusSpan.textContent = '⚠️ Network error calling /api/system/ai-test';
+      } finally {
+        setTimeout(() => {
+          aiBtn.disabled = false;
+          aiBtn.innerHTML = '🤖 Test AI Connection';
+        }, 3500);
+      }
+    });
+  };
+
+  /**
+   * Renders AI-extracted structured fields table in Forensic Document Inspector
+   */
+  window.v2RenderAiExtractedFields = async function (docId) {
+    if (!docId) {
+      const selector = document.getElementById('forensicDocSelector');
+      docId = selector ? selector.value : null;
+    }
+    if (!docId) return;
+
+    const pane = document.querySelector('.document-inspection-pane');
+    if (!pane) return;
+
+    let container = document.getElementById('v2AiExtractedFieldsSection');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'v2AiExtractedFieldsSection';
+      container.className = 'card-panel';
+      container.style.marginTop = '16px';
+      container.style.padding = '14px 18px';
+      pane.appendChild(container);
+    }
+
+    container.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong style="font-size:0.9rem; color:var(--text-primary);">🤖 AI-Extracted Fields</strong>
+          <span class="pill-tag pill-low" style="font-size:0.68rem;">Verified Grounding</span>
+        </div>
+        <span style="font-size:0.75rem; color:#94a3b8; font-style:italic;">AI-assisted, requires human review</span>
+      </div>
+      <div id="v2AiFieldsContent" style="font-size:0.82rem; color:var(--text-muted); padding:8px 0;">
+        Loading AI insights for ${escapeHtml(docId)}...
+      </div>
+    `;
+
+    try {
+      const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/ai-insights`);
+      const resData = await res.json();
+      const contentEl = document.getElementById('v2AiFieldsContent');
+      if (!contentEl) return;
+
+      const insights = (resData && resData.data) || [];
+      const fieldInsight = insights.find(i => i.insight_type === 'field_extraction');
+
+      if (!fieldInsight || !fieldInsight.data || Object.keys(fieldInsight.data).length === 0) {
+        contentEl.innerHTML = `
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0;">
+            <span>No structured AI fields extracted yet for this document.</span>
+            <button id="v2TriggerAiExtractBtn" type="button" class="btn-secondary" style="font-size:0.78rem; padding:4px 10px;">
+              ⚡ Extract with AI
+            </button>
+          </div>
+        `;
+        const extractBtn = document.getElementById('v2TriggerAiExtractBtn');
+        if (extractBtn) {
+          extractBtn.onclick = async () => {
+            extractBtn.disabled = true;
+            extractBtn.innerHTML = '⏳ Extracting...';
+            try {
+              const extRes = await fetch(`/api/documents/${encodeURIComponent(docId)}/ai-extract`, { method: 'POST' });
+              const extData = await extRes.json();
+              if (extData.success) {
+                if (typeof window.showToast === 'function') {
+                  window.showToast('AI field extraction completed and verified.', 'success');
+                }
+                window.v2RenderAiExtractedFields(docId);
+              } else {
+                if (typeof window.showToast === 'function') {
+                  window.showToast(extData.message || 'AI extraction failed', 'warning');
+                }
+                extractBtn.disabled = false;
+                extractBtn.innerHTML = '⚡ Extract with AI';
+              }
+            } catch (e) {
+              extractBtn.disabled = false;
+              extractBtn.innerHTML = '⚡ Extract with AI';
+            }
+          };
+        }
+        return;
+      }
+
+      const rawFields = typeof fieldInsight.data === 'string' ? JSON.parse(fieldInsight.data) : fieldInsight.data;
+      const rows = [];
+
+      // Scalar fields
+      if (rawFields.vendor) {
+        rows.push({
+          field: 'Vendor / Issuer',
+          val: rawFields.vendor.value || '—',
+          conf: rawFields.vendor.confidence !== undefined ? Math.round(rawFields.vendor.confidence * 100) + '%' : '—',
+          quote: rawFields.vendor.source_quote || '—'
+        });
+      }
+      if (rawFields.invoice_number) {
+        rows.push({
+          field: 'Invoice / Ref Number',
+          val: rawFields.invoice_number.value || '—',
+          conf: rawFields.invoice_number.confidence !== undefined ? Math.round(rawFields.invoice_number.confidence * 100) + '%' : '—',
+          quote: rawFields.invoice_number.source_quote || '—'
+        });
+      }
+      if (rawFields.subtotal) {
+        rows.push({
+          field: 'Subtotal Amount',
+          val: rawFields.subtotal.value || '—',
+          conf: rawFields.subtotal.confidence !== undefined ? Math.round(rawFields.subtotal.confidence * 100) + '%' : '—',
+          quote: rawFields.subtotal.source_quote || '—'
+        });
+      }
+      if (rawFields.tax) {
+        rows.push({
+          field: 'Tax / VAT Amount',
+          val: rawFields.tax.value || '—',
+          conf: rawFields.tax.confidence !== undefined ? Math.round(rawFields.tax.confidence * 100) + '%' : '—',
+          quote: rawFields.tax.source_quote || '—'
+        });
+      }
+      if (rawFields.total) {
+        rows.push({
+          field: 'Total Amount Due',
+          val: rawFields.total.value || '—',
+          conf: rawFields.total.confidence !== undefined ? Math.round(rawFields.total.confidence * 100) + '%' : '—',
+          quote: rawFields.total.source_quote || '—'
+        });
+      }
+
+      // Dates list
+      if (Array.isArray(rawFields.dates)) {
+        rawFields.dates.forEach(d => {
+          rows.push({
+            field: `Date (${escapeHtml(d.field || 'Transaction')})`,
+            val: d.value || '—',
+            conf: d.confidence !== undefined ? Math.round(d.confidence * 100) + '%' : '—',
+            quote: d.source_quote || '—'
+          });
+        });
+      }
+
+      // Line items
+      if (Array.isArray(rawFields.line_items)) {
+        rawFields.line_items.forEach((item, idx) => {
+          rows.push({
+            field: `Line Item ${idx + 1}`,
+            val: `${item.description || 'Item'} (Qty: ${item.quantity || 1}, Total: ${item.total || '—'})`,
+            conf: item.confidence !== undefined ? Math.round(item.confidence * 100) + '%' : '—',
+            quote: item.source_quote || '—'
+          });
+        });
+      }
+
+      // Parties
+      if (Array.isArray(rawFields.parties)) {
+        rawFields.parties.forEach(p => {
+          rows.push({
+            field: `Party (${escapeHtml(p.role || 'Entity')})`,
+            val: p.name || '—',
+            conf: p.confidence !== undefined ? Math.round(p.confidence * 100) + '%' : '—',
+            quote: p.source_quote || '—'
+          });
+        });
+      }
+
+      if (rows.length === 0) {
+        contentEl.innerHTML = '<span style="color:var(--text-muted);">No verified fields stored for this document.</span>';
+        return;
+      }
+
+      let tableHtml = `
+        <table style="width:100%; border-collapse:collapse; font-size:0.8rem; margin-top:6px;">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; color:var(--text-secondary);">
+              <th style="padding:6px 8px; width:22%;">Field</th>
+              <th style="padding:6px 8px; width:30%;">Extracted Value</th>
+              <th style="padding:6px 8px; width:12%;">Confidence</th>
+              <th style="padding:6px 8px; width:36%;">Verified Source Quote</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      rows.forEach(r => {
+        tableHtml += `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td style="padding:6px 8px; font-weight:600; color:var(--text-primary);">${escapeHtml(r.field)}</td>
+            <td style="padding:6px 8px; color:var(--accent-primary, #38bdf8);">${escapeHtml(r.val)}</td>
+            <td style="padding:6px 8px; color:var(--text-muted);">${escapeHtml(r.conf)}</td>
+            <td style="padding:6px 8px; font-family:var(--font-mono, monospace); font-size:0.75rem; color:#94a3b8;">"${escapeHtml(r.quote)}"</td>
+          </tr>
+        `;
+      });
+
+      tableHtml += `</tbody></table>`;
+      contentEl.innerHTML = tableHtml;
+
+    } catch (err) {
+      console.warn('[V2 AI Insights Fetch Error]', err);
+    }
+  };
+
   // Pre-initialize on load
   function initAllV2() {
     ensureEvidenceModal();
+    window.v2SetupAiTestButton();
     const select = document.getElementById('relGraphCaseSelect');
     if (select) {
       window.v2LoadRelationshipGraph(select.value || 'CAS-2026-0891');
+    }
+    const forensicSelect = document.getElementById('forensicDocSelector');
+    if (forensicSelect) {
+      forensicSelect.addEventListener('change', (e) => {
+        window.v2RenderAiExtractedFields(e.target.value);
+      });
+      if (forensicSelect.value) {
+        window.v2RenderAiExtractedFields(forensicSelect.value);
+      }
+    }
+    const navSettings = document.getElementById('navSettings');
+    if (navSettings) {
+      navSettings.addEventListener('click', () => {
+        setTimeout(window.v2SetupAiTestButton, 150);
+      });
     }
   }
 

@@ -33,6 +33,42 @@ logger = logging.getLogger(__name__)
 # Mandatory AI Disclaimer
 AI_DISCLAIMER = "AI-assessed, requires human review"
 
+# Configurable Default Models per Provider
+DEFAULT_MODELS = {
+    'gemini': 'gemini-1.5-flash',
+    'openai': 'gpt-4o-mini',
+    'claude': 'claude-3-haiku-20240307',
+    'anthropic': 'claude-3-haiku-20240307'
+}
+
+_last_llm_error = None
+
+
+def get_last_llm_error():
+    """Returns the most recent LLM invocation error message, if any."""
+    global _last_llm_error
+    return _last_llm_error
+
+
+def set_last_llm_error(error_message):
+    """Sets the most recent LLM invocation error message."""
+    global _last_llm_error
+    _last_llm_error = error_message
+
+
+def get_model_name(provider=None):
+    """
+    Returns the configured model name for the given provider.
+    Priority:
+    1. Config.VEXORA_LLM_MODEL or os.environ.get('VEXORA_LLM_MODEL') if specified.
+    2. Default model from DEFAULT_MODELS dictionary based on provider.
+    """
+    prov = (provider or getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini') or 'gemini').lower().strip()
+    configured = getattr(Config, 'VEXORA_LLM_MODEL', '') or os.environ.get('VEXORA_LLM_MODEL', '')
+    if configured and configured.strip():
+        return configured.strip()
+    return DEFAULT_MODELS.get(prov, 'gemini-1.5-flash')
+
 
 # =====================================================================
 # 1. Privacy Masking & Anti-Hallucination Verification
@@ -151,7 +187,8 @@ def call_llm(prompt, system_instruction=None, json_mode=True, timeout=15):
 
 def _call_gemini(prompt, api_key, system_instruction, json_mode, timeout):
     """Executes HTTPS request against Google Gemini REST API."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    model = get_model_name('gemini')
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     generation_config = {
         "temperature": 0.1,
@@ -177,9 +214,18 @@ def _call_gemini(prompt, api_key, system_instruction, json_mode, timeout):
     headers = {"Content-Type": "application/json"}
     resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
     if resp.status_code != 200:
-        logger.warning(f"[Gemini API Error] HTTP {resp.status_code}: {resp.text[:200]}")
+        err_text = resp.text[:400]
+        clean_err = err_text.replace(api_key, "[REDACTED_KEY]") if api_key else err_text
+        if resp.status_code == 404 or "not found" in err_text.lower() or "not supported" in err_text.lower():
+            msg = f"Model '{model}' not found or unsupported by Gemini. Please set VEXORA_LLM_MODEL in environment or .env."
+            set_last_llm_error(msg)
+            logger.warning(f"[Gemini API Error] {msg} (HTTP {resp.status_code})")
+        else:
+            set_last_llm_error(f"Gemini API HTTP {resp.status_code}: {clean_err}")
+            logger.warning(f"[Gemini API Error] HTTP {resp.status_code}: {clean_err}")
         return None
 
+    set_last_llm_error(None)
     data = resp.json()
     candidates = data.get("candidates", [])
     if not candidates:
@@ -197,6 +243,7 @@ def _call_gemini(prompt, api_key, system_instruction, json_mode, timeout):
 
 def _call_openai(prompt, api_key, system_instruction, json_mode, timeout):
     """Executes HTTPS request against OpenAI Chat Completions API."""
+    model = get_model_name('openai')
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -209,7 +256,7 @@ def _call_openai(prompt, api_key, system_instruction, json_mode, timeout):
     messages.append({"role": "user", "content": prompt})
 
     payload = {
-        "model": "gpt-4o-mini",
+        "model": model,
         "messages": messages,
         "temperature": 0.1,
         "max_tokens": 2048
@@ -219,9 +266,18 @@ def _call_openai(prompt, api_key, system_instruction, json_mode, timeout):
 
     resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
     if resp.status_code != 200:
-        logger.warning(f"[OpenAI API Error] HTTP {resp.status_code}: {resp.text[:200]}")
+        err_text = resp.text[:400]
+        clean_err = err_text.replace(api_key, "[REDACTED_KEY]") if api_key else err_text
+        if resp.status_code == 404 or "not found" in err_text.lower() or "model_not_found" in err_text.lower():
+            msg = f"Model '{model}' not found or unsupported by OpenAI. Please set VEXORA_LLM_MODEL in environment or .env."
+            set_last_llm_error(msg)
+            logger.warning(f"[OpenAI API Error] {msg} (HTTP {resp.status_code})")
+        else:
+            set_last_llm_error(f"OpenAI API HTTP {resp.status_code}: {clean_err}")
+            logger.warning(f"[OpenAI API Error] HTTP {resp.status_code}: {clean_err}")
         return None
 
+    set_last_llm_error(None)
     data = resp.json()
     choices = data.get("choices", [])
     if not choices:
@@ -236,6 +292,7 @@ def _call_openai(prompt, api_key, system_instruction, json_mode, timeout):
 
 def _call_claude(prompt, api_key, system_instruction, json_mode, timeout):
     """Executes HTTPS request against Anthropic Claude Messages API."""
+    model = get_model_name('claude')
     url = "https://api.anthropic.com/v1/messages"
     headers = {
         "x-api-key": api_key,
@@ -244,7 +301,7 @@ def _call_claude(prompt, api_key, system_instruction, json_mode, timeout):
     }
 
     payload = {
-        "model": "claude-3-haiku-20240307",
+        "model": model,
         "max_tokens": 2048,
         "messages": [{"role": "user", "content": prompt}]
     }
@@ -253,9 +310,18 @@ def _call_claude(prompt, api_key, system_instruction, json_mode, timeout):
 
     resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
     if resp.status_code != 200:
-        logger.warning(f"[Claude API Error] HTTP {resp.status_code}: {resp.text[:200]}")
+        err_text = resp.text[:400]
+        clean_err = err_text.replace(api_key, "[REDACTED_KEY]") if api_key else err_text
+        if resp.status_code == 404 or "not_found" in err_text.lower() or "not found" in err_text.lower():
+            msg = f"Model '{model}' not found or unsupported by Anthropic Claude. Please set VEXORA_LLM_MODEL in environment or .env."
+            set_last_llm_error(msg)
+            logger.warning(f"[Claude API Error] {msg} (HTTP {resp.status_code})")
+        else:
+            set_last_llm_error(f"Claude API HTTP {resp.status_code}: {clean_err}")
+            logger.warning(f"[Claude API Error] HTTP {resp.status_code}: {clean_err}")
         return None
 
+    set_last_llm_error(None)
     data = resp.json()
     content_list = data.get("content", [])
     if not content_list:
@@ -295,10 +361,10 @@ def _parse_json_block(text):
 
 def extract_fields_llm(text, doc_type="Document", document_id=None, user="System"):
     """
-    Extracts key structured fields from document text using LLM.
-    Strictly enforces source quote grounding: any field whose source_quote cannot
-    be verified in the original unredacted text is discarded.
-    Saves grounded insights to ai_insights table.
+    Extracts key structured fields from document text using LLM:
+    fields (vendor, invoice number, dates, subtotal, tax, total, line items, parties),
+    each with value, confidence, and source_quote, strictly verified by substring check.
+    Any ungrounded field is discarded. Grounded insights are saved to ai_insights table.
     """
     if not text or not text.strip():
         return None
@@ -309,17 +375,21 @@ def extract_fields_llm(text, doc_type="Document", document_id=None, user="System
 
     system_prompt = (
         "You are an expert document forensics intelligence engine. "
-        "Extract key structured fields from the document text. "
+        "Extract key structured fields from the document text: "
+        "vendor, invoice number, dates, subtotal, tax, total, line items, and parties. "
         "CRITICAL REQUIREMENT: For EVERY extracted field or value, you MUST include a 'source_quote' "
         "copied verbatim from the document text. If a field does not exist, do not guess. "
         "Return a valid JSON object with the following schema:\n"
         "{\n"
         '  "vendor": {"value": str, "confidence": float, "source_quote": str},\n'
         '  "invoice_number": {"value": str, "confidence": float, "source_quote": str},\n'
-        '  "dates": [{"field": str, "value": str, "confidence": float, "source_quote": str}],\n'
+        '  "subtotal": {"value": str, "confidence": float, "source_quote": str},\n'
+        '  "tax": {"value": str, "confidence": float, "source_quote": str},\n'
+        '  "total": {"value": str, "confidence": float, "source_quote": str},\n'
         '  "totals": {"subtotal": float, "tax": float, "total_amount": float, "currency": str, "confidence": float, "source_quote": str},\n'
-        '  "line_items": [{"description": str, "quantity": float, "unit_price": float, "total": float, "source_quote": str}],\n'
-        '  "parties": [{"role": str, "name": str, "source_quote": str}]\n'
+        '  "dates": [{"field": str, "value": str, "confidence": float, "source_quote": str}],\n'
+        '  "line_items": [{"description": str, "quantity": float, "unit_price": float, "total": float, "confidence": float, "source_quote": str}],\n'
+        '  "parties": [{"role": str, "name": str, "confidence": float, "source_quote": str}]\n'
         "}"
     )
 
@@ -333,19 +403,47 @@ def extract_fields_llm(text, doc_type="Document", document_id=None, user="System
     verified_data = {}
     dropped_fields = []
 
-    # 1. Single scalar dictionary fields (vendor, invoice_number, totals)
-    for field_name in ["vendor", "invoice_number", "totals"]:
+    # 1. Single scalar dictionary fields
+    scalar_fields = ["vendor", "invoice_number", "subtotal", "tax", "total", "totals"]
+    for field_name in scalar_fields:
         f_val = raw_result.get(field_name)
         if isinstance(f_val, dict):
             quote = f_val.get("source_quote") or ""
             if verify_source_quote(quote, text):
                 verified_data[field_name] = f_val
             else:
+                claimed = f_val.get("value") or f_val.get("total_amount") or f_val.get("subtotal") or str(f_val)
                 dropped_fields.append({
                     "field": field_name,
-                    "claimed_value": f_val.get("value") or f_val.get("total_amount"),
+                    "claimed_value": claimed,
                     "reason": "Source quote could not be verified in original document text."
                 })
+
+    # If totals was verified and subtotal/tax/total are missing at top level, populate from totals
+    if "totals" in verified_data:
+        tot = verified_data["totals"]
+        tot_quote = tot.get("source_quote", "")
+        tot_conf = tot.get("confidence", 0.9)
+        if "subtotal" not in verified_data and "subtotal" in tot and tot["subtotal"] is not None:
+            verified_data["subtotal"] = {
+                "value": str(tot["subtotal"]),
+                "confidence": tot_conf,
+                "source_quote": tot_quote
+            }
+        if "tax" not in verified_data and "tax" in tot and tot["tax"] is not None:
+            verified_data["tax"] = {
+                "value": str(tot["tax"]),
+                "confidence": tot_conf,
+                "source_quote": tot_quote
+            }
+        if "total" not in verified_data:
+            val = tot.get("total_amount") if tot.get("total_amount") is not None else tot.get("total")
+            if val is not None:
+                verified_data["total"] = {
+                    "value": str(val),
+                    "confidence": tot_conf,
+                    "source_quote": tot_quote
+                }
 
     # 2. List fields (dates, line_items, parties)
     for list_field in ["dates", "line_items", "parties"]:
@@ -356,6 +454,9 @@ def extract_fields_llm(text, doc_type="Document", document_id=None, user="System
                 if isinstance(item, dict):
                     quote = item.get("source_quote") or ""
                     if verify_source_quote(quote, text):
+                        # Ensure confidence is present
+                        if "confidence" not in item:
+                            item["confidence"] = 0.9
                         verified_list.append(item)
                     else:
                         dropped_fields.append({
@@ -513,13 +614,13 @@ def contextual_crosscheck(case_documents, case_id=None, user="System"):
 
     system_prompt = (
         "You are an advanced AI contextual audit engine. "
-        "Analyze the set of investigation documents for contextual and factual discrepancies: "
-        "- Mathematical inconsistencies (subtotal + tax != grand total, line items sum != subtotal)\n"
-        "- Contradictory parties, entity names, or bank account numbers between related documents\n"
-        "- Impossible chronological sequences (e.g. shipping before order, invoice paid before issue)\n"
-        "- Inconsistent monetary sums for the same invoice/order reference\n\n"
+        "Analyze the set of investigation documents specifically for four categories of discrepancies:\n"
+        "1. Totals that do not equal the sum of line items (subtotal + tax != grand total, line items sum != subtotal)\n"
+        "2. Mismatched parties across documents (differing vendor names, customer names, or bank account identities across related records)\n"
+        "3. Impossible timelines (chronological sequence violations such as shipping before order, invoice paid before issue, or future dates)\n"
+        "4. Amounts that differ across documents for the same transaction, order, or invoice reference\n\n"
         "CRITICAL REQUIREMENT: For EVERY inconsistency identified, you MUST provide an exact 'source_quote' "
-        "copied directly from the text of the involved document. If you cannot quote it, do not flag it.\n"
+        "copied directly from the text of the involved document. If you cannot quote it verbatim, do not report it.\n"
         "Return a valid JSON object:\n"
         "{\n"
         '  "inconsistencies": [\n'
@@ -622,15 +723,10 @@ def get_ai_status():
     """
     enabled = getattr(Config, 'ENABLE_LLM', False)
     provider = getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini')
-    api_key = getattr(Config, 'VEXORA_LLM_API_KEY', '') or os.environ.get('VEXORA_LLM_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+    api_key = getattr(Config, 'VEXORA_LLM_API_KEY', '') or os.environ.get('VEXORA_LLM_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '') or os.environ.get('OPENAI_API_KEY', '')
     has_key = bool(api_key and len(api_key.strip()) > 5)
     redact = getattr(Config, 'VEXORA_LLM_REDACT', True)
-
-    model_name = {
-        'gemini': 'gemini-1.5-flash',
-        'openai': 'gpt-4o-mini',
-        'claude': 'claude-3-haiku-20240307'
-    }.get(provider, 'gemini-1.5-flash')
+    model_name = get_model_name(provider)
 
     return {
         "enabled": bool(enabled and has_key),
@@ -641,3 +737,97 @@ def get_ai_status():
         "privacy_redaction_enabled": bool(redact),
         "disclaimer": AI_DISCLAIMER
     }
+
+
+def test_ai_connection(prompt="PING"):
+    """
+    Sends a minimal harmless prompt to test live LLM connectivity.
+    Returns dictionary with:
+    - ok: bool
+    - provider: str
+    - model: str
+    - latency_ms: float
+    - error: str (only on failure; never leaks api keys)
+    - disclaimer: str
+    """
+    import time
+    provider = getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini').lower().strip()
+    model = get_model_name(provider)
+
+    enabled = getattr(Config, 'ENABLE_LLM', False)
+    if not enabled:
+        return {
+            'ok': False,
+            'provider': provider,
+            'model': model,
+            'latency_ms': 0.0,
+            'error': 'AI reasoning is disabled. Set ENABLE_LLM=true in environment or .env.',
+            'disclaimer': AI_DISCLAIMER
+        }
+
+    api_key = (
+        getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        or os.environ.get('VEXORA_LLM_API_KEY', '')
+        or os.environ.get('GEMINI_API_KEY', '')
+        or os.environ.get('OPENAI_API_KEY', '')
+    )
+    if not api_key or len(api_key.strip()) < 5:
+        return {
+            'ok': False,
+            'provider': provider,
+            'model': model,
+            'latency_ms': 0.0,
+            'error': f'API key not configured for provider "{provider}". Set VEXORA_LLM_API_KEY in environment or .env.',
+            'disclaimer': AI_DISCLAIMER
+        }
+
+    if requests is None:
+        return {
+            'ok': False,
+            'provider': provider,
+            'model': model,
+            'latency_ms': 0.0,
+            'error': "'requests' library is not available.",
+            'disclaimer': AI_DISCLAIMER
+        }
+
+    start_time = time.time()
+    try:
+        set_last_llm_error(None)
+        res = call_llm(prompt, json_mode=False, timeout=12)
+        latency = round((time.time() - start_time) * 1000, 1)
+
+        if res is not None:
+            return {
+                'ok': True,
+                'provider': provider,
+                'model': model,
+                'latency_ms': latency,
+                'response_sample': str(res)[:60].strip(),
+                'disclaimer': AI_DISCLAIMER
+            }
+        else:
+            err = get_last_llm_error() or f"Connection failed to {provider} ({model}). Check network, key, or model name."
+            if api_key:
+                err = err.replace(api_key, "[REDACTED_KEY]")
+            return {
+                'ok': False,
+                'provider': provider,
+                'model': model,
+                'latency_ms': latency,
+                'error': err,
+                'disclaimer': AI_DISCLAIMER
+            }
+    except Exception as e:
+        latency = round((time.time() - start_time) * 1000, 1)
+        err_msg = str(e)
+        if api_key:
+            err_msg = err_msg.replace(api_key, "[REDACTED_KEY]")
+        return {
+            'ok': False,
+            'provider': provider,
+            'model': model,
+            'latency_ms': latency,
+            'error': err_msg,
+            'disclaimer': AI_DISCLAIMER
+        }

@@ -1038,6 +1038,51 @@ def create_app(config_class=Config):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/system/ai-test', methods=['POST'])
+    def api_system_ai_test():
+        """
+        Phase I: Tests live connectivity to configured LLM provider with a minimal prompt.
+        Returns ok/failed status, provider, model, latency_ms, and sanitized error if any.
+        Never leaks API keys or secrets.
+        """
+        try:
+            from backend.llm import test_ai_connection
+            result = test_ai_connection()
+            return jsonify(result), 200
+        except Exception as e:
+            from backend.llm import get_model_name
+            prov = getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini')
+            return jsonify({
+                'ok': False,
+                'provider': prov,
+                'model': get_model_name(prov),
+                'latency_ms': 0.0,
+                'error': f"AI test execution failed: {str(e)}",
+                'disclaimer': 'AI-assessed, requires human review'
+            }), 200
+
+    @app.route('/api/documents/<doc_id>/ai-insights', methods=['GET'])
+    def api_get_document_ai_insights(doc_id):
+        """
+        Phase I: Retrieves stored AI insights (e.g. structured field extractions) for a document.
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        try:
+            from backend.models import get_ai_insights_by_document
+            insights = get_ai_insights_by_document(doc_id)
+            return jsonify({
+                'success': True,
+                'document_id': doc_id,
+                'count': len(insights),
+                'data': insights
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Failed to fetch AI insights for {doc_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to retrieve AI insights: {str(e)}"}), 500
+
     @app.route('/api/documents/<doc_id>/ai-extract', methods=['POST'])
     def api_document_ai_extract(doc_id):
         """
