@@ -10,7 +10,10 @@ import json
 import hashlib
 import html
 import base64
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 try:
@@ -38,6 +41,36 @@ MANDATORY_DISCLAIMER = (
     "interpretation, physical document examination, and institutional validation remain mandatory before "
     "taking any administrative, disciplinary, or legal action."
 )
+
+# =====================================================================
+# 0. Pipeline Auto-Completion & Case Integrity Engine
+# =====================================================================
+
+def _ensure_case_analysis(case_id, user="Lead Investigator"):
+    """
+    Ensures that every document in the case has been analyzed and that cross-document
+    comparison has been performed before generating a case dossier.
+    Raises ValueError if the case has 0 ingested documents.
+    """
+    docs = get_all_documents(case_id=case_id)
+    if not docs:
+        raise ValueError("Case has no ingested documents. Upload and analyze at least one document before generating a dossier.")
+
+    from backend.analyzer import analyze_document
+    for d in docs:
+        status = (d.get('status') or '').strip()
+        if status not in ("Analyzed", "Clean"):
+            try:
+                analyze_document(d['id'], user=user)
+            except Exception as e:
+                logger.error(f"Failed to auto-analyze document {d.get('id')} in case {case_id}: {e}")
+
+    if len(docs) >= 2:
+        try:
+            compare_case_documents(case_id, user=user)
+        except Exception as e:
+            logger.error(f"Failed to auto-compare documents for case {case_id}: {e}")
+
 
 # =====================================================================
 # 1. Dossier Data Aggregation Engine
@@ -487,9 +520,13 @@ def generate_case_dossier_data(case_id):
 
     # 6. Executive Narrative Summary
     total_findings_count = len(findings_list)
+    if total_file_size < 1024 * 1024:
+        size_disp = f"{(total_file_size / 1024):.1f} KB"
+    else:
+        size_disp = f"{(total_file_size / (1024 * 1024)):.2f} MB"
     narrative = (
         f"An analytical forensic review of Case {case_id} ('{case['title']}') was conducted across "
-        f"{len(doc_inventory)} ingested document(s) totaling {(total_file_size / (1024*1024)):.2f} MB. "
+        f"{len(doc_inventory)} ingested document(s) totaling {size_disp}. "
     )
     if total_findings_count == 0 and disc_count == 0:
         narrative += (
@@ -583,6 +620,7 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     if fitz is None:
         raise RuntimeError("PyMuPDF (fitz) is not installed in the Python runtime.")
 
+    _ensure_case_analysis(case_id, user=user)
     data = generate_case_dossier_data(case_id)
     case = data['case']
     summary = data['executive_summary']
@@ -626,29 +664,65 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     # Insert official brand logo image on top-right of banner if available
     from backend.config import FRONTEND_DIR
     logo_path = FRONTEND_DIR / 'images' / 'logo.png'
+    has_logo = False
     if logo_path.exists():
         try:
             # Aspect ratio 1024x682 (~1.5:1). Target: width 84, height 56
             logo_rect = fitz.Rect(MARGIN_RIGHT - 88, 11, MARGIN_RIGHT, 67)
             page.insert_image(logo_rect, filename=str(logo_path))
+            has_logo = True
         except Exception:
-            pass
+            has_logo = False
 
     page.insert_text(fitz.Point(MARGIN_LEFT, 28), "VEXORA", fontname="hebo", fontsize=18, color=(1, 1, 1))
     page.insert_text(fitz.Point(MARGIN_LEFT + 86, 28), "• FORENSIC INVESTIGATION DOSSIER", fontname="hebo", fontsize=11, color=(56/255, 189/255, 248/255))
     page.insert_text(fitz.Point(MARGIN_LEFT, 44), "SEEING WHAT OTHERS OVERLOOK", fontname="hebo", fontsize=7.5, color=(56/255, 189/255, 248/255))
     page.insert_text(fitz.Point(MARGIN_LEFT, 62), f"Case ID: {case['id']} | Title: {case['title']} | Date: {data['generated_at']}", fontname="helv", fontsize=8.5, color=(148/255, 163/255, 184/255))
 
+    # Header Risk Level Badge in PDF Banner
+    risk_level = summary.get('risk_level', '')
+    if risk_level in ("Critical Risk / Irregular", "High Risk / Requires Review"):
+        pdf_badge_color = (239/255, 68/255, 68/255)
+        pdf_badge_bg = (254/255, 242/255, 242/255)
+        pdf_badge_border = (254/255, 202/255, 202/255)
+    elif risk_level == "Moderate Variance":
+        pdf_badge_color = (217/255, 119/255, 6/255)
+        pdf_badge_bg = (254/255, 243/255, 199/255)
+        pdf_badge_border = (253/255, 230/255, 138/255)
+    elif risk_level == "Clean / Verified Alignment":
+        pdf_badge_color = (21/255, 128/255, 61/255)
+        pdf_badge_bg = (220/255, 252/255, 231/255)
+        pdf_badge_border = (187/255, 247/255, 208/255)
+    else:
+        pdf_badge_color = (71/255, 85/255, 105/255)
+        pdf_badge_bg = (241/255, 245/255, 249/255)
+        pdf_badge_border = (226/255, 232/255, 240/255)
+
+    badge_w = 145.0
+    badge_h = 20.0
+    badge_right = (MARGIN_RIGHT - 96.0) if has_logo else MARGIN_RIGHT
+    badge_left = badge_right - badge_w
+    badge_top = 22.0
+    badge_bottom = badge_top + badge_h
+    badge_rect = fitz.Rect(badge_left, badge_top, badge_right, badge_bottom)
+    page.draw_rect(badge_rect, color=pdf_badge_border, fill=pdf_badge_bg, width=0.75)
+    page.insert_textbox(badge_rect, risk_level, fontname="hebo", fontsize=7.5, color=pdf_badge_color, align=fitz.TEXT_ALIGN_CENTER)
+
     y = 92.0
 
     # 2. Mandatory Human Review Disclaimer Box (Amber #fffbeb with #f59e0b border)
-    page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 42), color=(245/255, 158/255, 11/255), fill=(255/255, 251/255, 235/255), width=1)
-    page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 15), "[!] MANDATORY INVESTIGATION DISCLAIMER", fontname="hebo", fontsize=8, color=(180/255, 83/255, 9/255))
+    pdf_disc = data.get('mandatory_disclaimer', '')
+    prefix = "MANDATORY INVESTIGATION DISCLAIMER:"
+    if pdf_disc.startswith(prefix):
+        pdf_disc = pdf_disc[len(prefix):].strip()
+
+    page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 44), color=(245/255, 158/255, 11/255), fill=(255/255, 251/255, 235/255), width=1)
+    page.insert_text(fitz.Point(MARGIN_LEFT + 8, y + 14), "[!] MANDATORY INVESTIGATION DISCLAIMER", fontname="hebo", fontsize=8, color=(180/255, 83/255, 9/255))
     page.insert_textbox(
-        fitz.Rect(MARGIN_LEFT + 8, y + 18, MARGIN_RIGHT - 8, y + 40),
-        "All findings, metrics, and anomaly flags are algorithmic observations produced for investigative assistance only. They do not constitute conclusive legal proof of fraud. Human reviewer verification remains mandatory.",
+        fitz.Rect(MARGIN_LEFT + 8, y + 16, MARGIN_RIGHT - 8, y + 42),
+        pdf_disc,
         fontname="helv",
-        fontsize=7,
+        fontsize=6.5,
         color=(146/255, 64/255, 14/255)
     )
 
@@ -916,14 +990,18 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     try:
         # K2. Evidence and Traceability (top 5 findings)
         ev_items = data.get('evidence_traceability', [])
-        if ev_items:
+        if ev_items or y > 620:
             page = create_page()
             y = 50.0
 
-            page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 18), color=None, fill=(241/255, 245/255, 249/255))
-            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 13), "7. EVIDENCE AND TRACEABILITY (TOP FINDINGS)", fontname="hebo", fontsize=9.5, color=(30/255, 41/255, 59/255))
-            y += 26.0
+        page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 18), color=None, fill=(241/255, 245/255, 249/255))
+        page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 13), "7. EVIDENCE AND TRACEABILITY (TOP FINDINGS)", fontname="hebo", fontsize=9.5, color=(30/255, 41/255, 59/255))
+        y += 26.0
 
+        if not ev_items:
+            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 12), "No evidence-linked findings were produced for this case. No localized anomalies required visual evidence capture.", fontname="helv", fontsize=8, color=(100/255, 116/255, 139/255))
+            y += 24.0
+        else:
             from backend.evidence import get_finding_evidence_image
             for ev in ev_items[:5]:
                 if y > 540:
@@ -1117,6 +1195,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
     Generates a print-ready, modern HTML investigation report with
     responsive typography, print media rules, and full evidence breakdown.
     """
+    _ensure_case_analysis(case_id, user=user)
     data = generate_case_dossier_data(case_id)
     case = data['case']
     summary = data['executive_summary']
@@ -1262,36 +1341,40 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
         # K2: Evidence and Traceability (top 5 findings)
         from backend.evidence import get_finding_evidence_image
         k2_html = "<div class=\"section-title\">6. Evidence & Traceability (Top Findings)</div>"
-        for ev in data.get('evidence_traceability', [])[:5]:
-            sev = ev.get('severity', 'Medium')
-            sev_col = "#dc2626" if sev in ('Critical', 'High') else "#d97706" if sev == 'Medium' else "#64748b"
-            img_html = ""
-            try:
-                img_bytes, err = get_finding_evidence_image(ev['id'], zoom=1.5)
-                if img_bytes:
-                    b64_str = base64.b64encode(img_bytes).decode('utf-8')
-                    img_html = f'<div style="margin-top:10px;"><img src="data:image/png;base64,{b64_str}" style="max-width:440px; border:1px solid #cbd5e1; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);" alt="Visual Evidence" /></div>'
-            except Exception:
+        ev_items = data.get('evidence_traceability', [])
+        if not ev_items:
+            k2_html += "<p style='color:#64748b;'>No evidence-linked findings were produced for this case. No localized anomalies required visual evidence capture.</p>"
+        else:
+            for ev in ev_items[:5]:
+                sev = ev.get('severity', 'Medium')
+                sev_col = "#dc2626" if sev in ('Critical', 'High') else "#d97706" if sev == 'Medium' else "#64748b"
                 img_html = ""
+                try:
+                    img_bytes, err = get_finding_evidence_image(ev['id'], zoom=1.5)
+                    if img_bytes:
+                        b64_str = base64.b64encode(img_bytes).decode('utf-8')
+                        img_html = f'<div style="margin-top:10px;"><img src="data:image/png;base64,{b64_str}" style="max-width:440px; border:1px solid #cbd5e1; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);" alt="Visual Evidence" /></div>'
+                except Exception:
+                    img_html = ""
 
-            if not img_html:
-                img_html = '<div style="background:#f1f5f9; color:#64748b; padding:8px 12px; border-radius:4px; font-size:12px; margin-top:8px;">ℹ️ Visual Evidence: Document-level or metadata rule (visual coordinates not applicable).</div>'
+                if not img_html:
+                    img_html = '<div style="background:#f1f5f9; color:#64748b; padding:8px 12px; border-radius:4px; font-size:12px; margin-top:8px;">ℹ️ Visual Evidence: Document-level or metadata rule (visual coordinates not applicable).</div>'
 
-            k2_html += f"""
-            <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:4px solid {sev_col}; border-radius:4px; padding:12px; margin-bottom:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:#0f172a; font-size:13px;">[{html.escape(ev['rule_id'])}] {html.escape(ev['title'])}</strong>
-                    <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:#fee2e2; color:#b91c1c; font-weight:700;">Class: {html.escape(ev['class_label'])}</span>
+                k2_html += f"""
+                <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:4px solid {sev_col}; border-radius:4px; padding:12px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="color:#0f172a; font-size:13px;">[{html.escape(ev['rule_id'])}] {html.escape(ev['title'])}</strong>
+                        <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:#fee2e2; color:#b91c1c; font-weight:700;">Class: {html.escape(ev['class_label'])}</span>
+                    </div>
+                    <div style="font-size:11px; color:#64748b; font-family:monospace; margin-top:4px;">
+                        Page {html.escape(str(ev['page_number']))} • Box: {html.escape(str(ev['box']))} • Severity: {sev.upper()}
+                    </div>
+                    <blockquote style="background:#f8fafc; border-left:3px solid #0284c7; margin:6px 0; padding:6px 12px; font-size:12px; color:#334155; font-style:italic;">
+                        Source Quote: "{html.escape(ev['quoted_text'])}"
+                    </blockquote>
+                    {img_html}
                 </div>
-                <div style="font-size:11px; color:#64748b; font-family:monospace; margin-top:4px;">
-                    Page {html.escape(str(ev['page_number']))} • Box: {html.escape(str(ev['box']))} • Severity: {sev.upper()}
-                </div>
-                <blockquote style="background:#f8fafc; border-left:3px solid #0284c7; margin:6px 0; padding:6px 12px; font-size:12px; color:#334155; font-style:italic;">
-                    Source Quote: "{html.escape(ev['quoted_text'])}"
-                </blockquote>
-                {img_html}
-            </div>
-            """
+                """
         phase_k_sections += k2_html
     except Exception as e:
         phase_k_sections += f"<p style='color:#ef4444;'>Error compiling Evidence Traceability: {html.escape(str(e))}</p>"
@@ -1378,6 +1461,22 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
             </div>
         </div>
         """
+
+    # Risk badge style mapping
+    risk_level = summary.get('risk_level', '')
+    if risk_level in ("Critical Risk / Irregular", "High Risk / Requires Review"):
+        badge_style = "background:#fef2f2; color:#ef4444; border:1px solid #fecaca;"
+    elif risk_level == "Moderate Variance":
+        badge_style = "background:#fef3c7; color:#d97706; border:1px solid #fde68a;"
+    elif risk_level == "Clean / Verified Alignment":
+        badge_style = "background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;"
+    else:
+        badge_style = "background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;"
+
+    html_disc = data.get('mandatory_disclaimer', '')
+    prefix = "MANDATORY INVESTIGATION DISCLAIMER:"
+    if html_disc.startswith(prefix):
+        html_disc = html_disc[len(prefix):].strip()
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1508,7 +1607,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
                 </div>
             </div>
             <div style="text-align:right;">
-                <span style="display:inline-block; padding:6px 12px; border-radius:4px; font-weight:700; font-size:12px; background:#fef2f2; color:#ef4444; border:1px solid #fecaca;">
+                <span style="display:inline-block; padding:6px 12px; border-radius:4px; font-weight:700; font-size:12px; {badge_style}">
                     {summary['risk_level']}
                 </span>
             </div>
@@ -1516,7 +1615,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
 
         <div class="disclaimer-box">
             <strong>MANDATORY INVESTIGATION DISCLAIMER:</strong><br>
-            {data['mandatory_disclaimer']}
+            {html_disc}
         </div>
 
         <div class="section-title">1. Executive Investigation Summary</div>

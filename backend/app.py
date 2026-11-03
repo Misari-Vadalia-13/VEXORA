@@ -653,6 +653,8 @@ def create_app(config_class=Config):
             result['download_url'] = f"/api/reports/{result['report_id']}/download"
             result['view_url'] = f"/api/reports/{result['report_id']}/view"
             return jsonify(result), 201
+        except ValueError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 400
         except Exception as e:
             app.logger.error(f"Report generation failed for case {case_id}: {str(e)}")
             return jsonify({'success': False, 'error': f"Report generation failed: {str(e)}"}), 500
