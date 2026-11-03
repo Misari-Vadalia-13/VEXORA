@@ -1306,3 +1306,59 @@ VEXORA enforces a strict rule: **"If you can't quote it word-for-word from the t
   - `test_document_ai_insights_endpoint`: Verifies `GET /api/documents/<id>/ai-insights` returns stored insights and 404 for missing docs.
   - `test_demo_ai_exits_0_when_no_key_configured`: Verifies CLI tool exits cleanly with code 0 and prints skipped message.
 - **Combined Test Total:** 136/136 tests passing across all 11 test suites.
+
+---
+
+## V2 Phase J — Cross-Document Proof & Dossier Formatting (P3 & P4 Fixes) Log
+
+- **Completion Date:** 2026-11-03
+- **Status:** **Completed** (Tested on branch `feature/v2-phase-j`)
+
+### Executive Summary & Objectives
+Phase J resolved two foundational issues discovered in the review:
+1. **Fix P4 (Dossier Discrepancy Formatting):**
+   - In `backend/comparator.py`, discrepancy records were created with keys `'attribute'` and `'explanation'`, but `backend/reporter.py` queried `d.get('field', 'Attribute')` and `d.get('message', '')`. Because `'field'` and `'message'` did not exist, the dossier generator repeatedly printed the placeholder `"Conflict: Attribute"` with empty descriptions in both PDF and HTML reports.
+   - We harmonized key aliases (`'field'` and `'message'`) in `comparator.py` and upgraded `backend/reporter.py` to render the explicit attribute name, the two diverging values, and both participating filenames (e.g. `Conflict: Primary Monetary Value: $5,000.00 in tampered_04_duplicate_inv_a.pdf vs $18,500.00 in tampered_05_duplicate_inv_b.pdf`), followed by the full forensic rationale.
+2. **Fix P3 (Case-Level Multi-Document Evaluation Harness):**
+   - Previously, `tools/evaluate.py` evaluated documents in strict isolation. Cross-document tamper samples (`tampered_04_duplicate_inv_a.pdf`, `tampered_05_duplicate_inv_b.pdf`, and `tampered_06_bank_mismatch.pdf`) are internally valid PDFs that only tamper *across* documents. Because `comparator` and `correlator` were never executed in the benchmark evaluation, all three were reported as misses (False Negatives).
+   - Created a clean counterpart document in `demo_dataset/`: `genuine_01_matching_po.pdf` which matches `genuine_01_invoice.pdf` on invoice reference (`INV-2026-001`), counterparty (`Apex Global Industries`), date (`2026-01-15`), and total amount (`$1,250.00`).
+   - Added automated generation of `genuine_01_matching_po.pdf` and `demo_dataset/cases.csv` to `tools/make_samples.py`.
+   - `cases.csv` formalizes three benchmark scenarios:
+     * `case_01_duplicate_invoices`: Duplicate invoice submissions with conflicting monetary totals ($5,000 vs $18,500) and distinct entity names (`tampered_04_duplicate_inv_a.pdf` and `tampered_05_duplicate_inv_b.pdf`).
+     * `case_02_bank_mismatch`: Invoice total does not reconcile with bank wire confirmation ($18,500 claimed vs $5,000 bank wire; `tampered_05_duplicate_inv_b.pdf` and `tampered_06_bank_mismatch.pdf`).
+     * `case_03_clean_procurement`: Synchronized genuine procurement pairing with identical reference, party, date, and monetary figures (`genuine_01_invoice.pdf` and `genuine_01_matching_po.pdf`).
+   - Extended `tools/evaluate.py` to execute both:
+     * **Section 1: Single-Document Forensic Rules** (the existing 20-file ground truth table, completely preserved and unchanged).
+     * **Section 2: Cross-Document Case-Level Evaluation** (executes `compare_case_documents` and `build_case_relationship_graph` across all cases in `cases.csv`, and reports case-level TP, FP, TN, FN metrics).
+   - Saved full output to `docs/BENCHMARK_AFTER_J.txt`.
+
+### Beginner-Friendly Explanation (For Hackathon Judges)
+**Why do some forged documents look 100% genuine when analyzed by themselves?**
+Imagine a fraudster submits an invoice for $5,000. It is a clean, authentic PDF with no Photoshop edits, no hidden text, and perfectly valid dates. Then, they submit *another* invoice with the exact same invoice number (`INV-DEMO-999`) to a different department, but with the total changed to $18,500.
+If an AI or forensic scanner examines either invoice on its own, it sees zero tampering. Both documents are internally consistent.
+The fraud only exists in the **relationship** between documents:
+1. **Colliding Identifiers:** Two distinct documents claiming the exact same invoice number.
+2. **Conflicting Monetary Figures:** One says $5,000, the other says $18,500.
+3. **Settlement Discrepancies:** An invoice claiming $18,500 while the bank statement confirms only $5,000 was transferred.
+
+In Phase J, VEXORA proves its case-level correlation capability. By evaluating entire cases rather than solitary files, VEXORA catches cross-document discrepancies with 100% case-level recall, while confirming genuine procurement packages with 0 false alarms.
+
+### Benchmark Performance Comparison
+| Metric | Section 1 (Per-Document Isolation) | Section 2 (Case-Level Correlation) |
+|---|---|---|
+| **Evaluated Entities** | 20 Documents (10 Genuine, 10 Tampered) | 3 Cases (1 Genuine, 2 Tampered) |
+| **Accuracy** | 60.0% | **100.0%** |
+| **Recall (Detection Rate)** | 70.0% (Single-doc limitations on cross-doc tampered) | **100.0%** (2 / 2 Tampered Cases Caught) |
+| **Specificity (Clean Rate)**| 50.0% (Affected by visual heuristics) | **100.0%** (1 / 1 Genuine Case Verified Clean) |
+| **Precision** | 58.3% | **100.0%** |
+| **F1-Score** | 63.6% | **100.0%** |
+
+### Test Coverage & Verification
+- Created `tests/test_v2_phase_j.py` containing 6 automated tests:
+  - `test_01_dossier_comparison_formatting_pdf_and_html`: Verifies PDF and HTML dossiers render full attribute titles, values, and filenames, and never print generic `"Conflict: Attribute"`.
+  - `test_02_duplicate_invoice_case_detected`: Verifies duplicate invoice case triggers primary monetary variance and entity conflict.
+  - `test_03_bank_mismatch_case_detected`: Verifies invoice vs bank wire mismatch is flagged as a monetary disparity.
+  - `test_04_clean_procurement_case_produces_zero_conflicts`: Verifies synchronized invoice and PO produce zero discrepancies.
+  - `test_05_cases_csv_definitions_and_files_exist`: Verifies `demo_dataset/cases.csv` defines all three cases and all files exist on disk.
+  - `test_06_case_evaluation_engine_runs_successfully`: Verifies `run_case_evaluation()` runs to completion with exit code 0.
+- **Combined Test Total:** 142/142 tests passing across all 12 test suites (39 baseline + 103 V2).

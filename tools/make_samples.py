@@ -220,6 +220,15 @@ def generate_all_samples():
     ])
     labels.append({"filename": "genuine_01_invoice.pdf", "is_tampered": 0, "tampering_type": "None", "expected_rules": "None"})
 
+    # Phase J: Genuine Counterpart for cross-document clean evaluation (PO matching genuine_01_invoice.pdf)
+    make_genuine_pdf("genuine_01_matching_po.pdf", "PURCHASE ORDER - APEX GLOBAL", [
+        ("Purchase Order", "PO-2026-001"),
+        ("Invoice Reference", "INV-2026-001"),
+        ("Vendor", "Apex Global Industries"),
+        ("Order Date", "2026-01-15"),
+        ("Total Amount", "$1,250.00")
+    ])
+
     g2 = make_genuine_pdf("genuine_02_invoice.pdf", "TAX INVOICE", [
         ("Invoice Number", "INV-2026-002"),
         ("Bill To", "Kroll Logistics International"),
@@ -369,6 +378,40 @@ def generate_all_samples():
 
     print(f"[VEXORA Dataset Builder] Successfully generated {len(labels)} sample files in {DATASET_DIR}")
     print(f"[VEXORA Dataset Builder] Ground truth saved to {csv_path}")
+
+    # Write cases.csv for cross-document case-level evaluation (Phase J)
+    cases = [
+        {
+            "case_id": "case_01_duplicate_invoices",
+            "title": "Duplicate Invoice Submissions with Conflicting Totals",
+            "filenames": "tampered_04_duplicate_inv_a.pdf;tampered_05_duplicate_inv_b.pdf",
+            "is_tampered": 1,
+            "tampering_type": "Primary Monetary Value / Entity Substitution",
+            "expected_conflicts": "Primary Monetary Value,Vendor/Party Entity"
+        },
+        {
+            "case_id": "case_02_bank_mismatch",
+            "title": "Invoice vs Bank Settlement Mismatch",
+            "filenames": "tampered_05_duplicate_inv_b.pdf;tampered_06_bank_mismatch.pdf",
+            "is_tampered": 1,
+            "tampering_type": "Primary Monetary Value / Payment Discrepancy",
+            "expected_conflicts": "Primary Monetary Value"
+        },
+        {
+            "case_id": "case_03_clean_procurement",
+            "title": "Synchronized Genuine Procurement Records",
+            "filenames": "genuine_01_invoice.pdf;genuine_01_matching_po.pdf",
+            "is_tampered": 0,
+            "tampering_type": "None",
+            "expected_conflicts": "None"
+        }
+    ]
+    cases_csv_path = DATASET_DIR / 'cases.csv'
+    with open(cases_csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=["case_id", "title", "filenames", "is_tampered", "tampering_type", "expected_conflicts"])
+        writer.writeheader()
+        writer.writerows(cases)
+    print(f"[VEXORA Dataset Builder] Case evaluation scenarios saved to {cases_csv_path}")
     return labels
 
 

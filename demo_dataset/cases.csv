@@ -1,0 +1,4 @@
+case_id,title,filenames,is_tampered,tampering_type,expected_conflicts
+case_01_duplicate_invoices,Duplicate Invoice Submissions with Conflicting Totals,tampered_04_duplicate_inv_a.pdf;tampered_05_duplicate_inv_b.pdf,1,Primary Monetary Value / Entity Substitution,"Primary Monetary Value,Vendor/Party Entity"
+case_02_bank_mismatch,Invoice vs Bank Settlement Mismatch,tampered_05_duplicate_inv_b.pdf;tampered_06_bank_mismatch.pdf,1,Primary Monetary Value / Payment Discrepancy,Primary Monetary Value
+case_03_clean_procurement,Synchronized Genuine Procurement Records,genuine_01_invoice.pdf;genuine_01_matching_po.pdf,0,None,None
