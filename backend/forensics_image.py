@@ -1,17 +1,19 @@
 """
-VEXORA — Image Forensics Module (Phase D)
+VEXORA — Image Forensics Module (Phase D / Phase H Stabilized)
 Detects pixel-level alterations, compression artifacts, and cloned content in scanned documents & photos:
 - IMG-001: Error Level Analysis (ELA) via JPEG recompression disparity
 - IMG-002: Block-level noise and sharpness inconsistency (Laplacian variance)
 - IMG-003: Copy-move forgery detection using ORB keypoint displacement clustering
 - IMG-004: Signature region check (ink presence, location, and printed text overlap)
 
-Non-negotiable constraints:
+Non-negotiable constraints & Phase H Principles:
+- Gated execution: Analyzes standalone raster images and embedded PDF images only.
+  Never rasterizes vector PDF pages into synthetic images.
+- If a born-digital PDF has no embedded images, records a single Observation note.
+- Copy-move ignores keypoint matches located in detected text areas.
+- Severities capped at 'Medium' due to heuristic nature of pixel forensics.
 - Guarded imports for opencv-python-headless, numpy, and Pillow.
-- Returns status "unavailable" or empty list if libraries are missing.
-- All rules labeled "heuristic" with explicit limitation disclaimers in findings.
 - Never asserts "confirmed fraud" or "forgery".
-- Seamlessly runs on standalone images (.png, .jpg, etc.) or rasterized PDF pages.
 """
 
 import os
@@ -51,11 +53,12 @@ from backend.evidence_class import get_evidence_class
 logger = logging.getLogger(__name__)
 
 # Forensic Rules Catalog
+# Phase H: Capped severity of IMG-001 and IMG-003 at 'Medium' because pixel forensics are heuristics
 IMAGE_FORENSIC_RULES = {
     'IMG-001': {
         'id': 'IMG-001',
         'title': 'Error Level Analysis (ELA) Compression Disparity',
-        'severity': 'High',
+        'severity': 'Medium',
         'category': 'Visual Forensics',
         'confidence': 0.86,
         'evidence_class': 'Potential Manipulation',
@@ -75,7 +78,7 @@ IMAGE_FORENSIC_RULES = {
     'IMG-003': {
         'id': 'IMG-003',
         'title': 'Potential Copy-Move Cloned Region Detected',
-        'severity': 'High',
+        'severity': 'Medium',
         'category': 'Visual Forensics',
         'confidence': 0.89,
         'evidence_class': 'Potential Manipulation',
@@ -94,7 +97,14 @@ IMAGE_FORENSIC_RULES = {
     }
 }
 
+# Categories of documents where absence of a signature is forensically noteworthy
+SIGNATURE_EXPECTED_CATEGORIES = {
+    'contract', 'agreement', 'deed', 'affidavit', 'lease', 'nda', 'mou',
+    'power of attorney', 'employment agreement'
+}
 
+
+# Checks whether required computer vision libraries are installed and functional
 def is_image_forensics_available():
     """Checks if all required image analysis dependencies are operational."""
     return bool(cv2 is not None and np is not None and Image is not None)
@@ -104,11 +114,13 @@ def is_image_forensics_available():
 # 1. IMG-001: Error Level Analysis (ELA)
 # =====================================================================
 
+# Recompresses image at quality 90 to detect pixel-level compression disparity
 def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, page_num=1):
     """
     IMG-001: Recompresses image at a fixed JPEG quality (90) and computes the pixel-level
     error surface compared to the original. Spliced elements saved with different compression
     histories exhibit markedly elevated error levels relative to the page median.
+    Severity capped at Medium per Phase H guidelines.
     """
     if Image is None or np is None or pil_image is None:
         return []
@@ -175,7 +187,7 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
                 findings.append({
                     'rule_id': rule['id'],
                     'title': rule['title'],
-                    'severity': rule['severity'],
+                    'severity': 'Medium',
                     'category': rule['category'],
                     'status': 'Potential Anomaly',
                     'confidence': rule['confidence'],
@@ -183,7 +195,7 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
                     'page_number': page_num,
                     'coordinates': [int(x0), int(y0), int(x1), int(y1)],
                     'description': (
-                        f"Error Level Analysis identified an anomalous compression residue "
+                        f"[Heuristic Finding] Error Level Analysis identified an anomalous compression residue "
                         f"clustering at [{x0}, {y0}, {x1}, {y1}]. Block error is {round(max_err, 1)} "
                         f"(page median: {round(page_median, 1)}). Suggests this patch was saved under a "
                         f"different JPEG quantization history than the host document. [{rule['limitation']}]."
@@ -200,11 +212,13 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
 # 2. IMG-002: Noise & Sharpness Inconsistency
 # =====================================================================
 
+# Evaluates Laplacian variance disparities across non-overlapping image blocks
 def check_noise_and_sharpness_inconsistency(cv_image, block_size=64, page_num=1):
     """
     IMG-002: Evaluates the consistency of high-frequency texture and Laplacian variance
     across non-overlapping image blocks. Digital inserts pasted into an existing document
     frequently display sharpness or sensor noise disparities compared to the host page.
+    Severity capped at Medium per Phase H guidelines.
     """
     if cv2 is None or np is None or cv_image is None:
         return []
@@ -264,7 +278,7 @@ def check_noise_and_sharpness_inconsistency(cv_image, block_size=64, page_num=1)
             findings.append({
                 'rule_id': rule['id'],
                 'title': rule['title'],
-                'severity': rule['severity'],
+                'severity': 'Medium',
                 'category': rule['category'],
                 'status': 'Observation',
                 'confidence': rule['confidence'],
@@ -272,7 +286,7 @@ def check_noise_and_sharpness_inconsistency(cv_image, block_size=64, page_num=1)
                 'page_number': page_num,
                 'coordinates': [int(x0), int(y0), int(x1), int(y1)],
                 'description': (
-                    f"Sharpness and high-frequency edge variance in region [{x0}, {y0}, {x1}, {y1}] "
+                    f"[Heuristic Finding] Sharpness and high-frequency edge variance in region [{x0}, {y0}, {x1}, {y1}] "
                     f"is {round(max_ratio, 1)}x higher than the document median. Often indicates a sharp "
                     f"digital snippet pasted onto a lower-resolution or soft-scanned page. [{rule['limitation']}]."
                 ),
@@ -288,11 +302,38 @@ def check_noise_and_sharpness_inconsistency(cv_image, block_size=64, page_num=1)
 # 3. IMG-003: Copy-Move Forgery Detection (ORB Keypoint Matching)
 # =====================================================================
 
-def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
+# Detects bounding boxes of printed text lines to suppress false copy-move matches from repeated letters
+def _detect_text_line_boxes(gray_image):
+    """
+    Identifies rectangular bounding boxes of printed or rendered text lines.
+    Used by check_copy_move_orb to filter out false keypoint matches caused by repeated typographical characters.
+    """
+    if cv2 is None or np is None or gray_image is None:
+        return []
+    try:
+        _, thresh = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 5))
+        connected = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(connected, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        boxes = []
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            # Text lines typically have small height and horizontal aspect ratio
+            if 5 <= h <= 35 and (w / max(1, h)) >= 1.4:
+                boxes.append((x - 6, y - 3, x + w + 6, y + h + 3))
+        return boxes
+    except Exception:
+        return []
+
+
+# Identifies cloned or duplicated regions within a single image using ORB keypoint matching
+def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1, text_boxes=None):
     """
     IMG-003: Identifies cloned or duplicated regions within a single image using ORB
     keypoint descriptor matching and spatial displacement vector clustering.
     Cloned text, numbers, or rubber stamps generate parallel keypoint vectors.
+    Ignores matches whose keypoints fall within detected text areas to avoid matching repeated letters.
+    Severity capped at Medium per Phase H guidelines.
     """
     if cv2 is None or np is None or cv_image is None:
         return []
@@ -309,6 +350,16 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
         h, w = gray.shape
         if h < 100 or w < 100:
             return []
+
+        # Detect text areas if not supplied
+        if text_boxes is None:
+            text_boxes = _detect_text_line_boxes(gray)
+
+        def _is_in_text(pt):
+            for bx0, by0, bx1, by1 in text_boxes:
+                if bx0 <= pt[0] <= bx1 and by0 <= pt[1] <= by1:
+                    return True
+            return False
 
         orb = cv2.ORB_create(nfeatures=1200)
         keypoints, descriptors = orb.detectAndCompute(gray, None)
@@ -333,6 +384,10 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
             if m.distance < 0.78 * n.distance:
                 pt1 = keypoints[m.queryIdx].pt
                 pt2 = keypoints[m.trainIdx].pt
+
+                # Principled Phase H filter: ignore matches whose points overlap detected text areas
+                if _is_in_text(pt1) or _is_in_text(pt2):
+                    continue
 
                 dx = pt2[0] - pt1[0]
                 dy = pt2[1] - pt1[1]
@@ -379,7 +434,7 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
                 findings.append({
                     'rule_id': rule['id'],
                     'title': rule['title'],
-                    'severity': rule['severity'],
+                    'severity': 'Medium',
                     'category': rule['category'],
                     'status': 'Potential Anomaly',
                     'confidence': rule['confidence'],
@@ -387,7 +442,7 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
                     'page_number': page_num,
                     'coordinates': [x0, y0, x1, y1],
                     'description': (
-                        f"ORB feature keypoint matching detected {len(members)} coherent cloned feature vectors "
+                        f"[Heuristic Finding] ORB feature keypoint matching detected {len(members)} coherent cloned feature vectors "
                         f"with consistent spatial offset between regions. Suggests digital copy-move duplication of "
                         f"a graphical element, stamp, or numerical figure. [{rule['limitation']}]."
                     ),
@@ -403,12 +458,14 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1):
 # 4. IMG-004: Signature Region Verification
 # =====================================================================
 
-def check_signature_region(cv_image, page_num=1):
+# Scans lower page section for handwritten signature strokes; only reports when found or when expected
+def check_signature_region(cv_image, page_num=1, doc_category=None, expects_signature=False):
     """
     IMG-004: Scans the lower section of a document page for handwritten signature strokes.
     Evaluates stroke presence, location, and potential overlap with printed text baseline rules.
-    If the document format or quality does not allow reliable signature extraction,
-    returns an explicit unsupported notice per specification.
+    Phase H: Only emits a finding when signature strokes are actually detected or when the
+    document category explicitly expects a signature (e.g. Contract, Agreement).
+    Does not emit noisy 'unsupported' findings on ordinary documents.
     """
     if cv2 is None or np is None or cv_image is None:
         return []
@@ -423,7 +480,7 @@ def check_signature_region(cv_image, page_num=1):
             gray = cv_image
 
         h, w = gray.shape
-        # If image is too small or unsuited for signature analysis
+        # If image is below minimum threshold for signature analysis
         if h < 200 or w < 200:
             findings.append({
                 'rule_id': rule['id'],
@@ -439,6 +496,10 @@ def check_signature_region(cv_image, page_num=1):
                 'evidence': f"Dimensions: {w}x{h} px"
             })
             return findings
+
+        # Check whether this document type expects a signature
+        cat_str = str(doc_category).lower() if doc_category else ''
+        is_expected = bool(expects_signature or any(k in cat_str for k in SIGNATURE_EXPECTED_CATEGORIES))
 
         # Focus inspection on the bottom third of the page
         roi_y0 = int(h * 0.65)
@@ -460,8 +521,9 @@ def check_signature_region(cv_image, page_num=1):
             area = stats[i, cv2.CC_STAT_AREA]
             cw = stats[i, cv2.CC_STAT_WIDTH]
             ch = stats[i, cv2.CC_STAT_HEIGHT]
-            # Handwritten strokes have moderate area and non-rectangular aspect ratios
-            if 150 < area < 8000 and cw > 15 and ch > 10:
+            # Handwritten strokes have moderate area and non-rectangular aspect ratios;
+            # Ignore full-width page borders (cw >= w * 0.70)
+            if 150 < area < 8000 and 15 < cw < (w * 0.70) and ch > 10:
                 aspect = cw / float(ch)
                 if 0.3 < aspect < 6.0:
                     bx = stats[i, cv2.CC_STAT_LEFT]
@@ -476,7 +538,6 @@ def check_signature_region(cv_image, page_num=1):
             y1 = max(c[3] for c in signature_components)
 
             # Check if signature overlaps printed text lines
-            # Printed lines have long horizontal structural profiles
             roi_sig = thresh[y0 - roi_y0:y1 - roi_y0, x0:x1] if (y1 - roi_y0) <= thresh.shape[0] else thresh[y0 - roi_y0:, x0:x1]
             has_line_overlap = False
             if roi_sig.size > 0:
@@ -504,7 +565,8 @@ def check_signature_region(cv_image, page_num=1):
                 ),
                 'evidence': f"Ink cluster of {len(signature_components)} components at [{x0}, {y0}, {x1}, {y1}]"
             })
-        else:
+        elif is_expected:
+            # Only emit missing signature notice if document category strictly expects one
             findings.append({
                 'rule_id': rule['id'],
                 'title': rule['title'],
@@ -515,7 +577,7 @@ def check_signature_region(cv_image, page_num=1):
                 'evidence_class': rule['evidence_class'],
                 'page_number': page_num,
                 'coordinates': None,
-                'description': "signature analysis: unsupported for this document (no candidate ink strokes detected in designated signature zones).",
+                'description': "signature analysis: no candidate ink strokes detected in designated signature zones for document type expecting signature.",
                 'evidence': "No handwriting components found in lower 35% of page"
             })
     except Exception as e:
@@ -528,13 +590,17 @@ def check_signature_region(cv_image, page_num=1):
 # 5. Master Image Forensics Coordinator
 # =====================================================================
 
-def run_image_forensics(file_path):
+# Coordinates image forensic checks; runs only on standalone raster images and embedded images inside PDFs
+def run_image_forensics(file_path, doc_category=None):
     """
-    Master runner for Phase D image forensics.
+    Master runner for Phase D/H image forensics.
     Executes ELA, sharpness inconsistency, copy-move matching, and signature checks.
     Supports standalone raster images (.png, .jpg, .jpeg, .tiff, .bmp) as well as
-    embedded or rasterized pages of PDF files.
-    Returns standard VEXORA finding dictionaries.
+    embedded raster images extracted from PDF files.
+
+    Principled Gate (Phase H):
+    - Never rasterizes born-digital vector PDF pages into synthetic images.
+    - If a PDF has no embedded images, records a single Observation note.
     """
     if not is_image_forensics_available():
         logger.warning("[Image Forensics] OpenCV/NumPy/Pillow dependencies not available.")
@@ -559,31 +625,61 @@ def run_image_forensics(file_path):
             findings.extend(check_error_level_analysis(pil_img, page_num=1))
             findings.extend(check_noise_and_sharpness_inconsistency(cv_img, page_num=1))
             findings.extend(check_copy_move_orb(cv_img, page_num=1))
-            findings.extend(check_signature_region(cv_img, page_num=1))
+            findings.extend(check_signature_region(cv_img, page_num=1, doc_category=doc_category))
         except Exception as e:
             logger.warning(f"[Image Forensics] Error processing image {file_path}: {e}")
 
-    # Case B: Multi-page PDF Document (Rasterize up to first 3 pages)
+    # Case B: Multi-page PDF Document — Extract EMBEDDED raster images only
     elif ext == 'pdf' and fitz is not None:
         try:
             doc = fitz.open(file_path)
-            max_pages = min(len(doc), 3)
-            for page_idx in range(max_pages):
+            embedded_count = 0
+            for page_idx in range(len(doc)):
                 page = doc[page_idx]
                 page_num = page_idx + 1
+                image_list = page.get_images(full=True)
+                for img_info in image_list:
+                    xref = img_info[0]
+                    try:
+                        base_image = doc.extract_image(xref)
+                        if not base_image:
+                            continue
+                        img_bytes = base_image.get("image")
+                        if not img_bytes:
+                            continue
+                        pil_img = Image.open(io.BytesIO(img_bytes))
+                        w, h = pil_img.size
+                        # Skip tiny icons or 1px spacer artifacts
+                        if w < 50 or h < 50:
+                            continue
 
-                # Render page at 150 DPI for forensic sharpness
-                pix = page.get_pixmap(dpi=150)
-                img_data = pix.tobytes("png")
-                pil_img = Image.open(io.BytesIO(img_data))
-                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                        embedded_count += 1
+                        cv_img = cv2.cvtColor(np.array(pil_img.convert('RGB')), cv2.COLOR_RGB2BGR)
 
-                findings.extend(check_error_level_analysis(pil_img, page_num=page_num))
-                findings.extend(check_noise_and_sharpness_inconsistency(cv_img, page_num=page_num))
-                findings.extend(check_copy_move_orb(cv_img, page_num=page_num))
-                findings.extend(check_signature_region(cv_img, page_num=page_num))
+                        findings.extend(check_error_level_analysis(pil_img, page_num=page_num))
+                        findings.extend(check_noise_and_sharpness_inconsistency(cv_img, page_num=page_num))
+                        findings.extend(check_copy_move_orb(cv_img, page_num=page_num))
+                    except Exception as img_err:
+                        logger.warning(f"[Image Forensics] Error extracting image xref {xref} in {file_path}: {img_err}")
+
             doc.close()
+
+            # Phase H Principled Gate: Born-digital PDF with no embedded images
+            if embedded_count == 0:
+                findings.append({
+                    'rule_id': '',
+                    'title': 'Image Forensics Not Applicable',
+                    'severity': 'Info',
+                    'category': 'Visual Forensics',
+                    'status': 'Observation',
+                    'confidence': 1.0,
+                    'evidence_class': 'Observation',
+                    'page_number': 1,
+                    'coordinates': None,
+                    'description': 'image forensics not applicable: born-digital PDF with no embedded images',
+                    'evidence': 'Born-digital PDF with no embedded images'
+                })
         except Exception as e:
-            logger.warning(f"[Image Forensics] Error rasterizing PDF {file_path}: {e}")
+            logger.warning(f"[Image Forensics] Error extracting embedded images from PDF {file_path}: {e}")
 
     return findings

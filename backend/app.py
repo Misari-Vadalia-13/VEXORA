@@ -583,7 +583,7 @@ def create_app(config_class=Config):
         Protected by ENABLE_CORRELATOR feature flag.
         """
         from backend.config import Config
-        enabled = getattr(Config, 'ENABLE_CORRELATOR', False) or app.config.get('ENABLE_CORRELATOR', False)
+        enabled = getattr(Config, 'ENABLE_CORRELATOR', False)
         if not enabled:
             return jsonify({
                 'success': False,
@@ -837,12 +837,22 @@ def create_app(config_class=Config):
             storage_health['reports_folder_writable']
         )
 
+        # V2 Diagnostics & Feature Flags Status (Phase H)
+        try:
+            from backend.banner import get_v2_features_status
+            v2_status = get_v2_features_status(app)
+        except Exception:
+            v2_status = {}
+
         return jsonify({
             'success': True,
             'status': 'Operational' if all_healthy else 'Degraded',
             'engine_version': 'VEXORA v1.0 (Phase 9 Fully Integrated)',
             'python_version': sys.version.split()[0],
             'pymupdf_version': mupdf_ver,
+            'v2_features': v2_status,
+            'tesseract_available': v2_status.get('tesseract_available', False),
+            'tesseract_detail': v2_status.get('tesseract_detail', 'Unknown'),
             'database': {
                 'status': db_status,
                 'engine': 'SQLite 3 Relational',
@@ -1151,5 +1161,9 @@ def create_app(config_class=Config):
 if __name__ == '__main__':
     app = create_app()
     port = int(os.environ.get('PORT', 5000))
-    print(f"[*] Starting VEXORA Backend & API Server on http://127.0.0.1:{port}")
+    try:
+        from backend.banner import print_startup_banner
+        print_startup_banner(port=port, app_instance=app)
+    except Exception:
+        print(f"[*] Starting VEXORA Backend & API Server on http://127.0.0.1:{port}")
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)

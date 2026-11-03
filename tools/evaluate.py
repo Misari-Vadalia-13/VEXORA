@@ -102,9 +102,9 @@ def run_evaluation():
                 pdf_findings = run_extended_pdf_forensics(str(fpath))
                 all_findings.extend(pdf_findings)
 
-            # 5. Image Forensics
-            if ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp'):
-                img_findings = run_image_forensics(str(fpath))
+            # 5. Image Forensics (Standalone Images and PDF Embedded Images)
+            if ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp', 'pdf'):
+                img_findings = run_image_forensics(str(fpath), doc_category=cat)
                 all_findings.extend(img_findings)
 
         except Exception as e:

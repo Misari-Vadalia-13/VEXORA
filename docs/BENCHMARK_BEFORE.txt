@@ -1,0 +1,57 @@
+﻿
+==========================================================================================
+ VEXORA FORENSIC INTELLIGENCE SYSTEM ΓÇö BENCHMARK EVALUATION REPORT
+==========================================================================================
+Target Dataset: C:\VEXORA\demo_dataset
+Total Test Documents: 20
+
+Filename                             | Type       | Ground   | Fired Rule(s)        | Verdict 
+------------------------------------------------------------------------------------------
+genuine_01_invoice.pdf               | Genuine    | Genuine  | RULE-CTX-001, RUL... | FP (ALARM)
+genuine_02_invoice.pdf               | Genuine    | Genuine  | RULE-CTX-002         | FP (ALARM)
+genuine_03_bank_statement.pdf        | Genuine    | Genuine  | None (Clean)         | TN (CLEAN)
+genuine_04_bank_statement.pdf        | Genuine    | Genuine  | None (Clean)         | TN (CLEAN)
+genuine_05_purchase_order.pdf        | Genuine    | Genuine  | None (Clean)         | TN (CLEAN)
+genuine_06_contract.pdf              | Genuine    | Genuine  | RULE-CTX-001         | FP (ALARM)
+genuine_07_tax_return.pdf            | Genuine    | Genuine  | None (Clean)         | TN (CLEAN)
+genuine_08_receipt.png               | Genuine    | Genuine  | IMG-001, IMG-002,... | FP (ALARM)
+genuine_09_id_card.png               | Genuine    | Genuine  | IMG-001, IMG-002,... | FP (ALARM)
+genuine_10_audit_report.pdf          | Genuine    | Genuine  | None (Clean)         | TN (CLEAN)
+tampered_01_font_shift.pdf           | Tampered   | Anomaly  | RULE-CTX-001, RUL... | TP (HIT)
+tampered_02_whitebox_patch.png       | Tampered   | Anomaly  | IMG-002, IMG-003,... | TP (HIT)
+tampered_03_reversed_dates.pdf       | Tampered   | Anomaly  | RULE-CTX-003         | TP (HIT)
+tampered_04_duplicate_inv_a.pdf      | Tampered   | Anomaly  | None (Clean)         | FN (MISS)
+tampered_05_duplicate_inv_b.pdf      | Tampered   | Anomaly  | None (Clean)         | FN (MISS)
+tampered_06_bank_mismatch.pdf        | Tampered   | Anomaly  | None (Clean)         | FN (MISS)
+tampered_07_photoshop_meta.pdf       | Tampered   | Anomaly  | PDF-003              | TP (HIT)
+tampered_08_copymove_stamp.png       | Tampered   | Anomaly  | IMG-001, IMG-002,... | TP (HIT)
+tampered_09_future_timeline.pdf      | Tampered   | Anomaly  | RULE-CTX-003         | TP (HIT)
+tampered_10_divergent_timestamps.pdf | Tampered   | Anomaly  | PDF-003              | TP (HIT)
+
+==========================================================================================
+ SUMMARY FORENSIC PERFORMANCE METRICS
+==========================================================================================
+Total Evaluated Documents : 20
+Genuine Documents         : 10 (True Negatives: 5, False Positives: 5)
+Tampered Documents        : 10 (True Positives: 7, False Negatives: 3)
+--------------------------------------------------
+Overall Accuracy          : 60.0%
+Recall (Detection Rate)   : 70.0%
+Precision                 : 58.3%
+Specificity (Clean Rate)  : 50.0%
+F1-Score                  : 63.6%
+==========================================================================================
+
+PER-RULE ACTIVATION COUNTS:
+--------------------------------------------------
+  ΓÇó IMG-002          : 4 hit(s)
+  ΓÇó IMG-003          : 4 hit(s)
+  ΓÇó IMG-004          : 4 hit(s)
+  ΓÇó RULE-CTX-001     : 3 hit(s)
+  ΓÇó IMG-001          : 3 hit(s)
+  ΓÇó RULE-CTX-002     : 2 hit(s)
+  ΓÇó RULE-CTX-003     : 2 hit(s)
+  ΓÇó PDF-003          : 2 hit(s)
+  ΓÇó RULE-VIS-001     : 1 hit(s)
+--------------------------------------------------
+
