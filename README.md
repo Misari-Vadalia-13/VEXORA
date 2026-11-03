@@ -191,15 +191,16 @@ The comprehensive automated test suite covers:
 - Audit trail logging with parameterized filtering, RFC 4180 CSV / JSON exports, and system diagnostics self-test.
 - Complete end-to-end investigation lifecycle verification.
 
-All 114 automated tests execute cleanly against isolated test databases:
+All 148 automated tests across 13 test suites (39 baseline + 109 V2) execute cleanly against isolated test databases:
 
 ```bash
-.\.venv\Scripts\python -m unittest tests/test_backend.py tests/test_v2_contract.py tests/test_v2_phase_a.py tests/test_v2_phase_b.py tests/test_v2_phase_c.py tests/test_v2_phase_d.py tests/test_v2_phase_e.py tests/test_v2_phase_f.py
+.\.venv\Scripts\python -m unittest tests/test_backend.py tests/test_v2_contract.py tests/test_v2_phase_a.py tests/test_v2_phase_b.py tests/test_v2_phase_c.py tests/test_v2_phase_d.py tests/test_v2_phase_e.py tests/test_v2_phase_f.py tests/test_v2_phase_g.py tests/test_v2_phase_h.py tests/test_v2_phase_i.py tests/test_v2_phase_j.py tests/test_v2_phase_k.py
 ```
+*(Note: LLM integration tests use HTTP mocks (`requests.post`) to avoid requiring live API tokens during automated regression runs.)*
 
 ## ⚡ V2 Forensic Extensions & Additions
 
-The platform has been significantly deepened through seven additive phases (Phases A through G), introducing advanced forensic capabilities:
+The platform has been systematically deepened through eleven additive phases (Phases A through L), introducing advanced forensic capabilities:
 
 - **Phase A — Visual Evidence Overlays:** Interactive modal viewer highlighting physical document bounding boxes in red via `/api/findings/<id>/evidence-image` with 2D zoom/pan controls.
 - **Phase B — Deeper PDF Forensics:** Extends analysis beyond OCR with rules `PDF-001` through `PDF-005` (incremental update / timestamp divergence, embedded font subset anomalies, editing software metadata signatures like Photoshop/GIMP, optional content hidden layers `/OCProperties`, and multi-source page geometry variance). Findings are classified into `Observation`, `Inconsistency`, and `Potential Manipulation`.
@@ -208,6 +209,11 @@ The platform has been significantly deepened through seven additive phases (Phas
 - **Phase E — Real Field-Level Confidence:** Extracts per-word confidences from `pytesseract.image_to_data` and mathematically computes averages for extracted entities. Digital text is explicitly labeled `"n/a (digital text)"`. UI and dossiers display heuristic weights as **"Rule Weight"** to prevent confusing rule thresholds with statistical probabilities.
 - **Phase F — Cross-Document Correlation & Relationship Graph:** Multi-document correlation engine (`backend/correlator.py`) connecting shared invoice numbers, matching financial totals, fuzzy counterparties (via corporate suffix normalization), and chronological conflicts. Visualized via an interactive vanilla SVG relationship graph with zero external JavaScript charting libraries. Includes content-based semantic classification fallback (`backend/classifier_content.py`).
 - **Phase G — Benchmark Evaluation & Proof:** Programmatic generator (`tools/make_samples.py`) creating a 20-file benchmark dataset (`demo_dataset/`) with ground-truth `labels.csv`, evaluated via `tools/evaluate.py` to produce unvarnished precision, recall, and false alarm performance metrics.
+- **Phase H — Stabilized Demo & Principled Image Forensics Gate:** Gated `IMG-001` (ELA), `IMG-002` (sharpness), and `IMG-003` (copy-move) strictly to raster uploads and embedded PDF images, preventing false alarms on born-digital PDF vector pages. Added `.env.example` and safe startup diagnostic banner.
+- **Phase I — Resilient Live LLM Layer:** Configurable `VEXORA_LLM_MODEL` with HTTP 404 resilience, live `POST /api/system/ai-test` diagnostic endpoint with frontend test button, and quote-grounded substring validation for structured extracted fields.
+- **Phase J — Two-Tier Evaluation & Discrepancy Matrix:** Added cross-document case evaluation (`cases.csv`) to benchmark suite, and enhanced comparator and dossier reports with explicit discrepancy values (`attribute`, `doc_a_val`, `doc_b_val`).
+- **Phase K — Complete Dossier Sections:** Added five complete investigation dossier sections compliant with the problem statement: Extracted Information (K1), Evidence & Traceability with highlighted image crops (K2), Plain-Language Summary (K3), Verification Areas (K4), and Forensic Limitations (K5).
+- **Phase L — Documentation Honesty & Measured Benchmarks:** Aligned documentation with empirical performance (60.0% single-document accuracy, 100.0% case-level correlation accuracy), disclosed synthetic benchmark origin, noted mock usage in tests, and documented SQLite audit logging conventions.
 
 ## 🔬 Technical Corrections & Honesty Notes
 
@@ -217,6 +223,21 @@ To maintain forensic and scientific accuracy, the following technical facts are 
 2. **File Validation:** Document ingestion validates file extensions against an allowed list and computes SHA-256 cryptographic hashes for tamper resistance; it does not invoke binary MIME `libmagic` sniffing.
 3. **PDF Libraries:** Text extraction, glyph coordinates, and page bitmap rasterization are performed via PyMuPDF (`pymupdf`). Vector PDF dossiers are constructed via PyMuPDF and ReportLab primitives.
 4. **Honesty in Forensics:** The system never declares "confirmed fraud." Every automated finding is classified as a heuristic observation or potential anomaly requiring qualified human investigator review.
+
+## 📊 Measured Benchmark Performance & Known Limitations
+
+Forensic integrity requires transparent disclosure of performance boundaries. The evaluation benchmark (`tools/evaluate.py`) measures the system across 20 synthetic demonstration files and 3 cross-document case scenarios:
+
+- **Single-Document Isolated Evaluation (20 synthetic files):**
+  - **Accuracy:** 60.0% | **Recall:** 70.0% | **Precision:** 58.3% | **Specificity:** 50.0% | **F1-Score:** 63.6%
+  - **False Alarms (5 genuine files flagged):** Non-standard template layouts trigger missing statutory field heuristics (`RULE-CTX-001`), round numbers trigger `RULE-CTX-002`, and flat computer-generated fills trigger image ELA (`IMG-001`) and sharpness variance (`IMG-002`) due to the absence of camera sensor noise.
+  - **Misses (3 tampered files missed):** Duplicate invoices (`tampered_04`, `tampered_05`) and bank mismatches (`tampered_06`) are internally valid and mathematically consistent in isolation; their tampering only exists across documents.
+- **Cross-Document Case-Level Correlation (3 multi-document cases):**
+  - **Accuracy:** 100.0% | **Recall:** 100.0% | **Precision:** 100.0% | **Specificity:** 100.0% | **F1-Score:** 100.0%
+  - The cross-document comparator (`backend/comparator.py`) cross-references invoice numbers, totals, and counterparties, successfully uncovering duplicate billings and bank record discrepancies that cannot be found in isolation.
+- **Benchmark Nature:** All 20 evaluation files are synthetic demonstration samples generated by `tools/make_samples.py`, not real-world paper scans.
+- **Heuristics vs. Proof:** Automated findings represent potential anomalies and heuristic observations requiring qualified human investigator review, never definitive legal determinations of fraud.
+- **Audit Logging:** The SQLite `audit_log` records events sequentially by application convention; it is not a cryptographic or tamper-proof hardware ledger.
 
 ## ⚠️ Important Disclaimer
 
