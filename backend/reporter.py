@@ -8,6 +8,7 @@ cross-document discrepancy matrices, bounding-box provenance, and mandatory huma
 import os
 import json
 import hashlib
+import html
 from datetime import datetime
 from pathlib import Path
 
@@ -452,10 +453,21 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
                 page = create_page()
                 y = 50.0
 
-            page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 24), color=(226/255, 232/255, 240/255), fill=(254/255, 242/255, 242/255), width=0.5)
-            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 10), f"Conflict: {d.get('field', 'Attribute')}", fontname="hebo", fontsize=7.5, color=(185/255, 28/255, 28/255))
-            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 20), d.get('message', '')[:110], fontname="helv", fontsize=7, color=(51/255, 65/255, 85/255))
-            y += 28.0
+            attr = d.get('attribute') or d.get('field') or 'Attribute Discrepancy'
+            val_a = d.get('val_a', '')
+            val_b = d.get('val_b', '')
+            doc_a = d.get('doc_a_filename') or d.get('doc_a_id') or 'Doc A'
+            doc_b = d.get('doc_b_filename') or d.get('doc_b_id') or 'Doc B'
+            if val_a and val_b:
+                conflict_hdr = f"Conflict: {attr}: {val_a} in {doc_a} vs {val_b} in {doc_b}"
+            else:
+                conflict_hdr = f"Conflict: {attr} between {doc_a} and {doc_b}"
+            expl = d.get('explanation') or d.get('message') or ''
+
+            page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 26), color=(226/255, 232/255, 240/255), fill=(254/255, 242/255, 242/255), width=0.5)
+            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 10), conflict_hdr[:105], fontname="hebo", fontsize=7.2, color=(185/255, 28/255, 28/255))
+            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 20), expl[:115], fontname="helv", fontsize=6.8, color=(51/255, 65/255, 85/255))
+            y += 30.0
 
     y += 14.0
 
@@ -645,10 +657,21 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
         disc_cards = "<p style='color:#64748b;'>No cross-document conflicts or monetary disparities identified.</p>"
     else:
         for d in discrepancies:
+            attr = d.get('attribute') or d.get('field') or 'Attribute Discrepancy'
+            val_a = d.get('val_a', '')
+            val_b = d.get('val_b', '')
+            doc_a = d.get('doc_a_filename') or d.get('doc_a_id') or 'Doc A'
+            doc_b = d.get('doc_b_filename') or d.get('doc_b_id') or 'Doc B'
+            if val_a and val_b:
+                conflict_hdr = f"{attr}: {val_a} in {doc_a} vs {val_b} in {doc_b}"
+            else:
+                conflict_hdr = f"{attr} conflict between {doc_a} and {doc_b}"
+            expl = d.get('explanation') or d.get('message') or ''
+
             disc_cards += f"""
             <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:4px; padding:10px 14px; margin-bottom:8px;">
-                <strong style="color:#b91c1c;">⚠️ {d.get('field', 'Attribute Discrepancy')}</strong>
-                <p style="font-size:0.85rem; color:#334155; margin:4px 0 0 0;">{d.get('message', '')}</p>
+                <strong style="color:#b91c1c;">⚠️ Conflict: {html.escape(conflict_hdr)}</strong>
+                <p style="font-size:0.85rem; color:#334155; margin:4px 0 0 0;">{html.escape(expl)}</p>
             </div>
             """
 

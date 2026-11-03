@@ -427,13 +427,15 @@ def compare_case_documents(case_id, user="System"):
                             'doc_b_id': doc_b['id'],
                             'doc_b_filename': doc_b['filename'],
                             'attribute': item['attribute'],
+                            'field': item['attribute'],
                             'val_a': item['val_a'],
                             'val_b': item['val_b'],
                             'page_a': item.get('page_a', 1),
                             'page_b': item.get('page_b', 1),
                             'verdict': item['verdict'],
                             'status': item['status'],
-                            'explanation': item['explanation']
+                            'explanation': item['explanation'],
+                            'message': item['explanation']
                         })
 
     return {

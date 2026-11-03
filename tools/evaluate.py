@@ -25,9 +25,15 @@ from backend.forensics_pdf import run_extended_pdf_forensics
 from backend.forensics_image import run_image_forensics
 from backend.classifier import classify_document
 from backend.classifier_content import classify_by_content
+import backend.database as db_module
+from backend.database import init_db
+from backend.models import create_case, create_document, save_document_extraction
+from backend.comparator import compare_case_documents
+from backend.correlator import build_case_relationship_graph
 
 DATASET_DIR = PROJECT_ROOT / 'demo_dataset'
 LABELS_PATH = DATASET_DIR / 'labels.csv'
+CASES_PATH = DATASET_DIR / 'cases.csv'
 
 
 def run_evaluation():
@@ -186,5 +192,157 @@ def run_evaluation():
     return 0
 
 
+def run_case_evaluation():
+    """
+    Evaluates cross-document correlation and comparison rules against cases.csv.
+    Tests duplicate reference collisions, financial total mismatches, and genuine paired records.
+    """
+    if not CASES_PATH.exists():
+        print(f"\n[INFO] Case evaluation file not found at {CASES_PATH}. Skipping case-level evaluation.")
+        return 0
+
+    print("\n" + "=" * 90)
+    print(" SECTION 2: CROSS-DOCUMENT CASE-LEVEL EVALUATION (Comparator & Correlator)")
+    print("=" * 90)
+
+    # Save previous active database to restore afterwards
+    prev_db = getattr(db_module, '_last_active_db', None)
+
+    # Initialize ephemeral database for case evaluation
+    eval_db_path = str((PROJECT_ROOT / 'backend' / 'eval_benchmark.db').resolve())
+    if os.path.exists(eval_db_path):
+        try:
+            os.remove(eval_db_path)
+        except Exception:
+            pass
+
+    init_db(eval_db_path)
+    Config.ENABLE_CORRELATOR = True
+
+    cases = []
+    with open(CASES_PATH, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cases.append(row)
+
+    print(f"Target Scenarios: {CASES_PATH}")
+    print(f"Total Test Cases: {len(cases)}\n")
+
+    col_fmt = "{:<28} | {:<10} | {:<8} | {:<28} | {:<8}"
+    print(col_fmt.format("Case ID", "Type", "Ground", "Detected Discrepancies", "Verdict"))
+    print("-" * 90)
+
+    c_tp = 0
+    c_fn = 0
+    c_tn = 0
+    c_fp = 0
+
+    for c in cases:
+        cid = c['case_id']
+        is_tampered = int(c.get('is_tampered', 0))
+        filenames = [fn.strip() for fn in c.get('filenames', '').split(';') if fn.strip()]
+
+        create_case({
+            'title': c.get('title', cid),
+            'type': 'Cross-Document Benchmark',
+            'priority': 'High',
+            'status': 'Active',
+            'investigator': 'Benchmark Runner',
+            'description': c.get('tampering_type', 'Benchmark Case')
+        }, custom_id=cid)
+
+        for idx, fn in enumerate(filenames):
+            fpath = DATASET_DIR / fn
+            if not fpath.exists():
+                continue
+            ext = fpath.suffix.lower().lstrip('.')
+            doc_id = f"DOC-{cid}-{idx+1:02d}"
+            ext_data = extract_document_content(str(fpath))
+            create_document({
+                'id': doc_id,
+                'case_id': cid,
+                'filename': fn,
+                'file_type': ext,
+                'file_size': fpath.stat().st_size,
+                'file_path': str(fpath.resolve()),
+                'category': 'Invoice',
+                'status': 'Analyzed'
+            })
+            save_document_extraction(doc_id, ext_data)
+
+        cmp_res = compare_case_documents(cid)
+        graph_res = build_case_relationship_graph(cid)
+
+        discrepancies = cmp_res.get('discrepancies', [])
+        has_conflict = len(discrepancies) > 0
+
+        # Extract unique discrepancy attributes
+        disc_attrs = list({d.get('attribute', 'Discrepancy') for d in discrepancies})
+        disc_str = ", ".join(disc_attrs) if disc_attrs else "None (Matches)"
+        if len(disc_str) > 28:
+            disc_str = disc_str[:25] + "..."
+
+        verdict = ""
+        if is_tampered == 1:
+            if has_conflict:
+                c_tp += 1
+                verdict = "TP (HIT)"
+            else:
+                c_fn += 1
+                verdict = "FN (MISS)"
+        else:
+            if has_conflict:
+                c_fp += 1
+                verdict = "FP (ALARM)"
+            else:
+                c_tn += 1
+                verdict = "TN (CLEAN)"
+
+        type_str = "Tampered" if is_tampered == 1 else "Genuine"
+        ground_str = "Anomaly" if is_tampered == 1 else "Genuine"
+        print(col_fmt.format(cid[:28], type_str, ground_str, disc_str, verdict))
+
+    # Case Summary Metrics
+    total_cases = len(cases)
+    total_tampered = c_tp + c_fn
+    total_genuine = c_tn + c_fp
+
+    c_acc = ((c_tp + c_tn) / total_cases * 100) if total_cases > 0 else 0.0
+    c_rec = (c_tp / total_tampered * 100) if total_tampered > 0 else 0.0
+    c_prec = (c_tp / (c_tp + c_fp) * 100) if (c_tp + c_fp) > 0 else 0.0
+    c_spec = (c_tn / total_genuine * 100) if total_genuine > 0 else 0.0
+    c_f1 = (2 * c_prec * c_rec / (c_prec + c_rec)) if (c_prec + c_rec) > 0 else 0.0
+
+    print("\n" + "=" * 90)
+    print(" SUMMARY CASE-LEVEL FORENSIC PERFORMANCE METRICS")
+    print("=" * 90)
+    print(f"Total Evaluated Cases     : {total_cases}")
+    print(f"Genuine Cases             : {total_genuine} (True Negatives: {c_tn}, False Positives: {c_fp})")
+    print(f"Tampered Cases            : {total_tampered} (True Positives: {c_tp}, False Negatives: {c_fn})")
+    print("-" * 50)
+    print(f"Case-Level Accuracy       : {c_acc:.1f}%")
+    print(f"Case Recall (Detection)   : {c_rec:.1f}%")
+    print(f"Case Precision            : {c_prec:.1f}%")
+    print(f"Case Specificity (Clean)  : {c_spec:.1f}%")
+    print(f"Case F1-Score             : {c_f1:.1f}%")
+    print("=" * 90 + "\n")
+
+    # Clean up ephemeral database and restore prior active database
+    if os.path.exists(eval_db_path):
+        try:
+            os.remove(eval_db_path)
+        except Exception:
+            pass
+    db_module._last_active_db = prev_db
+
+    return 0
+
+
+def run_all_evaluations():
+    doc_res = run_evaluation()
+    case_res = run_case_evaluation()
+    return doc_res or case_res
+
+
 if __name__ == '__main__':
-    sys.exit(run_evaluation())
+    sys.exit(run_all_evaluations())
