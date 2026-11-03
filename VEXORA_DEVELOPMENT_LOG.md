@@ -1362,3 +1362,49 @@ In Phase J, VEXORA proves its case-level correlation capability. By evaluating e
   - `test_05_cases_csv_definitions_and_files_exist`: Verifies `demo_dataset/cases.csv` defines all three cases and all files exist on disk.
   - `test_06_case_evaluation_engine_runs_successfully`: Verifies `run_case_evaluation()` runs to completion with exit code 0.
 - **Combined Test Total:** 142/142 tests passing across all 12 test suites (39 baseline + 103 V2).
+
+---
+
+## V2 Phase K — Dossier Completeness (P5 Fix) Log
+
+- **Completion Date:** 2026-11-03
+- **Status:** **Completed** (Tested on branch `feature/v2-phase-k`)
+
+### Executive Summary & Objectives
+Phase K resolved problem **P5** (dossier missing core sections required by the hackathon problem statement) by extending both PDF and HTML investigation dossiers with five comprehensive, audit-ready sections:
+1. **K1. Extracted Information & Field Confidence:**
+   - Per document, renders a structured table of extracted fields with entity name, extracted value, source page, and confidence descriptor (`"n/a (digital text)"` for digital vector PDFs, `"{score}% (OCR)"` for OCR scans, or `"AI quote-verified"` for quote-grounded extractions).
+   - If a document was processed via simulated fallback (when host system lacks Tesseract), displays a prominent warning banner: `⚠️ Simulated Fallback: Host system lacked Tesseract OCR; extraction used simulated text.`
+2. **K2. Evidence and Traceability (Top Findings):**
+   - Ranks findings by severity (`Critical` > `High` > `Medium` > `Low` > `Info`) and extracts the top 5 findings.
+   - For each finding, renders the rule ID, class label (`Observation`, `Inconsistency`, or `Potential Manipulation`), source page, bounding box coordinates (`[x0, y0, x1, y1]`), and verbatim source text quote.
+   - Embeds the visual highlighted evidence image generated via `backend/evidence.py`. If coordinates are not applicable (e.g., metadata rules), renders a clean, informative notice rather than failing.
+3. **K3. Plain-Language Investigation Summary:**
+   - Provides an executive-level summary translating technical rule flags into readable narrative prose for non-technical stakeholders.
+   - If AI intelligence data exists, appends the AI contextual summary below it, prominently labeled: `"AI-assisted, requires human review"`.
+4. **K4. Areas Requiring Further Verification:**
+   - Dynamically derives an actionable investigative checklist from the specific findings and discrepancies discovered (e.g., verifying bank wire settlements with issuing financial institutions, checking business registries for corporate entities, requesting native PDF files from server email logs, and examining paper originals for signature authenticity).
+5. **K5. Limitations & System Boundaries:**
+   - Explicitly discloses both static system assumptions (digital vs. physical boundary, English calibration, heuristic nature) and dynamic run-time conditions (whether OCR fallback was active, whether born-digital image forensics was skipped, whether AI was disabled or unconfigured, and whether visual heuristics were active).
+6. **Non-Breaking Defensive Architecture:**
+   - All new rendering sections in both vector PDF (`PyMuPDF`) and HTML report generators are wrapped in defensive `try...except` blocks, ensuring dossier export never fails due to missing coordinates or partial data.
+
+### Beginner-Friendly Explanation (For Hackathon Judges)
+**Why is an evidence-traceable dossier essential for automated document forensics?**
+In high-stakes compliance and legal audits, an AI or software scanner cannot simply say: *"This document is 85% risky."* A judge, auditor, or compliance officer will ask:
+1. *Where on the page is the problem?*
+2. *What exact words or numbers were flagged?*
+3. *How confident is the system in its reading?*
+4. *What steps should the human investigator take next?*
+
+In Phase K, VEXORA solves this by turning automated detection into a **complete forensic dossier**. Every finding is visually grounded with its highlighted image bounding box, exact source text quote, confidence score, and clear verification action items. Furthermore, by transparently stating its technical limitations (such as when a document has no embedded images or when OCR is operating in fallback mode), VEXORA provides the honesty and traceability required in real-world legal proceedings.
+
+### Test Coverage & Verification
+- Created `tests/test_v2_phase_k.py` containing 6 comprehensive unit tests:
+  - `test_01_all_phase_k_sections_present_in_pdf`: Verifies all 5 new sections (K1–K5) appear in generated PDF dossiers.
+  - `test_02_all_phase_k_sections_present_in_html`: Verifies all 5 new sections appear in generated HTML dossiers.
+  - `test_03_simulated_fallback_visible_warning`: Verifies simulated fallback mode renders a visible warning banner.
+  - `test_04_report_generation_succeeds_when_evidence_rendering_fails`: Verifies graceful fallback and successful report creation if evidence image generation fails.
+  - `test_05_report_generation_succeeds_when_ai_data_missing`: Verifies report generation succeeds cleanly when AI data is absent.
+  - `test_06_dossier_data_structure_completeness`: Verifies `generate_case_dossier_data` dictionary includes all 5 Phase K structured keys.
+- **Combined Test Total:** 148/148 tests passing across all 13 test suites (39 baseline + 109 V2).
