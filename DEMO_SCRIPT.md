@@ -21,7 +21,7 @@ This script is designed for a concise, high-impact, live evaluation by hackathon
 ## Demo Script
 
 ### ⏱️ 0:00 – 0:45 | Introduction & 1-Click Demo Seed
-**Action:** Click the topbar button: **`⚡ Load Demo Case`**
+**Action:** Click the topbar button: **`📁 Add Demo Case`** (or **`⚡ Reset & Load Demo`**)
 
 > **Talking Point:**
 > *"Judges, document fraud in financial procurement and legal disputes rarely happens in isolation. A single invoice might look completely clean, yet when correlated with bank statements and vendor registries, massive discrepancies emerge.*

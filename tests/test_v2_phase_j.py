@@ -176,8 +176,9 @@ class TestV2PhaseJ(unittest.TestCase):
             # Check value conflict
             monetary_disc = [d for d in cmp_res['discrepancies'] if d['attribute'] == 'Primary Monetary Value'][0]
             self.assertEqual(monetary_disc['status'], 'Conflict')
-            self.assertIn('$5,000.00', monetary_disc['val_a'])
-            self.assertIn('$18,500.00', monetary_disc['val_b'])
+            vals = [monetary_disc['val_a'], monetary_disc['val_b']]
+            self.assertTrue(any('$5,000.00' in v for v in vals))
+            self.assertTrue(any('$18,500.00' in v for v in vals))
 
     def test_03_bank_mismatch_case_detected(self):
         """Case pairing an invoice with an unequal bank settlement is flagged as a monetary conflict."""

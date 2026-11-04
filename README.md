@@ -332,9 +332,51 @@ VEXORA is being developed as a learning-focused software project with an emphasi
 </p>
 
 
+## 🚀 Quickstart (One-Command Startup)
+
+VEXORA provides turnkey startup scripts that automatically verify Python, initialize a virtual environment (`.venv`), install dependencies from `requirements.txt`, create `.env` from template, and launch the application:
+
+### Windows
+```cmd
+start.bat
+```
+*(Or simply double-click `start.bat` in Windows Explorer)*
+
+### macOS & Linux
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+Once started, open your web browser to **http://127.0.0.1:5000**.
+
+---
+
+## 💾 Where Your Data is Stored, and How to Back It Up
+
+- **Primary Database File**: By default, all cases, document metadata, forensic findings, and correlation graphs are saved to a local SQLite database at `backend/vexora.db`.
+- **Configurable Database Path**: You can store the database anywhere on your system by configuring `VEXORA_DB_PATH` in your `.env` file or environment variables:
+  ```env
+  VEXORA_DB_PATH=backend/vexora.db
+  # Or custom path:
+  # VEXORA_DB_PATH=C:/data/vexora_investigations.db
+  ```
+- **Active Path Verification**: At server startup, the absolute path of the database in use is explicitly logged:
+  ```
+  [*] VEXORA Database in use: C:\VEXORA\backend\vexora.db
+  ```
+- **Pre-Wipe Automated Backups**: Whenever an investigator clicks **"Reset & Load Demo"** (`POST /api/demo/reset`), VEXORA automatically creates a timestamped safety backup in `backend/backups/vexora_YYYYMMDD_HHMMSS.db` before wiping, automatically rotating to retain the 5 newest backups.
+- **Non-Destructive Demo Seeding**: If you want to explore the benchmark Apex Global case without erasing your active work, click **"Add Demo Case"** (`POST /api/demo/add`). It seeds the demo case while preserving all existing investigations and documents.
+- **Manual Backups**: To manually backup your investigation dataset, simply copy `backend/vexora.db`, or run:
+  ```powershell
+  python -c "from tools.reset_demo import backup_database; backup_database()"
+  ```
+
+---
+
 ## ⚙️ Setup and Enabling V2 Features
 
-### 1. Installation Steps
+### 1. Manual Installation Steps
 1. Clone the repository and navigate to the project directory:
    ```powershell
    git clone https://github.com/Misari-Vadalia-13/VEXORA.git

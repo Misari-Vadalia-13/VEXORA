@@ -69,6 +69,12 @@ Forensic integrity requires transparent disclosure of operational boundaries. VE
 - **In-Memory Cache vs. Distributed Cache:**
   - Document analysis results are persisted directly to SQLite rather than a distributed Redis cache.
 
+### 2.6 Authentication & Single-Tenant Prototype Model
+- **Single-Tenant Local Design:**
+  - VEXORA is architected as a single-tenant local-first forensic workbench tailored for hackathon evaluation, on-premise investigator sandboxes, and offline demonstration with zero cloud lock-in.
+  - While investigator signatures (`alex.turner`, `Lead Investigator`) and cryptographic session secrets are tracked across all audit events and report sign-offs, full multi-user role-based access control (RBAC), multi-tenant workspace isolation, and OAuth2/SAML enterprise single sign-on are not implemented in this prototype.
+  - All users connecting to the local node operate within the shared investigator workspace. For enterprise multi-agency deployments, an external identity provider (IdP), JWT/OAuth2 auth gateway, and row-level security (RLS) should be added.
+
 ---
 
 ## 3. Empirical Benchmark Performance & Measured Metrics
