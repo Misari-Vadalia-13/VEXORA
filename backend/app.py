@@ -6,6 +6,7 @@ serves static UI assets, and records investigation activity.
 
 import sys
 import os
+from functools import wraps
 from pathlib import Path
 
 # Ensure project root is in sys.path for direct script execution
@@ -1268,7 +1269,16 @@ def create_app(config_class=Config):
     def api_demo_reset():
         """
         Phase 3: Resets database and seeds realistic demo case with 3 genuine docs + 1 tampered doc.
+        Guarded by VEXORA_ALLOW_DEMO_RESET environment setting.
         """
+        allow_reset = app.config.get('VEXORA_ALLOW_DEMO_RESET', getattr(Config, 'VEXORA_ALLOW_DEMO_RESET', True))
+
+        if not allow_reset:
+            return jsonify({
+                'success': False,
+                'error': 'Demo database wipe and reset is disabled in this environment (VEXORA_ALLOW_DEMO_RESET=false).'
+            }), 403
+
         try:
             from tools.reset_demo import reset_demo_database
             res = reset_demo_database()

@@ -38,6 +38,10 @@ def process_single_upload(file_storage, case_id=None, user="Lead Investigator", 
 
     original_name = file_storage.filename.strip()
 
+    # Security check: Null bytes injection guard
+    if '\0' in original_name or '\x00' in original_name:
+        raise ValidationError("Filename contains invalid null byte characters.", field="file")
+
     # 1. Validate file extension
     if not allowed_file(original_name):
         allowed_list = ', '.join(sorted(ALLOWED_EXTENSIONS)).upper()
@@ -93,6 +97,17 @@ def process_single_upload(file_storage, case_id=None, user="Lead Investigator", 
     target_dir = Path(upload_folder) if upload_folder else Path(Config.UPLOAD_FOLDER)
     target_dir.mkdir(parents=True, exist_ok=True)
     destination_path = target_dir / storage_filename
+
+    # Path traversal security verification
+    try:
+        resolved_target = target_dir.resolve()
+        resolved_dest = destination_path.resolve()
+        if not str(resolved_dest).startswith(str(resolved_target)):
+            raise ValidationError("Path traversal attempt detected in filename.", field="file")
+    except Exception as path_err:
+        if isinstance(path_err, ValidationError):
+            raise
+        pass
 
     # Write file bytes to disk
     with open(destination_path, 'wb') as f:

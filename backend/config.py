@@ -67,7 +67,14 @@ class Config:
     FRONTEND_DIR = str(FRONTEND_DIR)
     MAX_CONTENT_LENGTH = MAX_CONTENT_LENGTH
     JSON_SORT_KEYS = False
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() in ('true', '1', 't')
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+
+    # Security & Cookie Attributes
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() in ('true', '1', 'yes')
+    VEXORA_ALLOW_DEMO_RESET = os.environ.get('VEXORA_ALLOW_DEMO_RESET', 'true').lower() in ('true', '1', 'yes')
+    VEXORA_REQUIRE_AUTH = os.environ.get('VEXORA_REQUIRE_AUTH', 'false').lower() in ('true', '1', 'yes')
 
     # Feature Flags (V2 Additive Extensions)
     ENABLE_EVIDENCE_OVERLAY = os.environ.get('ENABLE_EVIDENCE_OVERLAY', 'false').lower() in ('true', '1', 'yes')

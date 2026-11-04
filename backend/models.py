@@ -84,11 +84,17 @@ def validate_user_registration(data):
     if not password or len(password) < 6:
         raise ValidationError("Password must be at least 6 characters long.", field="password")
 
+    # Role escalation security guard: prevent self-assigning administrative privileges
+    requested_role = (data.get('role') or 'Forensic Analyst').strip()
+    disallowed_admin_roles = {'admin', 'administrator', 'system administrator', 'superuser', 'root'}
+    if requested_role.lower() in disallowed_admin_roles:
+        raise ValidationError("Administrative roles cannot be self-assigned during registration.", field="role")
+
     return {
         'username': username.strip().lower(),
         'email': email.strip().lower(),
         'password': password,
-        'role': data.get('role', 'Forensic Analyst').strip(),
+        'role': requested_role,
         'badge_number': data.get('badge_number', 'VEX-000').strip()
     }
 
