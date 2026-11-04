@@ -184,3 +184,4 @@
 > 1. **Handwritten Paragraph Recognition (HTR):** VEXORA verifies handwritten signature *presence, stroke density, and baseline overlap* (`IMG-004`), but it does not transcribe continuous cursive handwriting into text.  
 > 2. **Vector vs Raster Bound:** Pixel-level algorithms (ELA, Laplacian sharpness) only operate on raster images or embedded PDF photos; they do not apply to born-digital vector font streams.  
 > 3. **Heuristic Pixel Severity:** Image forensics are heuristics subject to sensor noise and compression artifacts, which is why we cap their severity at Medium and mandate human investigator review."*
+
