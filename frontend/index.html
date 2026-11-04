@@ -57,7 +57,7 @@
         <a href="#cases" class="nav-item" id="navCases" data-view="cases">
           <span class="nav-icon" aria-hidden="true">📁</span>
           <span class="nav-label">Case Management</span>
-          <span class="nav-pill" id="sidebarCaseBadge">8</span>
+          <span class="nav-pill" id="sidebarCaseBadge">0</span>
         </a>
 
         <a href="#upload" class="nav-item" id="navUpload" data-view="upload">
@@ -68,7 +68,7 @@
         <a href="#library" class="nav-item" id="navLibrary" data-view="library">
           <span class="nav-icon" aria-hidden="true">📚</span>
           <span class="nav-label">Document Library</span>
-          <span class="nav-pill">24</span>
+          <span class="nav-pill" id="sidebarDocBadge">0</span>
         </a>
 
         <span class="nav-section-label">Forensic Intelligence</span>
@@ -711,7 +711,7 @@
                 <h3 class="dropzone-title">Drag & Drop Documents Here</h3>
                 <p class="dropzone-hint">Or click to select files from your computer. Files are assigned unique cryptographic hashes on ingest.</p>
                 <input type="file" id="fileUploadInput" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none;">
-                <button type="button" class="btn-primary" onclick="document.getElementById('fileUploadInput').click();">
+                <button type="button" class="btn-primary" id="browseFilesBtn" onclick="document.getElementById('fileUploadInput').click();">
                   Browse Files
                 </button>
               </div>
@@ -721,10 +721,7 @@
                 <div class="form-group">
                   <label class="form-label" for="targetCaseSelect">Target Investigation Case *</label>
                   <select id="targetCaseSelect" class="form-control">
-                    <option value="VX-2041">VX-2041: Loan Application #8841-B</option>
-                    <option value="VX-2039">VX-2039: Identity Verification Dossier</option>
-                    <option value="VX-2038">VX-2038: Procurement Invoice Discrepancy</option>
-                    <option value="VX-2035">VX-2035: Employment Declaration Check</option>
+                    <option value="" disabled selected>Loading cases...</option>
                   </select>
                 </div>
 
@@ -937,9 +934,7 @@
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
               <select class="form-control" style="width:260px;" id="forensicDocSelector">
-                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Page 2)</option>
-                <option value="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf (Page 1)</option>
-                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Page 3)</option>
+                <option value="" disabled selected>Loading documents...</option>
               </select>
               <button class="btn-primary" onclick="showToast('Running re-scan with forensic filters', 'info')">Re-Scan</button>
             </div>
@@ -1004,6 +999,39 @@
                   <h2 class="section-title">Forensic Observations</h2>
                   <span class="section-subtitle">Evidence-backed explanations requiring human reviewer confirmation</span>
                 </div>
+              </div>
+
+              <!-- Compact Evidence Integrity & Custody Panel -->
+              <div class="evidence-integrity-card" id="evidenceIntegrityCard" style="margin-bottom:14px; padding:12px; background:var(--bg-primary, rgba(255,255,255,0.02)); border:1px solid var(--border-color); border-radius:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-weight:700; font-size:0.82rem; color:var(--text-primary);">🛡️ Evidence Integrity & Chain of Custody</span>
+                  </div>
+                  <button type="button" class="btn-secondary" id="verifyIntegrityBtn" onclick="verifyCurrentDocIntegrity()" style="font-size:0.75rem; padding:4px 10px;">
+                    🔍 Verify Integrity
+                  </button>
+                </div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:6px; font-size:0.78rem;">
+                    <span style="color:var(--text-muted); font-weight:600;">SHA-256:</span>
+                    <code id="evidenceHashDisplay" style="font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;" title="Stored cryptographic hash at ingest">Select document...</code>
+                    <button type="button" class="table-action-btn" id="copyHashBtn" onclick="copyEvidenceHash()" style="font-size:0.72rem; padding:2px 6px;" title="Copy full SHA-256 to clipboard">📋 Copy</button>
+                  </div>
+                  <div id="integrityResultBadge">
+                    <span class="pill-tag" style="background:rgba(100,116,139,0.15); color:var(--text-muted); font-size:0.72rem;">Unverified</span>
+                  </div>
+                </div>
+
+                <!-- Collapsible Chain of Custody Timeline -->
+                <details id="custodyTimelineDetails" style="margin-top:6px;" ontoggle="if (this.open) loadCurrentDocCustody();">
+                  <summary style="cursor:pointer; font-size:0.78rem; font-weight:600; color:var(--primary-accent); user-select:none;">
+                    📜 Chain of Custody Timeline (<span id="custodyEventCount">0</span> events)
+                  </summary>
+                  <div id="custodyTimelineFeed" style="margin-top:8px; padding-left:8px; border-left:2px solid var(--border-color); max-height:160px; overflow-y:auto; font-size:0.75rem;">
+                    <p style="color:var(--text-muted); margin:4px 0;">Select a document to inspect chain of custody events.</p>
+                  </div>
+                </details>
               </div>
 
               <div class="findings-feed" id="forensicFindingsFeed">
@@ -1077,16 +1105,14 @@
             <div class="compare-box">
               <label class="form-label">Primary Source Document (Doc A)</label>
               <select class="form-control" id="compareDocA">
-                <option value="ID_Card_Misari.png">Identity_Card_Misari.png (Government ID Proof)</option>
-                <option value="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf (Earnings)</option>
+                <option value="" disabled selected>Loading documents...</option>
               </select>
             </div>
 
             <div class="compare-box">
               <label class="form-label">Comparison Reference Document (Doc B)</label>
               <select class="form-control" id="compareDocB">
-                <option value="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf (Income Tax Department Filing)</option>
-                <option value="Passport_Front_Scan.png">Passport_Front_Scan.png (Passport Proof)</option>
+                <option value="" disabled selected>Loading documents...</option>
               </select>
             </div>
           </div>
@@ -1166,10 +1192,7 @@
               <div style="display:flex; gap:10px; align-items:center;">
                 <label for="relGraphCaseSelect" style="font-size:0.85rem; color:var(--text-secondary); white-space:nowrap;">Select Case:</label>
                 <select class="form-control" id="relGraphCaseSelect" style="max-width:240px; font-size:0.85rem;" onchange="window.v2LoadRelationshipGraph(this.value)">
-                  <option value="CAS-2026-0891">CAS-2026-0891 (Apex Industries)</option>
-                  <option value="CAS-2026-0888">CAS-2026-0888 (Veridian Bio)</option>
-                  <option value="CAS-2026-0875">CAS-2026-0875 (Solas Energy)</option>
-                  <option value="CAS-2026-0842">CAS-2026-0842 (Kroll Logistics)</option>
+                  <option value="" disabled selected>Loading cases...</option>
                 </select>
                 <button class="btn-secondary" type="button" onclick="window.v2ReloadCurrentRelationshipGraph()" style="font-size:0.85rem;">🔄 Refresh</button>
               </div>
@@ -1256,7 +1279,7 @@
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
               <select id="dossierCaseSelector" class="form-control" style="min-width:220px; font-size:0.85rem;" onchange="loadCaseDossierPreview(this.value)">
-                <option value="">Select Investigation Case...</option>
+                <option value="" disabled selected>Loading cases...</option>
               </select>
               <button class="btn-secondary" onclick="window.print();" title="Browser Print">🖨️ Print</button>
               <button class="btn-secondary" id="exportHtmlDossierBtn" onclick="exportCurrentCaseDossier('html')" title="Generate Standalone HTML Dossier">🌐 Export HTML</button>

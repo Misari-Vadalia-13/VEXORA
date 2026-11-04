@@ -24,7 +24,7 @@ except ImportError:
     except ImportError:
         fitz = None
 
-from backend.config import Config, REPORTS_FOLDER
+from backend.config import Config, REPORTS_FOLDER, BASE_DIR
 from backend.models import (
     get_case_by_id,
     get_all_documents,
@@ -281,6 +281,92 @@ def build_evidence_traceability(findings):
         })
 
     return items
+
+
+def build_digital_evidence_handling(docs, case_id=None):
+    """
+    Builds the digital evidence handling & chain of custody summary
+    aligned with ISO/IEC 27037 principles (identification, collection, acquisition, preservation).
+    Tracks cryptographic SHA-256 verification status and chronological audit events.
+    """
+    from backend.database import query_db
+    records = []
+    upload_folder = Path(Config.UPLOAD_FOLDER)
+
+    for d in docs:
+        doc_id = d.get('id')
+        stored_hash = d.get('file_hash') or ''
+        raw_path = Path(d['file_path']) if d.get('file_path') else None
+
+        current_hash = None
+        target_file = None
+        if raw_path:
+            candidate = upload_folder / raw_path.name
+            if candidate.exists() and candidate.is_file():
+                target_file = candidate
+            elif raw_path.exists() and raw_path.is_file():
+                target_file = raw_path
+            else:
+                candidate_base = BASE_DIR / raw_path
+                if candidate_base.exists() and candidate_base.is_file():
+                    target_file = candidate_base
+
+        if target_file and target_file.exists():
+            try:
+                current_hash = hashlib.sha256(target_file.read_bytes()).hexdigest()
+            except Exception:
+                current_hash = None
+
+        if current_hash:
+            match = (current_hash.lower() == stored_hash.lower())
+            status_text = "Verified Match" if match else "Hash Mismatch"
+        else:
+            match = False
+            status_text = "File Missing on Disk"
+
+        events = []
+        try:
+            filename = d.get('filename') or ''
+            query = """
+                SELECT * FROM audit_logs
+                WHERE entity_id = ?
+                   OR (details LIKE ? AND details NOT LIKE '%upload_request%')
+                ORDER BY timestamp ASC, id ASC
+            """
+            term = f"%{doc_id}%"
+            rows = query_db(query, (doc_id, term))
+            if filename:
+                name_term = f"%{filename}%"
+                extra_query = """
+                    SELECT * FROM audit_logs
+                    WHERE details LIKE ?
+                      AND id NOT IN (SELECT id FROM audit_logs WHERE entity_id = ? OR details LIKE ?)
+                    ORDER BY timestamp ASC, id ASC
+                """
+                extra_rows = query_db(extra_query, (name_term, doc_id, term))
+                rows = sorted(list(rows) + list(extra_rows), key=lambda r: (r['timestamp'], r['id']))
+
+            for r in rows:
+                events.append({
+                    'timestamp': r['timestamp'],
+                    'actor': r['user'],
+                    'action': r['action'],
+                    'details': r['details']
+                })
+        except Exception:
+            events = []
+
+        records.append({
+            'document_id': doc_id,
+            'filename': d.get('filename'),
+            'stored_hash': stored_hash,
+            'current_hash': current_hash,
+            'match': match,
+            'status': status_text,
+            'custody_events': events
+        })
+
+    return records
 
 
 def build_investigation_summary(case, docs, findings, discrepancies, ai_summary=None):
@@ -621,6 +707,7 @@ def generate_case_dossier_data(case_id):
         'mandatory_disclaimer': MANDATORY_DISCLAIMER,
         'extracted_information': build_extracted_information(docs, ai_insights),
         'evidence_traceability': build_evidence_traceability(findings_list),
+        'digital_evidence_handling': build_digital_evidence_handling(docs, case_id),
         'investigation_summary': build_investigation_summary(
             case, docs, findings_list,
             cross_comparison.get('discrepancies', []),
@@ -1065,6 +1152,39 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
                     y += 24.0
 
                 y += 6.0
+
+        # 7.5 Digital Evidence Handling (aligned with ISO/IEC 27037 principles; no formal compliance claimed)
+        ev_handling = data.get('digital_evidence_handling', [])
+        if ev_handling:
+            if y > 580:
+                page = create_page()
+                y = 50.0
+
+            page.draw_rect(fitz.Rect(MARGIN_LEFT, y, MARGIN_RIGHT, y + 15), color=(203/255, 213/255, 225/255), fill=(248/255, 250/255, 252/255), width=0.5)
+            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 11), "7.5 DIGITAL EVIDENCE HANDLING & CHAIN OF CUSTODY", fontname="hebo", fontsize=8, color=(15/255, 23/255, 42/255))
+            y += 18.0
+            page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 9), "Digital evidence handling (aligned with ISO/IEC 27037 principles; no formal compliance claimed)", fontname="helv", fontsize=6.8, color=(100/255, 116/255, 139/255))
+            y += 14.0
+
+            for rec in ev_handling:
+                if y > 680:
+                    page = create_page()
+                    y = 50.0
+
+                stat_col = (21/255, 128/255, 61/255) if rec['match'] else (185/255, 28/255, 28/255)
+                h_short = rec['stored_hash'][:16] + "..." if len(rec['stored_hash']) > 16 else rec['stored_hash']
+                page.insert_text(fitz.Point(MARGIN_LEFT + 6, y + 8), f"* {rec['filename'][:36]} ({rec['document_id']})", fontname="hebo", fontsize=7, color=(15/255, 23/255, 42/255))
+                page.insert_text(fitz.Point(MARGIN_LEFT + 220, y + 8), f"SHA-256: {h_short}", fontname="courier", fontsize=6.5, color=(71/255, 85/255, 105/255))
+                page.insert_text(fitz.Point(MARGIN_RIGHT - 75, y + 8), f"[{rec['status']}]", fontname="hebo", fontsize=6.8, color=stat_col)
+                y += 12.0
+
+                for ev in rec.get('custody_events', [])[-2:]:
+                    ts = ev.get('timestamp', '')[:16]
+                    act = ev.get('action', '')
+                    usr = ev.get('actor', '')
+                    page.insert_text(fitz.Point(MARGIN_LEFT + 16, y + 8), f"- {ts} -- {act} (actor: {usr})", fontname="helv", fontsize=6.2, color=(100/255, 116/255, 139/255))
+                    y += 10.0
+                y += 4.0
     except Exception:
         pass
 
@@ -1400,6 +1520,70 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
                     {img_html}
                 </div>
                 """
+
+        # Digital evidence handling (aligned with ISO/IEC 27037 principles; no formal compliance claimed)
+        ev_handling = data.get('digital_evidence_handling', [])
+        if ev_handling:
+            k2_html += """
+            <div style="margin-top:16px; padding:12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px;">
+                <div style="font-weight:700; font-size:12.5px; color:#0f172a; margin-bottom:2px;">
+                    Digital Evidence Handling & Chain of Custody
+                </div>
+                <div style="font-size:11px; color:#64748b; font-style:italic; margin-bottom:10px;">
+                    Digital evidence handling (aligned with ISO/IEC 27037 principles; no formal compliance claimed)
+                </div>
+                <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:6px;">
+                    <thead>
+                        <tr style="background:#e2e8f0; text-align:left;">
+                            <th style="padding:6px; border:1px solid #cbd5e1;">Document Ref</th>
+                            <th style="padding:6px; border:1px solid #cbd5e1;">Ingest SHA-256 Hash</th>
+                            <th style="padding:6px; border:1px solid #cbd5e1;">Integrity Status</th>
+                            <th style="padding:6px; border:1px solid #cbd5e1;">Chain of Custody Events</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            for rec in ev_handling:
+                stat_col = "#15803d" if rec['match'] else "#b91c1c"
+                stat_bg = "#f0fdf4" if rec['match'] else "#fef2f2"
+                hash_short = rec['stored_hash'][:16] + "..." if len(rec['stored_hash']) > 16 else rec['stored_hash']
+
+                events_html = "<ul style='margin:0; padding-left:14px; font-size:10px; color:#475569;'>"
+                if rec.get('custody_events'):
+                    for ev in rec['custody_events']:
+                        ts = ev.get('timestamp', '')[:19]
+                        act = ev.get('action', '')
+                        usr = ev.get('actor', '')
+                        events_html += f"<li><strong>{html.escape(ts)}</strong> • {html.escape(act)} ({html.escape(usr)})</li>"
+                else:
+                    events_html += "<li>No custody events logged</li>"
+                events_html += "</ul>"
+
+                k2_html += f"""
+                    <tr>
+                        <td style="padding:6px; border:1px solid #cbd5e1; font-weight:600; color:#0f172a;">
+                            {html.escape(rec.get('filename') or rec.get('document_id'))}
+                            <div style="font-size:10px; color:#64748b; font-family:monospace;">{html.escape(rec.get('document_id'))}</div>
+                        </td>
+                        <td style="padding:6px; border:1px solid #cbd5e1; font-family:monospace; font-size:10px;">
+                            {html.escape(hash_short)}
+                        </td>
+                        <td style="padding:6px; border:1px solid #cbd5e1;">
+                            <span style="display:inline-block; padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px; background:{stat_bg}; color:{stat_col};">
+                                {html.escape(rec['status'])}
+                            </span>
+                        </td>
+                        <td style="padding:6px; border:1px solid #cbd5e1;">
+                            {events_html}
+                        </td>
+                    </tr>
+                """
+            k2_html += """
+                    </tbody>
+                </table>
+            </div>
+            """
+
         phase_k_sections += k2_html
     except Exception as e:
         phase_k_sections += f"<p style='color:#ef4444;'>Error compiling Evidence Traceability: {html.escape(str(e))}</p>"

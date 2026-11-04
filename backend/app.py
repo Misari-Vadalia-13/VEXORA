@@ -16,7 +16,8 @@ if str(PROJECT_ROOT) not in sys.path:
 import csv
 import io
 import json
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, send_from_directory, send_file, session, Response
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -275,9 +276,20 @@ def create_app(config_class=Config):
         Supports single file ('file') or batch uploads ('files').
         Validates formats and sizes, hashes with SHA-256, classifies, and saves to disk and SQLite.
         """
-        case_id = request.form.get('case_id') or request.args.get('case_id')
+        raw_case_id = request.form.get('case_id') or request.args.get('case_id')
+        case_id = raw_case_id.strip() if raw_case_id else None
         user = session.get('username', 'alex.turner')
         upload_folder = app.config.get('UPLOAD_FOLDER')
+
+        # Strict validation: case_id is mandatory and must exist
+        if not case_id:
+            log_audit("UPLOAD_FAILED", "document", "upload_request", "Upload rejected: Select a case first.", user=user)
+            return jsonify({'success': False, 'error': 'Select a case first.'}), 400
+
+        target_case = get_case_by_id(case_id)
+        if not target_case:
+            log_audit("UPLOAD_FAILED", "document", "upload_request", f"Upload rejected: Case not found: '{case_id}'", user=user)
+            return jsonify({'success': False, 'error': f"Case not found: '{case_id}'"}), 400
 
         # Collect files from multipart form
         file_list = []
@@ -287,6 +299,7 @@ def create_app(config_class=Config):
             file_list = [request.files['file']]
 
         if not file_list or all(f.filename == '' for f in file_list):
+            log_audit("UPLOAD_FAILED", "document", "upload_request", "Upload rejected: No files provided in request.", user=user)
             return jsonify({'success': False, 'error': 'No files provided in request.'}), 400
 
         uploaded_docs = []
@@ -305,9 +318,11 @@ def create_app(config_class=Config):
 
         # If all uploads failed due to validation, return 400
         if not uploaded_docs and errors:
+            err_msg = errors[0]['error']
+            log_audit("UPLOAD_FAILED", "document", "upload_request", f"Upload rejected: {err_msg}", user=user)
             return jsonify({
                 'success': False,
-                'error': errors[0]['error'],
+                'error': err_msg,
                 'details': errors
             }), 400
 
@@ -316,6 +331,9 @@ def create_app(config_class=Config):
             'message': f"Successfully ingested {len(uploaded_docs)} document(s).",
             'count': len(uploaded_docs),
             'data': uploaded_docs,
+            'id': uploaded_docs[0]['id'] if uploaded_docs else None,
+            'document_id': uploaded_docs[0]['id'] if uploaded_docs else None,
+            'case_id': uploaded_docs[0]['case_id'] if uploaded_docs else case_id,
             'errors': errors if errors else None
         }), 201
 
@@ -360,6 +378,140 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' missing on disk."}), 404
 
         return send_from_directory(upload_folder, disk_filename, as_attachment=False, download_name=doc['filename'])
+
+    @app.route('/api/documents/<doc_id>/integrity', methods=['GET'])
+    def api_check_document_integrity(doc_id):
+        """
+        Recomputes SHA-256 of the physical document file on disk and verifies
+        it against the immutable stored hash captured at ingest time.
+        Records an INTEGRITY_CHECK event into the immutable audit trail.
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        stored_hash = doc.get('file_hash') or ''
+        upload_folder = Path(app.config.get('UPLOAD_FOLDER', Config.UPLOAD_FOLDER))
+        raw_path = Path(doc['file_path']) if doc.get('file_path') else None
+
+        target_file = None
+        if raw_path:
+            candidate = upload_folder / raw_path.name
+            if candidate.exists() and candidate.is_file():
+                target_file = candidate
+            elif raw_path.exists() and raw_path.is_file():
+                target_file = raw_path
+            else:
+                candidate_base = Config.BASE_DIR / raw_path
+                if candidate_base.exists() and candidate_base.is_file():
+                    target_file = candidate_base
+
+        user = session.get('username', 'alex.turner')
+        checked_at = datetime.now(timezone.utc).isoformat()
+
+        if not target_file or not target_file.exists():
+            log_audit(
+                "INTEGRITY_CHECK_FAILED",
+                "document",
+                doc_id,
+                f"Integrity check failed: physical file missing on disk (expected: {raw_path})",
+                user=user
+            )
+            return jsonify({
+                'success': False,
+                'error': f"Physical file '{raw_path.name if raw_path else 'unknown'}' missing on disk.",
+                'document_id': doc_id,
+                'stored_hash': stored_hash,
+                'current_hash': None,
+                'match': False,
+                'status': 'missing',
+                'checked_at': checked_at
+            }), 404
+
+        try:
+            file_bytes = target_file.read_bytes()
+            current_hash = hashlib.sha256(file_bytes).hexdigest()
+            match = (current_hash.lower() == stored_hash.lower())
+
+            log_audit(
+                "INTEGRITY_CHECK",
+                "document",
+                doc_id,
+                f"SHA-256 verification: {'MATCH' if match else 'MISMATCH'} (stored={stored_hash[:12]}..., current={current_hash[:12]}...)",
+                user=user
+            )
+
+            return jsonify({
+                'success': True,
+                'document_id': doc_id,
+                'filename': doc.get('filename'),
+                'stored_hash': stored_hash,
+                'current_hash': current_hash,
+                'match': match,
+                'checked_at': checked_at,
+                'status': 'verified' if match else 'tampered'
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Error computing file integrity for {doc_id}: {e}")
+            return jsonify({'success': False, 'error': f"Error computing file integrity: {str(e)}"}), 500
+
+    @app.route('/api/documents/<doc_id>/custody', methods=['GET'])
+    def api_get_document_custody(doc_id):
+        """
+        Retrieves ordered chronological chain of custody events for a specific document
+        from the immutable audit trail (upload, extraction, classification, analysis,
+        cross-document comparison, dossier reporting, and integrity verifications).
+        """
+        doc = get_document_by_id(doc_id)
+        if not doc:
+            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+
+        filename = doc.get('filename') or ''
+        case_id = doc.get('case_id') or ''
+
+        # Query all audit events where this document is the primary entity or explicitly referenced
+        query = """
+            SELECT * FROM audit_logs
+            WHERE entity_id = ?
+               OR (details LIKE ? AND details NOT LIKE '%upload_request%')
+            ORDER BY timestamp ASC, id ASC
+        """
+        term = f"%{doc_id}%"
+        rows = query_db(query, (doc_id, term))
+
+        if filename:
+            name_term = f"%{filename}%"
+            extra_query = """
+                SELECT * FROM audit_logs
+                WHERE details LIKE ?
+                  AND id NOT IN (SELECT id FROM audit_logs WHERE entity_id = ? OR details LIKE ?)
+                ORDER BY timestamp ASC, id ASC
+            """
+            extra_rows = query_db(extra_query, (name_term, doc_id, term))
+            rows = sorted(list(rows) + list(extra_rows), key=lambda r: (r['timestamp'], r['id']))
+
+        events = []
+        for r in rows:
+            events.append({
+                'id': r['id'],
+                'timestamp': r['timestamp'],
+                'actor': r['user'],
+                'action': r['action'],
+                'entity_type': r['entity_type'],
+                'entity_id': r['entity_id'],
+                'details': r['details']
+            })
+
+        return jsonify({
+            'success': True,
+            'document_id': doc_id,
+            'filename': filename,
+            'case_id': case_id,
+            'stored_hash': doc.get('file_hash'),
+            'count': len(events),
+            'events': events,
+            'custody_chain': events
+        }), 200
 
     @app.route('/api/documents/<doc_id>', methods=['DELETE'])
     def api_delete_document(doc_id):
@@ -547,6 +699,32 @@ def create_app(config_class=Config):
         except Exception as e:
             app.logger.error(f"Comparison error between {doc_a_id} and {doc_b_id}: {str(e)}")
             return jsonify({'success': False, 'error': f"Cross-document comparison failed: {str(e)}"}), 500
+
+    @app.route('/api/cases/<case_id>/analyze', methods=['POST'])
+    def api_analyze_case_documents(case_id):
+        """Executes full-case analysis on all unanalyzed documents and runs cross-document discrepancy discovery."""
+        case = get_case_by_id(case_id)
+        if not case:
+            return jsonify({'success': False, 'error': f"Case not found: '{case_id}'"}), 404
+
+        try:
+            from backend.reporter import _ensure_case_analysis
+            user = session.get('username', 'alex.turner')
+            _ensure_case_analysis(case_id, user=user)
+            updated = get_case_by_id(case_id)
+            all_findings = []
+            for d in updated.get('documents', []):
+                all_findings.extend(get_findings_by_document(d['id']))
+            return jsonify({
+                'success': True,
+                'case_id': case_id,
+                'documents_count': len(updated.get('documents', [])),
+                'findings_count': len(all_findings),
+                'findings': all_findings
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Case analysis failure for {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/cases/<case_id>/compare', methods=['GET'])
     def api_compare_case_documents(case_id):

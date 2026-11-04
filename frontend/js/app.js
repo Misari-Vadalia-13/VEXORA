@@ -370,9 +370,27 @@ function initUploadSimulator() {
         const resData = await res.json();
 
         if (res.ok && resData.success) {
-          showToast(`Ingested ${resData.count} document(s) successfully! Cryptographic SHA-256 generated.`, 'success');
+          const uploadedDocs = resData.data || [];
+          const count = resData.count || uploadedDocs.length;
+          showToast(`Ingested ${count} document(s) successfully! Cryptographic SHA-256 generated.`, 'success');
           stagedFilesList = [];
           if (queue) queue.innerHTML = '';
+
+          // Auto-select uploaded document and target case
+          if (uploadedDocs.length > 0) {
+            const lastDoc = uploadedDocs[uploadedDocs.length - 1];
+            if (lastDoc.id) {
+              localStorage.setItem('vexora_selected_doc_id', lastDoc.id);
+            }
+            if (lastDoc.case_id) {
+              localStorage.setItem('vexora_selected_case_id', lastDoc.case_id);
+            }
+          } else if (resData.id) {
+            localStorage.setItem('vexora_selected_doc_id', resData.id);
+            if (resData.case_id) {
+              localStorage.setItem('vexora_selected_case_id', resData.case_id);
+            }
+          }
 
           // Refresh live library and stats
           if (typeof window.refreshAll === 'function') {
@@ -529,7 +547,12 @@ function initCaseModal() {
           if (resData.success && resData.data) {
             caseId = resData.data.id;
             isLiveSaved = true;
+            localStorage.setItem('vexora_selected_case_id', caseId);
           }
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          showToast(`Failed to create case: ${errData.error || 'Server error'}`, 'danger');
+          return;
         }
       } catch (err) {
         console.warn('[VEXORA API] Backend not reachable for case creation, using optimistic local state.', err);
@@ -874,6 +897,25 @@ window.deleteDocumentRecord = async function(docId) {
   }
 };
 
+window.deleteCaseRecord = async function(caseId) {
+  if (!confirm(`Are you sure you want to delete case ${caseId} and all associated documents?`)) return;
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/cases/${encodeURIComponent(caseId)}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      showToast(`Case ${caseId} deleted successfully.`, 'info');
+      if (typeof window.refreshAll === 'function') {
+        await window.refreshAll();
+      }
+    } else {
+      showToast(`Failed to delete case: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showToast('Failed to connect to backend to delete case.', 'danger');
+  }
+};
+
 window.refreshAll = async function refreshAll() {
   await window.vexoraApiReady;
   if (!__vexoraApiBase) {
@@ -905,51 +947,103 @@ window.refreshAll = async function refreshAll() {
     if (casesRes.ok) {
       const casesJson = await casesRes.json();
       if (casesJson.success && Array.isArray(casesJson.data)) casesList = casesJson.data;
+    } else {
+      const err = await casesRes.json().catch(() => ({}));
+      showToast(`Failed to load cases: ${err.error || casesRes.statusText}`, 'danger');
     }
   } catch (e) {
     console.warn('[refreshAll] /api/cases failed:', e);
+    showToast('Failed to connect to backend for cases list.', 'danger');
   }
 
   try {
     const docsRes = await fetch(`${apiBase}/documents`);
     if (docsRes.ok) {
       const docsJson = await docsRes.json();
-      if (docsJson.success && Array.isArray(docsJson.data)) docsList = docsJson.data;
+      if (docsJson.success && Array.isArray(docsJson.data)) {
+        docsList = docsJson.data;
+        window.__vexoraDocs = docsList;
+      }
+    } else {
+      const err = await docsRes.json().catch(() => ({}));
+      showToast(`Failed to load documents: ${err.error || docsRes.statusText}`, 'danger');
     }
   } catch (e) {
     console.warn('[refreshAll] /api/documents failed:', e);
+    showToast('Failed to connect to backend for documents list.', 'danger');
   }
 
-  // 2. Update Stats Counter Cards
+  // 2. Update Stats Counter Cards & Sidebar Badges
   try {
-    if (statsData) {
-      const activeCounter = document.getElementById('activeCasesCount');
-      if (activeCounter && statsData.active_cases !== undefined) activeCounter.textContent = statsData.active_cases;
-      const docsCounter = document.getElementById('totalDocsCount');
-      if (docsCounter && statsData.total_documents !== undefined) docsCounter.textContent = statsData.total_documents;
-      const flagsCounter = document.getElementById('flaggedAnomaliesCount');
-      if (flagsCounter && statsData.critical_findings !== undefined) flagsCounter.textContent = statsData.critical_findings;
-      const evidenceCounter = document.getElementById('evidenceNodesCount');
-      if (evidenceCounter && statsData.total_findings !== undefined) evidenceCounter.textContent = statsData.total_findings;
+    const activeCounter = document.getElementById('activeCasesCount');
+    if (activeCounter) activeCounter.textContent = statsData?.active_cases !== undefined ? statsData.active_cases : casesList.length;
 
-      const persistStats = document.getElementById('localPersistenceStats');
-      if (persistStats) {
-        const cCount = statsData.active_cases !== undefined ? statsData.active_cases : 0;
-        const dCount = statsData.total_documents !== undefined ? statsData.total_documents : 0;
-        persistStats.textContent = `${cCount} cases • ${dCount} documents`;
-      }
+    const docsCounter = document.getElementById('totalDocsCount');
+    if (docsCounter) docsCounter.textContent = statsData?.total_documents !== undefined ? statsData.total_documents : docsList.length;
 
-      if (statsData.ai_reasoning_active) {
-        window.updateAiReasoningBadge(true, statsData.ai_model || 'Gemini 2.5 Flash');
-      } else {
-        window.updateAiReasoningBadge(false);
-      }
+    const flagsCounter = document.getElementById('flaggedAnomaliesCount');
+    if (flagsCounter && statsData?.critical_findings !== undefined) flagsCounter.textContent = statsData.critical_findings;
+
+    const evidenceCounter = document.getElementById('evidenceNodesCount');
+    if (evidenceCounter && statsData?.total_findings !== undefined) evidenceCounter.textContent = statsData.total_findings;
+
+    const persistStats = document.getElementById('localPersistenceStats');
+    if (persistStats) {
+      const cCount = casesList.length;
+      const dCount = docsList.length;
+      persistStats.textContent = `${cCount} cases • ${dCount} documents`;
+    }
+
+    const sidebarCaseBadge = document.getElementById('sidebarCaseBadge');
+    if (sidebarCaseBadge) sidebarCaseBadge.textContent = casesList.length;
+
+    const sidebarDocBadge = document.getElementById('sidebarDocBadge');
+    if (sidebarDocBadge) sidebarDocBadge.textContent = docsList.length;
+
+    if (statsData?.ai_reasoning_active) {
+      window.updateAiReasoningBadge(true, statsData.ai_model || 'Gemini 2.5 Flash');
+    } else {
+      window.updateAiReasoningBadge(false);
     }
   } catch (e) {
-    console.warn('[refreshAll] Stats update failed:', e);
+    console.warn('[refreshAll] Stats and badges update failed:', e);
   }
 
-  // 3. Populate targetCaseSelect (Upload Page Case Selector)
+  // 3. Upload Ingestion Guard: Disable if zero cases
+  try {
+    const browseBtn = document.getElementById('browseFilesBtn');
+    const dropzone = document.getElementById('documentDropzone');
+    let noCaseAlert = document.getElementById('noCasesUploadAlert');
+
+    if (casesList.length === 0) {
+      if (browseBtn) browseBtn.disabled = true;
+      if (dropzone) {
+        dropzone.style.opacity = '0.6';
+        dropzone.style.pointerEvents = 'none';
+      }
+      if (!noCaseAlert && dropzone && dropzone.parentNode) {
+        noCaseAlert = document.createElement('div');
+        noCaseAlert.id = 'noCasesUploadAlert';
+        noCaseAlert.style.cssText = 'margin-bottom:16px; padding:12px 16px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:6px; display:flex; align-items:center; justify-content:space-between; gap:12px;';
+        noCaseAlert.innerHTML = `
+          <span style="color:var(--status-danger); font-weight:600; font-size:0.9rem;">⚠️ Create a case first before uploading documents.</span>
+          <button type="button" class="btn-primary" style="font-size:0.8rem; padding:6px 12px;" onclick="navigateToView('cases')">Go to Case Management</button>
+        `;
+        dropzone.parentNode.insertBefore(noCaseAlert, dropzone);
+      }
+    } else {
+      if (browseBtn) browseBtn.disabled = false;
+      if (dropzone) {
+        dropzone.style.opacity = '1';
+        dropzone.style.pointerEvents = 'auto';
+      }
+      if (noCaseAlert) noCaseAlert.remove();
+    }
+  } catch (e) {
+    console.warn('[refreshAll] Upload guard failed:', e);
+  }
+
+  // 4. Populate targetCaseSelect (Upload Page Case Selector)
   try {
     const targetCaseSelect = document.getElementById('targetCaseSelect');
     if (targetCaseSelect) {
@@ -958,6 +1052,8 @@ window.refreshAll = async function refreshAll() {
       if (casesList.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
+        opt.disabled = true;
+        opt.selected = true;
         opt.textContent = 'No cases yet - create one';
         targetCaseSelect.appendChild(opt);
       } else {
@@ -982,7 +1078,7 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] targetCaseSelect update failed:', e);
   }
 
-  // 4. Populate dossierCaseSelector (Dossier Report Case Selector)
+  // 5. Populate dossierCaseSelector (Dossier Report Case Selector)
   try {
     const dossierCaseSelect = document.getElementById('dossierCaseSelector');
     if (dossierCaseSelect) {
@@ -991,6 +1087,8 @@ window.refreshAll = async function refreshAll() {
       if (casesList.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
+        opt.disabled = true;
+        opt.selected = true;
         opt.textContent = 'No cases yet - create one';
         dossierCaseSelect.appendChild(opt);
       } else {
@@ -1025,7 +1123,7 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] dossierCaseSelector update failed:', e);
   }
 
-  // 5. Populate relGraphCaseSelect (Cross-Document Relationship Graph Case Selector)
+  // 6. Populate relGraphCaseSelect (Cross-Document Relationship Graph Case Selector)
   try {
     const relGraphSelect = document.getElementById('relGraphCaseSelect');
     if (relGraphSelect) {
@@ -1034,6 +1132,8 @@ window.refreshAll = async function refreshAll() {
       if (casesList.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
+        opt.disabled = true;
+        opt.selected = true;
         opt.textContent = 'No cases yet - create one';
         relGraphSelect.appendChild(opt);
       } else {
@@ -1066,7 +1166,7 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] relGraphCaseSelect update failed:', e);
   }
 
-  // 6. Populate forensicDocSelector (Forensic Inspector Document Selector)
+  // 7. Populate forensicDocSelector (Forensic Inspector Document Selector)
   try {
     const forensicDocSelector = document.getElementById('forensicDocSelector');
     if (forensicDocSelector) {
@@ -1075,6 +1175,8 @@ window.refreshAll = async function refreshAll() {
       if (docsList.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
+        opt.disabled = true;
+        opt.selected = true;
         opt.textContent = 'No documents yet - upload one';
         forensicDocSelector.appendChild(opt);
       } else {
@@ -1084,21 +1186,32 @@ window.refreshAll = async function refreshAll() {
           opt.textContent = `${doc.filename} (${doc.id})`;
           forensicDocSelector.appendChild(opt);
         });
+        const savedDocId = localStorage.getItem('vexora_selected_doc_id');
         if (prevVal && [...forensicDocSelector.options].some((o) => o.value === prevVal)) {
           forensicDocSelector.value = prevVal;
+        } else if (savedDocId && [...forensicDocSelector.options].some((o) => o.value === savedDocId)) {
+          forensicDocSelector.value = savedDocId;
+        } else if (docsList.length > 0) {
+          forensicDocSelector.selectedIndex = 0;
         }
         forensicDocSelector.onchange = (e) => {
-          if (e.target.value && typeof window.loadDocumentFindings === 'function') {
-            window.loadDocumentFindings(e.target.value);
+          if (e.target.value) {
+            localStorage.setItem('vexora_selected_doc_id', e.target.value);
+            if (typeof window.loadDocumentFindings === 'function') {
+              window.loadDocumentFindings(e.target.value);
+            }
           }
         };
+        if (forensicDocSelector.value && typeof window.loadDocumentFindings === 'function') {
+          window.loadDocumentFindings(forensicDocSelector.value);
+        }
       }
     }
   } catch (e) {
     console.warn('[refreshAll] forensicDocSelector update failed:', e);
   }
 
-  // 7. Populate compareDocA and compareDocB (Cross-Document Comparison Selectors)
+  // 8. Populate compareDocA and compareDocB (Cross-Document Comparison Selectors)
   try {
     const compareDocA = document.getElementById('compareDocA');
     const compareDocB = document.getElementById('compareDocB');
@@ -1111,11 +1224,15 @@ window.refreshAll = async function refreshAll() {
       if (docsList.length === 0) {
         const optA = document.createElement('option');
         optA.value = '';
+        optA.disabled = true;
+        optA.selected = true;
         optA.textContent = 'No documents yet - upload one';
         compareDocA.appendChild(optA);
 
         const optB = document.createElement('option');
         optB.value = '';
+        optB.disabled = true;
+        optB.selected = true;
         optB.textContent = 'No documents yet - upload one';
         compareDocB.appendChild(optB);
       } else {
@@ -1131,13 +1248,18 @@ window.refreshAll = async function refreshAll() {
           compareDocB.appendChild(optB);
         });
 
+        const savedDocId = localStorage.getItem('vexora_selected_doc_id');
         if (prevA && [...compareDocA.options].some((o) => o.value === prevA)) {
           compareDocA.value = prevA;
+        } else if (savedDocId && [...compareDocA.options].some((o) => o.value === savedDocId)) {
+          compareDocA.value = savedDocId;
         }
+
         if (prevB && [...compareDocB.options].some((o) => o.value === prevB)) {
           compareDocB.value = prevB;
         } else if (docsList.length > 1) {
-          compareDocB.selectedIndex = 1;
+          const targetIdx = compareDocA.selectedIndex === 0 ? 1 : 0;
+          compareDocB.selectedIndex = targetIdx;
         }
       }
     }
@@ -1145,7 +1267,117 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] comparison selectors update failed:', e);
   }
 
-  // 8. Populate Document Library Grid Cards
+  // 9. Repopulate Dashboard Recent Cases Table
+  try {
+    const tableBody = document.querySelector('#recentCasesTable tbody');
+    if (tableBody) {
+      tableBody.innerHTML = '';
+      if (casesList.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">
+              No active cases found. Click <strong>+ Add Case</strong> to create an investigation case.
+            </td>
+          </tr>
+        `;
+      } else {
+        casesList.forEach((c) => {
+          const docCount = docsList.filter((d) => d.case_id === c.id).length;
+          const priority = c.priority || 'Medium';
+          const priorityClass =
+            priority === 'High' || priority === 'Critical' ? 'pill-high' : priority === 'Medium' ? 'pill-medium' : 'pill-low';
+          const status = c.status || 'Active';
+          const investigator = c.investigator || 'Unassigned';
+
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="case-id-cell">${escapeHtml(c.id)}</td>
+            <td>
+              <span class="case-title-cell">${escapeHtml(c.title)}</span>
+              <span class="case-subtitle">Lead: ${escapeHtml(investigator)}${c.description ? ` • ${escapeHtml(c.description)}` : ''}</span>
+            </td>
+            <td>${docCount} doc${docCount === 1 ? '' : 's'}</td>
+            <td><span class="pill-tag ${priorityClass}">${escapeHtml(priority)}</span></td>
+            <td><span class="pill-tag pill-status">${escapeHtml(status)}</span></td>
+            <td>
+              <div class="action-btn-group">
+                <button class="table-action-btn" onclick="localStorage.setItem('vexora_selected_case_id','${escapeHtml(c.id)}'); navigateToView('upload')">Upload</button>
+                <button class="table-action-btn" onclick="localStorage.setItem('vexora_selected_case_id','${escapeHtml(c.id)}'); navigateToView('dossier')">Dossier</button>
+              </div>
+            </td>
+          `;
+          tableBody.appendChild(row);
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] recentCasesTable update failed:', e);
+  }
+
+  // 10. Repopulate Case Management Grid
+  try {
+    const casesGrid = document.getElementById('caseManagementGrid');
+    if (casesGrid) {
+      casesGrid.innerHTML = '';
+      if (casesList.length === 0) {
+        casesGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
+            <div style="font-size: 2rem; margin-bottom: 8px;">📁</div>
+            <p>No investigation cases created yet. Click <strong>+ New Investigation Case</strong> above to create one.</p>
+          </div>
+        `;
+      } else {
+        casesList.forEach((c) => {
+          const docCount = docsList.filter((d) => d.case_id === c.id).length;
+          const priority = c.priority || 'Medium';
+          const priorityClass =
+            priority === 'High' || priority === 'Critical' ? 'pill-high' : priority === 'Medium' ? 'pill-medium' : 'pill-low';
+          const priorityDataAttr = priority.toLowerCase();
+          const status = c.status || 'Active';
+          const investigator = c.investigator || 'Unassigned';
+
+          const card = document.createElement('div');
+          card.className = 'case-card';
+          card.setAttribute('data-priority', priorityDataAttr);
+          card.innerHTML = `
+            <div class="case-card-header">
+              <span class="case-card-id">${escapeHtml(c.id)}</span>
+              <span class="pill-tag ${priorityClass}">${escapeHtml(priority)}</span>
+            </div>
+            <h3 class="case-card-title">${escapeHtml(c.title)}</h3>
+            <p class="case-card-desc">${escapeHtml(c.description || 'Investigation case ready for artifact ingestion and cross-checking.')}</p>
+            <div class="case-card-metrics">
+              <div class="case-metric-item">
+                <span class="case-metric-val">${docCount}</span>
+                <span class="case-metric-lbl">Documents</span>
+              </div>
+              <div class="case-metric-item">
+                <span class="case-metric-val" style="color:var(--status-verified);">${escapeHtml(c.type || 'General')}</span>
+                <span class="case-metric-lbl">Type</span>
+              </div>
+              <div class="case-metric-item">
+                <span class="case-metric-val" style="color:var(--primary-accent);">${escapeHtml(status)}</span>
+                <span class="case-metric-lbl">Status</span>
+              </div>
+            </div>
+            <div class="case-card-footer">
+              <span class="case-author-note">Lead: ${escapeHtml(investigator)}</span>
+              <div class="action-btn-group">
+                <button class="table-action-btn" onclick="localStorage.setItem('vexora_selected_case_id','${escapeHtml(c.id)}'); navigateToView('upload')">Upload</button>
+                <button class="table-action-btn" onclick="localStorage.setItem('vexora_selected_case_id','${escapeHtml(c.id)}'); navigateToView('dossier')">Dossier</button>
+                <button class="table-action-btn" onclick="deleteCaseRecord('${escapeHtml(c.id)}')" title="Delete Case" style="color:var(--status-danger);">🗑️ Delete</button>
+              </div>
+            </div>
+          `;
+          casesGrid.appendChild(card);
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] caseManagementGrid update failed:', e);
+  }
+
+  // 11. Populate Document Library Grid Cards
   try {
     const docLibraryGrid = document.getElementById('docLibraryGrid');
     if (docLibraryGrid) {
@@ -1208,7 +1440,7 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] docLibraryGrid update failed:', e);
   }
 
-  // 9. Auxiliary report, audit trail, and graph loading
+  // 12. Auxiliary report, audit trail, and graph loading
   try {
     if (typeof loadGeneratedReportsList === 'function') loadGeneratedReportsList();
     if (typeof loadAuditTrailLogs === 'function') loadAuditTrailLogs();
@@ -1217,7 +1449,7 @@ window.refreshAll = async function refreshAll() {
     console.warn('[refreshAll] Auxiliary sync failed:', e);
   }
 
-  // 10. Dispatch data ready event to eliminate race condition
+  // 13. Dispatch data ready event to eliminate race condition
   window.__vexoraDataReady = true;
   document.dispatchEvent(new CustomEvent('vexora:data-ready', { detail: { cases: casesList, docs: docsList } }));
 };
@@ -1271,6 +1503,9 @@ window.triggerDocumentExtraction = async function(docId) {
 
       showToast(`Extraction Complete! Found ${entityCount} entities across ${ext.page_count} page(s) (${ext.total_words} words).`, 'success');
       console.log('[VEXORA Extraction Details]', ext);
+      if (typeof window.refreshAll === 'function') {
+        window.refreshAll();
+      }
     } else {
       showToast(`Extraction failed: ${data.error || 'Server error'}`, 'danger');
     }
@@ -1301,6 +1536,11 @@ window.analyzeDocumentAndInspect = async function(docId) {
       if (selector) {
         selector.value = docId;
       }
+      localStorage.setItem('vexora_selected_doc_id', docId);
+
+      if (typeof window.refreshAll === 'function') {
+        window.refreshAll();
+      }
 
       // Switch view to Forensic Inspector
       setTimeout(() => {
@@ -1316,10 +1556,67 @@ window.analyzeDocumentAndInspect = async function(docId) {
 };
 
 /**
- * Phase 6: Fetch and load findings for a selected document
+ * Phase 6 & Additive Forensic Polish: Fetch and load findings & evidence integrity for a selected document
  */
 window.loadDocumentFindings = async function(docId) {
+  window.__currentForensicDocId = docId;
   const apiBase = getApiBase();
+
+  // Initialize and populate Evidence Integrity & Chain of Custody panel
+  try {
+    const doc = (window.__vexoraDocs || []).find(d => String(d.id) === String(docId));
+    const hashDisplay = document.getElementById('evidenceHashDisplay');
+    const badge = document.getElementById('integrityResultBadge');
+    const eventCount = document.getElementById('custodyEventCount');
+    const feed = document.getElementById('custodyTimelineFeed');
+    const details = document.getElementById('custodyTimelineDetails');
+
+    if (details) details.open = false;
+    if (feed) feed.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem;">Click to expand chain of custody timeline...</div>';
+
+    if (doc && doc.file_hash) {
+      window.__currentEvidenceHash = doc.file_hash;
+      if (hashDisplay) {
+        const h = doc.file_hash;
+        hashDisplay.textContent = h.length > 20 ? (h.substring(0, 14) + '...' + h.substring(h.length - 8)) : h;
+        hashDisplay.title = h;
+      }
+    } else {
+      window.__currentEvidenceHash = '';
+      if (hashDisplay) {
+        hashDisplay.textContent = 'Fetching hash...';
+        hashDisplay.title = '';
+      }
+    }
+
+    if (badge) {
+      badge.innerHTML = '<span class="pill-tag" style="background:rgba(100,116,139,0.15); color:var(--text-muted); font-size:0.72rem;">Unverified</span>';
+    }
+    if (eventCount) {
+      eventCount.textContent = '...';
+    }
+
+    // Always fetch custody count and stored hash to ensure fresh metadata
+    fetch(`${apiBase}/documents/${encodeURIComponent(docId)}/custody`)
+      .then(res => res.json())
+      .then(custodyData => {
+        if (custodyData && custodyData.success) {
+          if (custodyData.stored_hash) {
+            window.__currentEvidenceHash = custodyData.stored_hash;
+            if (hashDisplay) {
+              const h = custodyData.stored_hash;
+              hashDisplay.textContent = h.length > 20 ? (h.substring(0, 14) + '...' + h.substring(h.length - 8)) : h;
+              hashDisplay.title = h;
+            }
+          }
+          if (eventCount) eventCount.textContent = custodyData.count !== undefined ? custodyData.count : (custodyData.events ? custodyData.events.length : 0);
+        }
+      })
+      .catch(() => {});
+  } catch (err) {
+    console.warn('[Evidence Integrity Init Error]', err);
+  }
+
   try {
     const res = await fetch(`${apiBase}/documents/${docId}/findings`);
     const data = await res.json();
@@ -1329,6 +1626,122 @@ window.loadDocumentFindings = async function(docId) {
     }
   } catch (err) {
     console.warn('[VEXORA Load Findings Error]', err);
+  }
+};
+
+/**
+ * Verify evidence integrity by recomputing SHA-256 on the backend
+ */
+window.verifyCurrentDocIntegrity = async function() {
+  const docId = window.__currentForensicDocId || document.getElementById('forensicDocSelector')?.value;
+  if (!docId) {
+    showToast('Please select a document first.', 'warning');
+    return;
+  }
+  const apiBase = getApiBase();
+  const btn = document.getElementById('verifyIntegrityBtn');
+  const badge = document.getElementById('integrityResultBadge');
+  const origBtnText = btn ? btn.innerHTML : '🔍 Verify Integrity';
+  if (btn) btn.innerHTML = '⏳ Verifying...';
+
+  try {
+    const res = await fetch(`${apiBase}/documents/${encodeURIComponent(docId)}/integrity`);
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (data.match) {
+        if (badge) {
+          badge.innerHTML = '<span class="pill-tag" style="background:rgba(16,185,129,0.15); color:#10b981; font-weight:700; font-size:0.72rem; border:1px solid rgba(16,185,129,0.3);">✓ Hash matches</span>';
+        }
+        showToast('Evidence integrity verified: SHA-256 matches ingest hash.', 'success');
+      } else {
+        if (badge) {
+          badge.innerHTML = '<span class="pill-tag" style="background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700; font-size:0.72rem; border:1px solid rgba(239,68,68,0.3);">✕ Hash mismatch - file changed since ingest</span>';
+        }
+        showToast('Integrity Alert: File hash mismatch or modified on disk!', 'danger');
+      }
+      // If custody details are open, refresh timeline to show the new integrity check event
+      const details = document.getElementById('custodyTimelineDetails');
+      if (details && details.open) {
+        window.loadCurrentDocCustody();
+      }
+    } else {
+      if (badge) {
+        badge.innerHTML = `<span class="pill-tag" style="background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700; font-size:0.72rem;">✕ ${escapeHtml(data.error || 'Verification Failed')}</span>`;
+      }
+      showToast(data.error || 'Failed to verify evidence integrity.', 'danger');
+    }
+  } catch (err) {
+    console.error('[Verify Integrity Error]', err);
+    showToast('Failed to connect to integrity verification service.', 'danger');
+  } finally {
+    if (btn) btn.innerHTML = origBtnText;
+  }
+};
+
+/**
+ * Copy full SHA-256 hash to clipboard
+ */
+window.copyEvidenceHash = function() {
+  const hash = window.__currentEvidenceHash;
+  if (!hash) {
+    showToast('No hash available to copy. Select an ingested document.', 'warning');
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(hash).then(() => {
+      showToast('Full SHA-256 copied to clipboard.', 'info');
+    }).catch(() => {
+      prompt('Evidence SHA-256 Hash:', hash);
+    });
+  } else {
+    prompt('Evidence SHA-256 Hash:', hash);
+  }
+};
+
+/**
+ * Fetch and render chronological Chain of Custody events for current document
+ */
+window.loadCurrentDocCustody = async function() {
+  const docId = window.__currentForensicDocId || document.getElementById('forensicDocSelector')?.value;
+  if (!docId) return;
+  const apiBase = getApiBase();
+  const eventCount = document.getElementById('custodyEventCount');
+  const feed = document.getElementById('custodyTimelineFeed');
+  if (feed) feed.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem;">Loading custody audit trail...</div>';
+
+  try {
+    const res = await fetch(`${apiBase}/documents/${encodeURIComponent(docId)}/custody`);
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (eventCount) eventCount.textContent = data.count !== undefined ? data.count : (data.events ? data.events.length : 0);
+      if (!feed) return;
+      if (!data.events || data.events.length === 0) {
+        feed.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem;">No audit events recorded for this document yet.</div>';
+        return;
+      }
+      feed.innerHTML = data.events.map((ev) => {
+        const timeStr = ev.timestamp ? ev.timestamp.replace('T', ' ').substring(0, 19) : 'Unknown';
+        const actor = ev.actor || 'system';
+        const action = ev.action || 'EVENT';
+        return `
+          <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.75rem;">
+            <div style="font-family:var(--font-mono); color:var(--text-muted); min-width:115px; font-size:0.7rem;">${timeStr}</div>
+            <div style="display:flex; flex-direction:column; gap:2px; flex:1;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span class="pill-tag" style="background:rgba(59,130,246,0.15); color:var(--primary-accent); font-size:0.68rem; padding:1px 5px; font-weight:700;">${escapeHtml(action)}</span>
+                <span style="color:var(--text-muted); font-size:0.7rem;">by <strong>${escapeHtml(actor)}</strong></span>
+              </div>
+              <div style="color:var(--text-secondary); word-break:break-word; font-size:0.72rem;">${escapeHtml(ev.details || '')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      if (feed) feed.innerHTML = '<div style="color:var(--status-critical); font-size:0.75rem;">Failed to load chain of custody.</div>';
+    }
+  } catch (err) {
+    console.error('[Custody Trail Error]', err);
+    if (feed) feed.innerHTML = '<div style="color:var(--status-critical); font-size:0.75rem;">Connection error loading custody trail.</div>';
   }
 };
 
@@ -1370,6 +1783,14 @@ function renderForensicFindings(findings) {
 
     const card = document.createElement('div');
     card.className = `finding-detail-card ${cardClass}`;
+    card.style.cursor = 'pointer';
+    card.title = 'Click to inspect visual evidence & bounding box';
+    card.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+      if (typeof window.v2OpenEvidenceModal === 'function') {
+        window.v2OpenEvidenceModal(f);
+      }
+    };
     card.innerHTML = `
       <div class="finding-card-head">
         <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
@@ -1698,6 +2119,14 @@ window.loadCaseDossierPreview = async function(caseId) {
           const sev = (f.severity || 'Medium').toLowerCase();
           const card = document.createElement('div');
           card.className = `finding-detail-card ${sev === 'critical' || sev === 'high' ? 'critical' : ''}`;
+          card.style.cursor = 'pointer';
+          card.title = 'Click to inspect visual evidence & bounding box';
+          card.onclick = (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+            if (typeof window.v2OpenEvidenceModal === 'function') {
+              window.v2OpenEvidenceModal(f);
+            }
+          };
           const coordText = f.coordinates ? ` • Box [${escapeHtml(f.coordinates)}]` : '';
 
           const evClass = f.evidence_class || 'Observation';

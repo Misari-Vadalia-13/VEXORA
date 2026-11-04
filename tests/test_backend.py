@@ -283,6 +283,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         """Verifies rejection of unsupported file extensions with HTTP 400."""
         import io
         data = {
+            'case_id': 'CAS-2026-0891',
             'file': (io.BytesIO(b"MZ executable binary payload"), 'malicious_tool.exe')
         }
         res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
@@ -295,6 +296,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         """Verifies rejection of empty (0-byte) files."""
         import io
         data = {
+            'case_id': 'CAS-2026-0891',
             'file': (io.BytesIO(b""), 'empty_invoice.pdf')
         }
         res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
@@ -305,12 +307,12 @@ class VexoraBackendTestCase(unittest.TestCase):
         """Verifies that uploading duplicate filenames preserves both with unique IDs and disk paths."""
         import io
         pdf_bytes = b"%PDF-1.4 mock content %%EOF"
-        data1 = {'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
+        data1 = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
         res1 = self.client.post('/api/documents/upload', data=data1, content_type='multipart/form-data')
         self.assertEqual(res1.status_code, 201)
         doc1 = res1.get_json()['data'][0]
 
-        data2 = {'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
+        data2 = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Standard_Invoice.pdf')}
         res2 = self.client.post('/api/documents/upload', data=data2, content_type='multipart/form-data')
         self.assertEqual(res2.status_code, 201)
         doc2 = res2.get_json()['data'][0]
@@ -322,7 +324,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         """Verifies streaming document download and subsequent deletion."""
         import io
         pdf_content = b"%PDF-1.4 Download stream verification sample %%EOF"
-        data = {'file': (io.BytesIO(pdf_content), 'Download_Test_Document.pdf')}
+        data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_content), 'Download_Test_Document.pdf')}
         res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
         self.assertEqual(res.status_code, 201)
         doc_id = res.get_json()['data'][0]['id']
@@ -362,7 +364,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         doc.close()
 
         # 1. Upload PDF
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Apex_Digital_Invoice.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Apex_Digital_Invoice.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         self.assertEqual(up_res.status_code, 201)
         doc_id = up_res.get_json()['data'][0]['id']
@@ -409,7 +411,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         pdf_bytes = doc.tobytes()
         doc.close()
 
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Multi_Page_Contract.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Multi_Page_Contract.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -431,7 +433,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         img.save(buf, format='PNG')
         buf.seek(0)
 
-        upload_data = {'file': (buf, 'Sample_Scan.png')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (buf, 'Sample_Scan.png')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -443,15 +445,32 @@ class VexoraBackendTestCase(unittest.TestCase):
         self.assertEqual(data['metadata']['dimensions'], '300x150')
 
     def test_extract_corrupted_document(self):
-        """Verifies graceful error handling (HTTP 400) when document is corrupted."""
+        """Verifies graceful error handling (HTTP 400) on upload and extraction when document is corrupted."""
         import io
+        from pathlib import Path
+        from backend.models import create_document
+        from backend.config import Config
 
         corrupted_bytes = b"CORRUPTED BYTES THAT ARE NOT A PDF"
-        upload_data = {'file': (io.BytesIO(corrupted_bytes), 'Corrupt_File.pdf')}
+        # 1. Verify upload rejection for corrupted PDF
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(corrupted_bytes), 'Corrupt_File.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
-        doc_id = up_res.get_json()['data'][0]['id']
+        self.assertEqual(up_res.status_code, 400)
+        self.assertIn('corrupt', up_res.get_json()['error'].lower())
 
-        extract_res = self.client.post(f'/api/documents/{doc_id}/extract')
+        # 2. Verify extraction rejection if corrupted file exists in storage
+        corrupt_disk_path = Path(Config.UPLOAD_FOLDER) / "DOC_TEST_CORRUPT_sample.pdf"
+        corrupt_disk_path.write_bytes(corrupted_bytes)
+        created_doc = create_document({
+            'id': 'DOC-TEST-CORRUPT',
+            'case_id': 'CAS-2026-0891',
+            'filename': 'Corrupt_Direct.pdf',
+            'file_type': 'pdf',
+            'file_size': len(corrupted_bytes),
+            'file_path': str(corrupt_disk_path),
+            'status': 'Pending'
+        })
+        extract_res = self.client.post(f'/api/documents/{created_doc["id"]}/extract')
         self.assertEqual(extract_res.status_code, 400)
         res_json = extract_res.get_json()
         self.assertFalse(res_json['success'])
@@ -486,7 +505,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         pdf_bytes = doc.tobytes()
         doc.close()
 
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Font_Tampered_Invoice.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Font_Tampered_Invoice.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -519,7 +538,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         pdf_bytes = doc.tobytes()
         doc.close()
 
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Overprinted_Contract.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Overprinted_Contract.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -549,7 +568,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         pdf_bytes = doc.tobytes()
         doc.close()
 
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Inconsistent_Dates_Invoice.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Inconsistent_Dates_Invoice.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -574,7 +593,7 @@ class VexoraBackendTestCase(unittest.TestCase):
         pdf_bytes = doc.tobytes()
         doc.close()
 
-        upload_data = {'file': (io.BytesIO(pdf_bytes), 'Lifecycle_Doc.pdf')}
+        upload_data = {'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(pdf_bytes), 'Lifecycle_Doc.pdf')}
         up_res = self.client.post('/api/documents/upload', data=upload_data, content_type='multipart/form-data')
         doc_id = up_res.get_json()['data'][0]['id']
 
@@ -640,10 +659,10 @@ class VexoraBackendTestCase(unittest.TestCase):
         bytes_b = doc_b.tobytes()
         doc_b.close()
 
-        up_a = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_a), 'Invoice_A.pdf')}, content_type='multipart/form-data')
+        up_a = self.client.post('/api/documents/upload', data={'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(bytes_a), 'Invoice_A.pdf')}, content_type='multipart/form-data')
         doc_a_id = up_a.get_json()['data'][0]['id']
 
-        up_b = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_b), 'Bank_B.pdf')}, content_type='multipart/form-data')
+        up_b = self.client.post('/api/documents/upload', data={'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(bytes_b), 'Bank_B.pdf')}, content_type='multipart/form-data')
         doc_b_id = up_b.get_json()['data'][0]['id']
 
         cmp_res = self.client.post('/api/documents/compare', json={'doc_a_id': doc_a_id, 'doc_b_id': doc_b_id})
@@ -683,10 +702,10 @@ class VexoraBackendTestCase(unittest.TestCase):
         bytes_b = doc_b.tobytes()
         doc_b.close()
 
-        up_a = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_a), 'Claim_Doc.pdf')}, content_type='multipart/form-data')
+        up_a = self.client.post('/api/documents/upload', data={'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(bytes_a), 'Claim_Doc.pdf')}, content_type='multipart/form-data')
         doc_a_id = up_a.get_json()['data'][0]['id']
 
-        up_b = self.client.post('/api/documents/upload', data={'file': (io.BytesIO(bytes_b), 'Receipt_Doc.pdf')}, content_type='multipart/form-data')
+        up_b = self.client.post('/api/documents/upload', data={'case_id': 'CAS-2026-0891', 'file': (io.BytesIO(bytes_b), 'Receipt_Doc.pdf')}, content_type='multipart/form-data')
         doc_b_id = up_b.get_json()['data'][0]['id']
 
         cmp_res = self.client.post('/api/documents/compare', json={'doc_a_id': doc_a_id, 'doc_b_id': doc_b_id})
@@ -1035,6 +1054,24 @@ class VexoraBackendTestCase(unittest.TestCase):
         self.assertIn('CASE_CREATED', actions)
         self.assertIn('DOCUMENT_UPLOAD', actions)
         self.assertIn('REPORT_GENERATED', actions)
+
+    def test_upload_missing_case_id(self):
+        """Verifies that uploading without a case_id returns HTTP 400 'Select a case first'."""
+        import io
+        pdf_bytes = b"%PDF-1.4 mock content %%EOF"
+        data = {'file': (io.BytesIO(pdf_bytes), 'No_Case_Invoice.pdf')}
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('select a case first', res.get_json()['error'].lower())
+
+    def test_upload_nonexistent_case_id(self):
+        """Verifies that uploading with a non-existent case_id returns HTTP 400 'Case not found'."""
+        import io
+        pdf_bytes = b"%PDF-1.4 mock content %%EOF"
+        data = {'case_id': 'CAS-NONEXISTENT-999', 'file': (io.BytesIO(pdf_bytes), 'Bad_Case_Invoice.pdf')}
+        res = self.client.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('case not found', res.get_json()['error'].lower())
 
 if __name__ == '__main__':
     unittest.main()

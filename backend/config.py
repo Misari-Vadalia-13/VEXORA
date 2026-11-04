@@ -58,6 +58,8 @@ TEST_DATABASE_PATH = BACKEND_DIR / 'test_vexora.db'
 
 class Config:
     """Base application configuration class."""
+    BASE_DIR = BASE_DIR
+    BACKEND_DIR = BACKEND_DIR
     SECRET_KEY = os.environ.get('SECRET_KEY', 'vexora-forensics-dev-secret-key-2026')
     DATABASE = str(DATABASE_PATH)
     UPLOAD_FOLDER = str(UPLOAD_FOLDER)
