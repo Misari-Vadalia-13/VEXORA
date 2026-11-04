@@ -30,12 +30,14 @@ RULE_EVIDENCE_CLASS_MAP = {
     'PDF-003': 'Inconsistency',               # Metadata Revision Desynchronization
     'PDF-004': 'Potential Manipulation',      # Embedded Image Placed Over Text / Resolution Disparity
     'PDF-005': 'Potential Manipulation',      # Invisible or Fully Off-Page Text
+    'PDF-006': 'Potential Manipulation',      # Suspicious Interactive or Executable Object
 
     # Phase D: Image Forensic Rules
     'IMG-001': 'Potential Manipulation',      # Error Level Analysis (ELA) Compression Disparity
     'IMG-002': 'Observation',                 # Noise or Sharpness Inconsistency Across Blocks
     'IMG-003': 'Potential Manipulation',      # Copy-Move Duplication via ORB Keypoint Matching
     'IMG-004': 'Observation',                 # Signature Region Presence & Text Overlap Check
+    'IMG-005': 'Observation',                 # EXIF Metadata & Provenance Analysis
 
     # Fallback Generic Rules
     'RULE-GEN-001': 'Observation'

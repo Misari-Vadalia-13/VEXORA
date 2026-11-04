@@ -33,11 +33,15 @@ try:
 except ImportError:
     np = None
 
+import re
+import time
+
 try:
-    from PIL import Image, ImageChops
+    from PIL import Image, ImageChops, ExifTags
 except ImportError:
     Image = None
     ImageChops = None
+    ExifTags = None
 
 try:
     import pymupdf as fitz
@@ -94,6 +98,16 @@ IMAGE_FORENSIC_RULES = {
         'evidence_class': 'Observation',
         'limitation': 'Heuristic limitation: Freeform pen stroke weight, ballpoint ink hue, and scanner binarization vary widely across documents.',
         'recommendation': 'Verify signature authenticity against authorized signatory registry cards.'
+    },
+    'IMG-005': {
+        'id': 'IMG-005',
+        'title': 'Image EXIF Metadata & Provenance Analysis',
+        'severity': 'Low',
+        'category': 'Contextual Forensics',
+        'confidence': 0.82,
+        'evidence_class': 'Observation',
+        'limitation': 'Heuristic limitation: EXIF tags can be stripped by privacy tools, social media, or web uploaders; software signatures do not prove unauthorized tampering.',
+        'recommendation': 'Review EXIF modification history, camera make/model, and software tags against standard corporate imaging workflows.'
     }
 }
 
@@ -184,7 +198,42 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
             # Only report if region is substantial (> 400 px^2)
             if (x1 - x0) * (y1 - y0) >= 400:
                 max_err = max(b[4] for b in anomalous_blocks)
-                findings.append({
+
+                # Persist ELA visualization difference map
+                viz_path_str = None
+                viz_url = None
+                try:
+                    scale = 15.0
+                    ela_vis = np.clip(diff_arr * scale, 0, 255).astype(np.uint8)
+                    if cv2 is not None:
+                        ela_vis_bgr = cv2.applyColorMap(ela_vis, cv2.COLORMAP_JET)
+                        cv2.rectangle(ela_vis_bgr, (int(x0), int(y0)), (int(x1), int(y1)), (0, 0, 255), 2)
+                        cv2.putText(ela_vis_bgr, f"ELA MaxErr: {round(max_err, 1)}", (int(x0), max(15, int(y0) - 5)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+                    else:
+                        ela_vis_bgr = np.stack([ela_vis] * 3, axis=-1)
+
+                    upload_root = Config.UPLOAD_FOLDER
+                    try:
+                        from flask import current_app, has_app_context
+                        if has_app_context() and current_app and current_app.config.get('UPLOAD_FOLDER'):
+                            upload_root = current_app.config.get('UPLOAD_FOLDER')
+                    except Exception:
+                        pass
+                    evidence_dir = Path(upload_root) / 'evidence'
+                    evidence_dir.mkdir(parents=True, exist_ok=True)
+                    fname = f"ela_diff_{int(x0)}_{int(y0)}_p{page_num}_{int(time.time() * 1000)}.png"
+                    target_file = evidence_dir / fname
+                    if cv2 is not None:
+                        cv2.imwrite(str(target_file), ela_vis_bgr)
+                    else:
+                        Image.fromarray(ela_vis).save(str(target_file))
+                    viz_path_str = str(target_file)
+                    viz_url = f"/api/evidence/{fname}"
+                except Exception as viz_err:
+                    logger.debug(f"[IMG-001] Could not persist ELA visualization: {viz_err}")
+
+                finding_entry = {
                     'rule_id': rule['id'],
                     'title': rule['title'],
                     'severity': 'Medium',
@@ -201,7 +250,11 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
                         f"different JPEG quantization history than the host document. [{rule['limitation']}]."
                     ),
                     'evidence': f"ELA block error {round(max_err, 1)} vs page median {round(page_median, 1)}"
-                })
+                }
+                if viz_path_str:
+                    finding_entry['visualization_path'] = viz_path_str
+                    finding_entry['evidence_url'] = viz_url
+                findings.append(finding_entry)
     except Exception as e:
         logger.warning(f"[IMG-001 Error] ELA failed: {e}")
 
@@ -421,8 +474,20 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1, 
             # Filter for clusters with >= min_matches
             clone_clusters = [c for c in clusters if len(c[2]) >= min_matches]
 
-            if clone_clusters:
-                best_cluster = max(clone_clusters, key=lambda c: len(c[2]))
+            # Additional tightening: reject thin collinear 1D slivers (e.g. single dotted lines or borders)
+            valid_clone_clusters = []
+            for c in clone_clusters:
+                dist, angle, members = c
+                all_pts = [p for pair in members for p in pair]
+                xs = [p[0] for p in all_pts]
+                ys = [p[1] for p in all_pts]
+                bbox_w = max(xs) - min(xs)
+                bbox_h = max(ys) - min(ys)
+                if bbox_w >= 15 and bbox_h >= 15:
+                    valid_clone_clusters.append(c)
+
+            if valid_clone_clusters:
+                best_cluster = max(valid_clone_clusters, key=lambda c: len(c[2]))
                 members = best_cluster[2]
                 all_pts = [p for pair in members for p in pair]
 
@@ -586,8 +651,158 @@ def check_signature_region(cv_image, page_num=1, doc_category=None, expects_sign
     return findings
 
 
+
+
 # =====================================================================
-# 5. Master Image Forensics Coordinator
+# 5. IMG-005: Image EXIF Metadata & Provenance Analysis
+# =====================================================================
+
+def check_exif_metadata(pil_image_or_path, file_path=None, page_num=1):
+    """
+    IMG-005: Inspects EXIF metadata tags, capture device metadata, timestamps,
+    and digital editing software signatures.
+    
+    Principles:
+    - Missing EXIF is an investigative indicator, not proof of forgery.
+    - Capped at 'Medium' severity for editing software and 'Low' for timestamp divergence.
+    - Preserves objective evidence classes ('Observation' / 'Inconsistency').
+    """
+    if Image is None:
+        return []
+
+    findings = []
+    rule = IMAGE_FORENSIC_RULES['IMG-005']
+
+    try:
+        opened_here = False
+        if isinstance(pil_image_or_path, (str, Path)):
+            pil_img = Image.open(str(pil_image_or_path))
+            target_path = str(pil_image_or_path)
+            opened_here = True
+        elif hasattr(pil_image_or_path, 'getexif'):
+            pil_img = pil_image_or_path
+            target_path = str(file_path) if file_path else None
+        else:
+            return []
+
+        exif_tags = {}
+        raw_exif = None
+        if hasattr(pil_img, 'getexif'):
+            raw_exif = pil_img.getexif()
+
+        if raw_exif:
+            try:
+                for tag_id, val in raw_exif.items():
+                    tag_name = ExifTags.TAGS.get(tag_id, str(tag_id)) if ExifTags else str(tag_id)
+                    exif_tags[tag_name] = str(val).strip()
+
+                # Also inspect Exif sub-IFD (0x8769)
+                try:
+                    if ExifTags and hasattr(ExifTags, 'IFD') and hasattr(ExifTags.IFD, 'Exif'):
+                        sub_ifd = raw_exif.get_ifd(ExifTags.IFD.Exif)
+                    else:
+                        sub_ifd = raw_exif.get_ifd(0x8769)
+                    if sub_ifd:
+                        for tag_id, val in sub_ifd.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, str(tag_id)) if ExifTags else str(tag_id)
+                            exif_tags[tag_name] = str(val).strip()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # Check 1: Third-party digital image manipulation software signature
+        suspicious_editors = [
+            'photoshop', 'gimp', 'canva', 'paint.net', 'pixlr', 'sejda',
+            'ilovepdf', 'adobe lightroom', 'snapseed', 'facetune', 'coreldraw',
+            'affinity photo'
+        ]
+        software_val = exif_tags.get('Software', '')
+        matched_editor = None
+        if software_val:
+            s_lower = software_val.lower()
+            for ed in suspicious_editors:
+                if ed in s_lower:
+                    matched_editor = ed
+                    break
+
+        if matched_editor:
+            findings.append({
+                'rule_id': rule['id'],
+                'title': f"Image Editor Signature in EXIF ({matched_editor.capitalize()})",
+                'severity': 'Medium',
+                'category': rule['category'],
+                'status': 'Observation',
+                'confidence': 0.88,
+                'evidence_class': 'Observation',
+                'page_number': page_num,
+                'coordinates': None,
+                'description': (
+                    f"[Heuristic Finding] EXIF metadata contains editing software signature: '{software_val}'. "
+                    f"Camera captures and scanner hardware output do not natively encode third-party graphic editing software. [{rule['limitation']}]."
+                ),
+                'evidence': f"EXIF Software: '{software_val}'"
+            })
+
+        # Check 2: Original capture date vs file modification date divergence
+        dt_orig = exif_tags.get('DateTimeOriginal') or exif_tags.get('DateTimeDigitized')
+        dt_mod = exif_tags.get('DateTime')
+        if dt_orig and dt_mod:
+            c_orig = re.sub(r'[^\d]', '', dt_orig)[:8]
+            c_mod = re.sub(r'[^\d]', '', dt_mod)[:8]
+            if c_orig and c_mod and c_orig != c_mod:
+                findings.append({
+                    'rule_id': rule['id'],
+                    'title': 'EXIF Capture vs Modification Date Divergence',
+                    'severity': 'Low',
+                    'category': rule['category'],
+                    'status': 'Observation',
+                    'confidence': 0.82,
+                    'evidence_class': 'Inconsistency',
+                    'page_number': page_num,
+                    'coordinates': None,
+                    'description': (
+                        f"[Technical Observation] EXIF capture date ({dt_orig}) differs from subsequent modification date ({dt_mod}). "
+                        f"Indicates file re-export or delayed metadata update. [{rule['limitation']}]."
+                    ),
+                    'evidence': f"DateTimeOriginal: {dt_orig} | DateTime: {dt_mod}"
+                })
+
+        # Check 3: Check if file is JPEG photo with completely stripped/missing EXIF
+        if not exif_tags and target_path:
+            p_str = target_path.lower()
+            if p_str.endswith(('.jpg', '.jpeg')):
+                findings.append({
+                    'rule_id': rule['id'],
+                    'title': 'EXIF Provenance Metadata Absent',
+                    'severity': 'Low',
+                    'category': rule['category'],
+                    'status': 'Observation',
+                    'confidence': 0.65,
+                    'evidence_class': 'Observation',
+                    'page_number': page_num,
+                    'coordinates': None,
+                    'description': (
+                        "Image file contains no EXIF provenance metadata (camera make, model, or capture timestamp). "
+                        "Note: Missing EXIF is an investigative indicator, not proof of forgery. Many web portals, social messaging "
+                        "apps, and privacy tools strip EXIF by default."
+                    ),
+                    'evidence': 'No EXIF metadata block found in image container'
+                })
+
+    except Exception as e:
+        logger.warning(f"[IMG-005 Error] EXIF analysis failed: {e}")
+    finally:
+        if 'opened_here' in locals() and opened_here and hasattr(pil_img, 'close'):
+            try:
+                pil_img.close()
+            except Exception:
+                pass
+
+    return findings
+
+# =====================================================================
+# 6. Master Image Forensics Coordinator
 # =====================================================================
 
 # Coordinates image forensic checks; runs only on standalone raster images and embedded images inside PDFs
@@ -626,6 +841,7 @@ def run_image_forensics(file_path, doc_category=None):
             findings.extend(check_noise_and_sharpness_inconsistency(cv_img, page_num=1))
             findings.extend(check_copy_move_orb(cv_img, page_num=1))
             findings.extend(check_signature_region(cv_img, page_num=1, doc_category=doc_category))
+            findings.extend(check_exif_metadata(pil_img, file_path=file_path, page_num=1))
         except Exception as e:
             logger.warning(f"[Image Forensics] Error processing image {file_path}: {e}")
 

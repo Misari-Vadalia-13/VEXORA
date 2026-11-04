@@ -379,6 +379,18 @@ def create_app(config_class=Config):
 
         return send_from_directory(upload_folder, disk_filename, as_attachment=False, download_name=doc['filename'])
 
+    @app.route('/api/evidence/<path:filename>', methods=['GET'])
+    def api_get_evidence_file(filename):
+        """Streams generated forensic visualization files (e.g. ELA difference maps)."""
+        upload_folder = Path(app.config.get('UPLOAD_FOLDER', Config.UPLOAD_FOLDER))
+        evidence_dir = upload_folder / 'evidence'
+        if not evidence_dir.exists():
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+        target = evidence_dir / filename
+        if not target.exists():
+            return jsonify({'success': False, 'error': f"Evidence file '{filename}' not found."}), 404
+        return send_from_directory(evidence_dir, filename)
+
     @app.route('/api/documents/<doc_id>/integrity', methods=['GET'])
     def api_check_document_integrity(doc_id):
         """

@@ -73,6 +73,15 @@ EXTENDED_PDF_RULES = {
         'confidence': 0.94,
         'evidence_class': 'Potential Manipulation',
         'recommendation': 'Inspect text elements located outside the printable page boundary or using invisible rendering mode.'
+    },
+    'PDF-006': {
+        'id': 'PDF-006',
+        'title': 'Suspicious Interactive or Executable Object',
+        'severity': 'High',
+        'category': 'Structural Integrity',
+        'confidence': 0.95,
+        'evidence_class': 'Potential Manipulation',
+        'recommendation': 'Quarantine file and inspect embedded scripts, launch actions, or attached payloads in a sandboxed analysis environment.'
     }
 }
 
@@ -161,8 +170,9 @@ def check_text_hidden_under_shapes(doc):
 
 def check_incremental_updates(file_path):
     """
-    PDF-002: Inspects raw PDF file bytes for multiple %%EOF markers,
-    indicating that the document was appended or modified after initial creation.
+    PDF-002: Inspects raw PDF file bytes for multiple %%EOF markers and
+    incremental update cross-reference chains (/Prev pointers).
+    Differentiates confirmed structural facts from heuristic suspicions.
     """
     findings = []
     rule = EXTENDED_PDF_RULES['PDF-002']
@@ -172,7 +182,15 @@ def check_incremental_updates(file_path):
             raw_bytes = f.read()
 
         eof_count = raw_bytes.count(b'%%EOF')
-        if eof_count > 1:
+        prev_matches = re.findall(rb'/Prev\s+(\d+)', raw_bytes)
+        prev_offsets = [int(m) for m in prev_matches]
+
+        if eof_count > 1 or len(prev_offsets) > 0:
+            revision_count = max(eof_count, len(prev_offsets) + 1)
+            evidence_str = f"Raw %%EOF marker count: {eof_count}"
+            if prev_offsets:
+                evidence_str += f" | /Prev xref offsets: {prev_offsets}"
+
             findings.append({
                 'rule_id': rule['id'],
                 'title': rule['title'],
@@ -184,10 +202,11 @@ def check_incremental_updates(file_path):
                 'page_number': 1,
                 'coordinates': None,
                 'description': (
-                    f"Document file contains {eof_count} incremental update marker(s) (%%EOF). "
-                    f"This technical observation indicates the document was modified or resaved after initial compilation."
+                    f"[Confirmed Structural Fact] Document file contains {eof_count} incremental update marker(s) (%%EOF) "
+                    f"and {len(prev_offsets)} /Prev cross-reference pointer(s) (revisions: {revision_count}). "
+                    f"This technical observation confirms the document body was appended, re-saved, or digitally modified after initial compilation."
                 ),
-                'evidence': f"Raw %%EOF marker count: {eof_count}"
+                'evidence': evidence_str
             })
     except Exception as e:
         logger.warning(f"[PDF-002 Error] Failed to read raw bytes: {e}")
@@ -331,6 +350,33 @@ def check_embedded_images_and_resolution(doc):
                                 })
                                 break
 
+        # Check for full-page background scan overprinted with digital vector text
+        p_w, p_h = page.rect.width, page.rect.height
+        for (dpi, i_rect) in image_dpis:
+            if i_rect.width >= p_w * 0.75 and i_rect.height >= p_h * 0.75:
+                text_inside = [t for t in text_spans if (t[0] & i_rect).get_area() > 0]
+                if len(text_inside) >= 1:
+                    sample_texts = [t[1] for t in text_inside[:3]]
+                    sample_str = ", ".join([f"'{s}'" for s in sample_texts])
+                    findings.append({
+                        'rule_id': 'PDF-004',
+                        'title': 'Vector Text Overprinted on Scanned Page Background',
+                        'severity': 'Medium',
+                        'category': 'Visual Structure',
+                        'status': 'Potential Anomaly',
+                        'confidence': 0.88,
+                        'evidence_class': 'Potential Manipulation',
+                        'page_number': page_num,
+                        'coordinates': [round(i_rect.x0, 2), round(i_rect.y0, 2), round(i_rect.x1, 2), round(i_rect.y1, 2)],
+                        'description': (
+                            f"Page {page_num} contains {len(text_inside)} digital vector text element(s) ({sample_str}) "
+                            f"rendered over a full-page raster scan [{int(i_rect.width)}x{int(i_rect.height)} pt]. "
+                            f"This indicates digital text overprinting / patching onto a scanned document template."
+                        ),
+                        'evidence': f"{len(text_inside)} vector text spans on background image bbox {list(i_rect)}"
+                    })
+                    break
+
         # Check for extreme image resolution disparity (> 3.5x ratio on same page)
         if len(image_dpis) >= 2:
             sorted_dpis = sorted(image_dpis, key=lambda x: x[0])
@@ -450,6 +496,63 @@ def check_invisible_and_offpage_text(doc):
 
 
 # =====================================================================
+
+
+def check_suspicious_pdf_objects(doc):
+    """
+    PDF-006: Scans PDF structural catalog, name trees, and xref dictionary objects
+    for suspicious interactive or executable constructs:
+    - /JavaScript or /JS: Embedded executable scripts
+    - /Launch: Shell or executable launch actions
+    - /EmbeddedFiles: Hidden embedded file attachments / payloads
+    """
+    findings = []
+    rule = EXTENDED_PDF_RULES['PDF-006']
+
+    try:
+        suspicious_xrefs = []
+        for xref in range(1, doc.xref_length()):
+            try:
+                obj_text = doc.xref_object(xref)
+                if not obj_text:
+                    continue
+
+                if re.search(r'/(JavaScript|JS)\b', obj_text):
+                    suspicious_xrefs.append((xref, 'Embedded JavaScript (/JavaScript)', 'High'))
+                elif re.search(r'/Launch\b', obj_text):
+                    suspicious_xrefs.append((xref, 'Executable Launch Trigger (/Launch)', 'Critical'))
+                elif re.search(r'/EmbeddedFiles\b', obj_text):
+                    suspicious_xrefs.append((xref, 'Hidden Embedded File Payload (/EmbeddedFiles)', 'Medium'))
+            except Exception:
+                continue
+
+        seen_types = set()
+        for xref, obj_type, sev in suspicious_xrefs:
+            if obj_type in seen_types:
+                continue
+            seen_types.add(obj_type)
+            findings.append({
+                'rule_id': rule['id'],
+                'title': f"Suspicious PDF Object Detected ({obj_type})",
+                'severity': sev,
+                'category': rule['category'],
+                'status': 'Potential Anomaly',
+                'confidence': rule['confidence'],
+                'evidence_class': rule['evidence_class'],
+                'page_number': 1,
+                'coordinates': None,
+                'description': (
+                    f"[Confirmed Structural Fact] PDF structure contains an active {obj_type} at object xref {xref}. "
+                    f"Standard business documents, contracts, and financial invoices should contain only passive page streams. "
+                    f"Active scripting or external launch triggers represent significant forensic anomalies."
+                ),
+                'evidence': f"Object xref {xref} specifies {obj_type}"
+            })
+    except Exception as e:
+        logger.warning(f"[PDF-006 Error] Suspicious object scan failed: {e}")
+
+    return findings
+
 # 2. Master Extended PDF Forensics Runner
 # =====================================================================
 
@@ -493,6 +596,9 @@ def run_extended_pdf_forensics(file_path):
 
         # PDF-005: Invisible and off-page text
         findings.extend(check_invisible_and_offpage_text(doc))
+
+        # PDF-006: Suspicious interactive or executable objects
+        findings.extend(check_suspicious_pdf_objects(doc))
     finally:
         doc.close()
 
