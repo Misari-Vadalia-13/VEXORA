@@ -462,6 +462,7 @@ def compare_case_documents(case_id, user="System"):
             'case_id': case_id,
             'message': f"Case has {len(docs)} document(s). At least 2 documents are required for cross-comparison.",
             'comparisons_count': 0,
+            'comparison_count': 0,
             'discrepancies': []
         }
 

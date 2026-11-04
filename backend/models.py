@@ -1,3 +1,14 @@
+import threading
+from functools import wraps
+
+_model_write_lock = threading.Lock()
+
+def _synchronized_model(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _model_write_lock:
+            return fn(*args, **kwargs)
+    return wrapper
 """
 VEXORA — Models & Business Logic Layer
 Provides data access methods, parameterized query helpers,
@@ -155,6 +166,7 @@ def get_case_by_id(case_id):
     case['findings_count'] = len(findings)
     return case
 
+@_synchronized_model
 def create_case(validated_data, custom_id=None, user="System"):
     """Inserts a new investigation case into SQLite with audit logging."""
     case_id = custom_id or generate_case_id()
@@ -281,6 +293,7 @@ def get_document_by_id(doc_id):
     doc['findings'] = findings
     return doc
 
+@_synchronized_model
 def create_document(data, user="System"):
     """Registers document metadata into the database."""
     doc_id = data.get('id') or generate_document_id()
@@ -493,6 +506,7 @@ def get_findings_by_document(doc_id):
     )
     return [_hydrate_finding_evidence_class(f) for f in results]
 
+@_synchronized_model
 def create_finding(data, user="System"):
     """Adds a new forensic finding record with coordinate and rule traceability."""
     year = datetime.now().year
