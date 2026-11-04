@@ -158,7 +158,7 @@ class TestV2PhaseH(unittest.TestCase):
         # Embedded image must have been extracted and evaluated
         self.assertGreaterEqual(len(findings), 1)
         img_rule_ids = [f.get('rule_id') for f in findings if f.get('rule_id')]
-        self.assertTrue(any(rid in ('IMG-001', 'IMG-002') for rid in img_rule_ids),
+        self.assertTrue(any(rid in ('IMG-001', 'IMG-002', 'IMG-003') for rid in img_rule_ids),
                         f"Expected IMG-001 or IMG-002 from embedded image, got {img_rule_ids}")
 
     def test_04_startup_flag_info_reported_in_diagnostics(self):

@@ -94,9 +94,11 @@ def get_v2_features_status(app_instance=None):
 def print_startup_banner(port=5000, app_instance=None):
     """
     Prints a clear, formatted startup banner to stdout listing the ON/OFF state
-    of every V2 feature flag and whether Tesseract OCR was found.
+    of every V2 feature flag, active database file path, and whether Tesseract OCR was found.
     """
+    from backend.config import Config
     status = get_v2_features_status(app_instance)
+    db_target = app_instance.config.get('DATABASE') if app_instance else getattr(Config, 'DATABASE', 'backend/vexora.db')
 
     def _tag(val):
         return "[ON] " if val else "[OFF]"
@@ -113,7 +115,8 @@ def print_startup_banner(port=5000, app_instance=None):
     print(f"    • {_tag(status['ENABLE_LLM'])} LLM Reasoning Layer   (ENABLE_LLM)")
     print(f"    • {_tag(status['VEXORA_STRICT_OCR'])} Strict OCR Mode        (VEXORA_STRICT_OCR)")
     print(f"    • {_tag(status['VEXORA_LLM_REDACT'])} LLM PII Redaction      (VEXORA_LLM_REDACT)")
-    print("  SYSTEM ENGINES & DEPENDENCIES:")
+    print("  SYSTEM ENGINES & PERSISTENCE:")
+    print(f"    • Active Database File : {Path(db_target).resolve()}")
     print(f"    • Tesseract OCR Binary : {status['tesseract_detail']}")
     print(f"    • Computer Vision      : {status['opencv_detail']}")
     print(f"    • LLM Provider Config  : {status['VEXORA_LLM_PROVIDER']}")

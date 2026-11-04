@@ -18,6 +18,10 @@ dist/
 *.sqlite
 *.sqlite3
 *.db
+test_vexora.db
+vexora.db.bak
+backups/
+backend/backups/
 uploads/*
 !uploads/.gitkeep
 reports/*

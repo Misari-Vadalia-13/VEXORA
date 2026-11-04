@@ -110,6 +110,17 @@
             <span class="status-subtitle">Local Node • Verified</span>
           </div>
         </div>
+        <div class="system-status-card" id="localPersistenceCard" style="margin-top: 8px; font-size: 0.75rem; border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.08)); padding-top: 8px;">
+          <div class="status-text-group" style="width: 100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="status-title" style="font-size:0.75rem; color:var(--text-muted, #94a3b8); display:flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                Data saved locally
+              </span>
+            </div>
+            <span class="status-subtitle" id="localPersistenceStats" style="font-size: 0.7rem; color: var(--text-secondary, #cbd5e1);">Loading local data...</span>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -141,6 +152,11 @@
 
           <!-- Topbar Actions -->
           <div class="topbar-actions">
+            <!-- AI Reasoning Status Badge -->
+            <span id="aiReasoningBadge" class="pill-tag pill-status" style="font-size:0.75rem; display:inline-flex; align-items:center; gap:5px; padding:5px 10px; cursor:pointer;" title="Click to test AI connection in Settings" onclick="navigateToView('settings')">
+              🤖 AI reasoning: OFF (deterministic mode)
+            </span>
+
             <!-- Live Clock Display -->
             <button class="btn-secondary" id="clockWidget" title="Local System Time" style="padding: 7px 12px; font-family: var(--font-mono); font-size: 0.8rem;">
               🕒 <span id="headerClock">--:--:--</span>
@@ -156,6 +172,17 @@
             <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle Theme (Light / Dark)">
               <span id="themeToggleIcon">☀️</span>
               <span id="themeToggleText">Light</span>
+            </button>
+
+            <!-- Load / Add Demo Case Actions -->
+            <button class="btn-secondary" id="addDemoCaseBtn" onclick="addDemoCaseAction()" title="Add demo case (keep my data)" style="padding: 7px 12px; font-size: 0.82rem; display:inline-flex; align-items:center; gap:5px;">
+              <span>📁</span>
+              <span>Add Demo Case</span>
+            </button>
+
+            <button class="btn-secondary" id="loadDemoCaseBtn" onclick="loadDemoCaseAction()" title="Reset database and seed showcase investigation case (erases existing data)" style="padding: 7px 12px; font-size: 0.82rem; display:inline-flex; align-items:center; gap:5px; opacity: 0.85;">
+              <span>⚡</span>
+              <span>Reset &amp; Load Demo</span>
             </button>
 
             <!-- Primary Action: New Case Trigger -->
@@ -1035,9 +1062,14 @@
               <h1 class="page-title">Cross-Document Comparison</h1>
               <p class="page-subtitle">Correlate extracted entities across multiple documents to identify factual contradictions.</p>
             </div>
-            <button class="btn-primary" id="runComparisonBtn" onclick="triggerCrossDocumentComparison()">
-              Run Cross-Check
-            </button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn-primary" id="runComparisonBtn" onclick="triggerCrossDocumentComparison()">
+                Run Cross-Check
+              </button>
+              <button class="btn-secondary" id="runAiCrosscheckBtn" onclick="triggerAiCaseCrosscheck()" style="display:inline-flex; align-items:center; gap:6px;">
+                🤖 AI Cross-Check
+              </button>
+            </div>
           </div>
 
           <!-- Document Selector Bar -->

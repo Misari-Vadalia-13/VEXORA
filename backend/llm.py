@@ -35,7 +35,7 @@ AI_DISCLAIMER = "AI-assessed, requires human review"
 
 # Configurable Default Models per Provider
 DEFAULT_MODELS = {
-    'gemini': 'gemini-1.5-flash',
+    'gemini': 'gemini-2.5-flash',
     'openai': 'gpt-4o-mini',
     'claude': 'claude-3-haiku-20240307',
     'anthropic': 'claude-3-haiku-20240307'
@@ -67,7 +67,7 @@ def get_model_name(provider=None):
     configured = getattr(Config, 'VEXORA_LLM_MODEL', '') or os.environ.get('VEXORA_LLM_MODEL', '')
     if configured and configured.strip():
         return configured.strip()
-    return DEFAULT_MODELS.get(prov, 'gemini-1.5-flash')
+    return DEFAULT_MODELS.get(prov, 'gemini-2.5-flash')
 
 
 # =====================================================================
@@ -96,7 +96,21 @@ def redact_text_for_llm(text):
         text
     )
 
-    # Mask long digit strings (bank accounts, IBANs, national IDs, SSNs >= 10 digits)
+    # Mask US SSNs (9 digits: xxx-xx-xxxx or xxx xx xxxx)
+    redacted = re.sub(
+        r'\b\d{3}[-\s]\d{2}[-\s]\d{4}\b',
+        '[REDACTED_SSN]',
+        redacted
+    )
+
+    # Mask Tax Identification Numbers (EIN 12-3456789 or PAN ABCDE1234F)
+    redacted = re.sub(
+        r'\b\d{2}-\d{7}\b|\b[A-Z]{5}\d{4}[A-Z]\b',
+        '[REDACTED_TAX_ID]',
+        redacted
+    )
+
+    # Mask long digit strings (bank accounts, IBANs, national IDs >= 10 digits)
     redacted = re.sub(
         r'\b\d{10,24}\b',
         '[REDACTED_DIGITS]',
@@ -147,7 +161,24 @@ def verify_source_quote(source_quote, original_text):
 # 2. Universal HTTPS LLM Dispatcher
 # =====================================================================
 
-def call_llm(prompt, system_instruction=None, json_mode=True, timeout=15):
+def sanitize_prompt_text(text):
+    """
+    Sanitizes ingested document text before injecting into LLM prompts:
+    - Escapes/replaces markdown backticks (``` -> ''')
+    - Disarms common prompt injection / instruction hijacking patterns
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    # Disarm markdown code block delimiters
+    s = text.replace("```", "'''")
+    # Disarm instruction override phrases
+    s = re.sub(r'(?i)\b(ignore\s+(all\s+)?(previous|prior)\s+instructions?)\b', '[DISARMED_INSTRUCTION]', s)
+    s = re.sub(r'(?i)\b(system\s*:\s*)', '[SYSTEM_PREFIX] ', s)
+    s = re.sub(r'(?i)\b(assistant\s*:\s*)', '[ASSISTANT_PREFIX] ', s)
+    return s
+
+
+def call_llm(prompt, system_instruction=None, json_mode=True, timeout=30):
     """
     Dispatches a prompt to configured LLM provider via plain HTTPS (no SDK required).
     Supports Gemini (default), OpenAI, and Claude.
@@ -163,26 +194,45 @@ def call_llm(prompt, system_instruction=None, json_mode=True, timeout=15):
     if not enabled:
         return None
 
-    api_key = getattr(Config, 'VEXORA_LLM_API_KEY', '') or os.environ.get('VEXORA_LLM_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+    api_key = (
+        getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        or os.environ.get('VEXORA_LLM_API_KEY', '')
+        or os.environ.get('GEMINI_API_KEY', '')
+        or os.environ.get('OPENAI_API_KEY', '')
+    )
     if not api_key:
         logger.info("[LLM] VEXORA_LLM_API_KEY is not configured.")
+        set_last_llm_error("AI reasoning unavailable: set VEXORA_LLM_API_KEY in .env")
         return None
 
     provider = getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini').lower().strip()
 
-    try:
-        if provider == 'gemini':
-            return _call_gemini(prompt, api_key, system_instruction, json_mode, timeout)
-        elif provider == 'openai':
-            return _call_openai(prompt, api_key, system_instruction, json_mode, timeout)
-        elif provider == 'claude' or provider == 'anthropic':
-            return _call_claude(prompt, api_key, system_instruction, json_mode, timeout)
-        else:
-            logger.warning(f"[LLM] Unsupported provider '{provider}'. Defaulting to Gemini.")
-            return _call_gemini(prompt, api_key, system_instruction, json_mode, timeout)
-    except Exception as e:
-        logger.warning(f"[LLM Error] Execution failed: {e}")
-        return None
+    # Retry once on transient network failure/timeout
+    for attempt in range(2):
+        try:
+            if provider == 'gemini':
+                res = _call_gemini(prompt, api_key, system_instruction, json_mode, timeout)
+            elif provider == 'openai':
+                res = _call_openai(prompt, api_key, system_instruction, json_mode, timeout)
+            elif provider == 'claude' or provider == 'anthropic':
+                res = _call_claude(prompt, api_key, system_instruction, json_mode, timeout)
+            else:
+                logger.warning(f"[LLM] Unsupported provider '{provider}'. Defaulting to Gemini.")
+                res = _call_gemini(prompt, api_key, system_instruction, json_mode, timeout)
+
+            if res is not None:
+                return res
+
+            # If client error (404 / unsupported model), do not retry
+            last_err = get_last_llm_error() or ""
+            if "not found" in last_err.lower() or "404" in last_err or "unsupported" in last_err.lower() or "401" in last_err:
+                break
+        except Exception as e:
+            logger.warning(f"[LLM Error] Attempt {attempt + 1} failed: {e}")
+            if attempt == 1:
+                set_last_llm_error(f"Network error after retry: {e}")
+                return None
+    return None
 
 
 def _call_gemini(prompt, api_key, system_instruction, json_mode, timeout):
@@ -369,8 +419,8 @@ def extract_fields_llm(text, doc_type="Document", document_id=None, user="System
     if not text or not text.strip():
         return None
 
-    # Redact PII before sending externally
-    clean_text = text[:12000]  # Cap prompt context to avoid window limits
+    # Sanitize and redact PII before sending externally
+    clean_text = sanitize_prompt_text(text[:12000])  # Cap context and sanitize
     redacted_prompt_text = redact_text_for_llm(clean_text)
 
     system_prompt = (
@@ -527,7 +577,7 @@ def explain_finding(finding, nearby_text="", document_id=None, user="System"):
     desc = finding.get('description', '')
     evidence = finding.get('evidence', '')
 
-    context_sample = nearby_text[:3000] if nearby_text else ""
+    context_sample = sanitize_prompt_text(nearby_text[:3000]) if nearby_text else ""
     redacted_context = redact_text_for_llm(context_sample)
 
     system_prompt = (
@@ -794,7 +844,7 @@ def test_ai_connection(prompt="PING"):
     start_time = time.time()
     try:
         set_last_llm_error(None)
-        res = call_llm(prompt, json_mode=False, timeout=12)
+        res = call_llm(prompt, json_mode=False, timeout=30)
         latency = round((time.time() - start_time) * 1000, 1)
 
         if res is not None:

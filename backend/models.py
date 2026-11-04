@@ -673,6 +673,20 @@ def get_system_stats():
 
     risk_rate = round((flagged_documents / total_documents * 100), 1) if total_documents > 0 else 0.0
 
+    # Check AI configuration state for live telemetry
+    try:
+        from backend.config import Config
+        from backend.llm import get_model_name
+        enabled = bool(getattr(Config, 'ENABLE_LLM', False))
+        api_key = bool(getattr(Config, 'VEXORA_LLM_API_KEY', '') or os.environ.get('VEXORA_LLM_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('OPENAI_API_KEY'))
+        prov = getattr(Config, 'VEXORA_LLM_PROVIDER', 'gemini')
+        model = get_model_name(prov)
+        ai_enabled = enabled and api_key
+    except Exception:
+        ai_enabled = False
+        prov = 'gemini'
+        model = 'gemini-2.5-flash'
+
     return {
         'total_cases': total_cases,
         'active_cases': active_cases,
@@ -683,6 +697,9 @@ def get_system_stats():
         'high_risk_rate_percent': risk_rate,
         'system_status': 'Operational',
         'database_engine': 'SQLite 3 (Relational)',
+        'ai_reasoning_active': ai_enabled,
+        'ai_provider': prov,
+        'ai_model': model,
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 

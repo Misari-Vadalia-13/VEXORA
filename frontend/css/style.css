@@ -505,7 +505,7 @@ button {
 }
 
 .topbar {
-  height: var(--topbar-height);
+  min-height: var(--topbar-height);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   padding: 0 28px;
@@ -2259,10 +2259,94 @@ button {
 
 /* Responsive adjustment for Phase 2 views */
 @media (max-width: 1024px) {
-  .upload-grid-container,
+  .upload-grid-container {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .forensic-split-view,
   .comparison-doc-select-bar {
     grid-template-columns: 1fr;
   }
 }
 
+/* Layout overflow fix */
+.main-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.content-body {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.view-section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.topbar {
+  min-height: var(--topbar-height);
+  height: auto;
+  min-width: 0;
+  gap: 12px;
+}
+
+.topbar-left {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topbar-right {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+}
+
+.upload-grid-container {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+}
+
+.upload-grid-container > * {
+  min-width: 0;
+}
+
+.form-group {
+  min-width: 0;
+}
+
+.form-control {
+  width: 100%;
+  max-width: 100%;
+}
+
+.staged-item {
+  min-width: 0;
+}
+
+.staged-item-top {
+  min-width: 0;
+  gap: 8px;
+}
+
+.staged-name {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staged-size {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1024px) {
+  .upload-grid-container {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

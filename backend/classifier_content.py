@@ -1,17 +1,18 @@
 """
-VEXORA — Content-Based Document Classification Fallback Module (Phase F)
-Provides deep semantic content inspection used strictly as a secondary fallback
-when filename-based heuristics return 'General Document'.
-Existing classifications from filename rules remain 100% untouched.
+VEXORA — Content-Based Document Classification Fallback Module (Phase F & Phase 3)
+Combines deep semantic content inspection and filename heuristics to accurately
+classify documents (Invoices, Bank Statements, Purchase Orders, Tax Returns,
+Employment Contracts, Financial Audits, Identity Proofs/IDs).
 """
 
 import re
 
 CONTENT_CLASSIFICATION_RULES = {
     'Invoice': {
+        'filename_clues': ['invoice', 'inv', 'bill', 'billing'],
         'patterns': [
             r'\btax\s+invoice\b',
-            r'\binvoice\s+(?:no|num|number|#)\b',
+            r'\binvoice\s*(?:#|no|num|number)\b',
             r'\bbill\s+to\b',
             r'\bamount\s+due\b',
             r'\btotal\s+amount\b',
@@ -21,9 +22,10 @@ CONTENT_CLASSIFICATION_RULES = {
             r'\bsubtotal\b',
             r'\bdue\s+date\b'
         ],
-        'base_confidence': 93.5
+        'base_confidence': 95.0
     },
     'Bank Statement': {
+        'filename_clues': ['statement', 'bank', 'acct', 'financial_statement'],
         'patterns': [
             r'\bbank\s+statement\b',
             r'\baccount\s+statement\b',
@@ -31,17 +33,19 @@ CONTENT_CLASSIFICATION_RULES = {
             r'\bclosing\s+balance\b',
             r'\baccount\s+number\b',
             r'\bstatement\s+period\b',
+            r'\bbalance\b',
             r'\bwithdrawals?\b',
             r'\bdeposits?\b',
             r'\bavailable\s+balance\b',
             r'\btransaction\s+history\b'
         ],
-        'base_confidence': 94.5
+        'base_confidence': 95.0
     },
     'Purchase Order': {
+        'filename_clues': ['purchase_order', 'po_', 'purchase'],
         'patterns': [
             r'\bpurchase\s+order\b',
-            r'\bpo\s+(?:number|#|no)\b',
+            r'\bpo\s*(?:number|#|no)\b',
             r'\bvendor\b',
             r'\bdeliver\s+to\b',
             r'\bship\s+to\b',
@@ -49,24 +53,31 @@ CONTENT_CLASSIFICATION_RULES = {
             r'\bline\s+items?\b',
             r'\border\s+date\b'
         ],
-        'base_confidence': 92.5
+        'base_confidence': 94.0
     },
     'Tax Return': {
+        'filename_clues': ['tax', 'w-2', 'w2', '1040', 'income_tax'],
         'patterns': [
             r'\bform\s+1040\b',
             r'\bw-2\b',
             r'\binternal\s+revenue\b',
+            r'\bincome\s+tax\b',
+            r'\btax\s+return\b',
             r'\btax\s+year\b',
             r'\badjusted\s+gross\s+income\b',
             r'\btaxable\s+income\b',
             r'\birs\b',
             r'\btax\s+payer\b'
         ],
-        'base_confidence': 95.0
+        'base_confidence': 96.0
     },
     'Employment Contract': {
+        'filename_clues': ['contract', 'agreement', 'employment', 'nda', 'mou'],
         'patterns': [
             r'\bemployment\s+(?:agreement|contract)\b',
+            r'\bcontract\b',
+            r'\bagreement\b',
+            r'\bparties\b',
             r'\bemployer\b',
             r'\bemployee\b',
             r'\bcompensation\b',
@@ -74,9 +85,10 @@ CONTENT_CLASSIFICATION_RULES = {
             r'\bscope\s+of\s+work\b',
             r'\bprobationary\s+period\b'
         ],
-        'base_confidence': 91.5
+        'base_confidence': 94.0
     },
     'Financial Audit': {
+        'filename_clues': ['audit', 'annual_report', 'financial_report'],
         'patterns': [
             r'\bindependent\s+auditor\b',
             r'\bfinancial\s+statements\b',
@@ -89,31 +101,38 @@ CONTENT_CLASSIFICATION_RULES = {
         'base_confidence': 94.0
     },
     'Identity Record': {
+        'filename_clues': ['identity', 'passport', 'driver', 'license', 'id_card', 'id_proof'],
         'patterns': [
             r'\bpassport\b',
             r'\bdriver(?:\'s)?\s+license\b',
             r'\bnational\s+identity\b',
             r'\bidentification\s+card\b',
+            r'\bdob\b',
             r'\bdate\s+of\s+birth\b',
             r'\bplace\s+of\s+birth\b',
             r'\bexpiration\s+date\b'
         ],
-        'base_confidence': 93.0
+        'base_confidence': 95.0
     }
 }
 
-def classify_by_content(text_content, file_type='pdf'):
+def classify_by_content(text_content, filename='', file_type='pdf'):
     """
-    Performs fallback semantic classification based exclusively on document text content.
-    Used ONLY when filename-based classification returns 'General Document'.
-    Returns tuple: (category_name, confidence_score)
+    Combines semantic content keywords AND filename clues for forensic classification.
+    Returns tuple: (category_name, confidence_score_float).
     """
-    if not text_content or not isinstance(text_content, str):
+    # Handle callers passing file_type as second positional argument
+    if filename and filename.lower() in ('pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp'):
+        file_type = filename
+        filename = ''
+
+    clean_text = (text_content or '').lower()
+    clean_filename = (filename or '').lower()
+
+    if not clean_text and not clean_filename:
         if file_type.lower() in ('png', 'jpg', 'jpeg', 'tiff', 'bmp'):
             return ('Scanned Artifact', 65.0)
         return ('General Document', 60.0)
-
-    clean_text = text_content.lower()
 
     best_category = 'General Document'
     best_score = 60.0
@@ -121,6 +140,13 @@ def classify_by_content(text_content, file_type='pdf'):
 
     for category, config in CONTENT_CLASSIFICATION_RULES.items():
         matches = 0
+
+        # Filename clues
+        for clue in config.get('filename_clues', []):
+            if clue in clean_filename:
+                matches += 2  # Strong signal from filename
+
+        # Content keyword patterns
         for pat in config['patterns']:
             if re.search(pat, clean_text, re.IGNORECASE):
                 matches += 1

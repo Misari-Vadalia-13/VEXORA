@@ -72,6 +72,30 @@ def _ensure_case_analysis(case_id, user="Lead Investigator"):
             logger.error(f"Failed to auto-compare documents for case {case_id}: {e}")
 
 
+def _rotate_case_dossiers(case_id: str, max_keep: int = 3):
+    """Retains only the latest max_keep dossiers per case in REPORTS_FOLDER."""
+    try:
+        reports_dir = Path(Config.REPORTS_FOLDER)
+        if not reports_dir.exists():
+            return
+        safe_case_id = case_id.replace('-', '_')
+        pdf_files = sorted(reports_dir.glob(f"DOSSIER_{safe_case_id}_*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old_file in pdf_files[max_keep:]:
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+        html_files = sorted(reports_dir.glob(f"DOSSIER_{safe_case_id}_*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old_file in html_files[max_keep:]:
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+    except Exception as e:
+        logger.warning(f"Failed to rotate dossiers for {case_id}: {e}")
+
+
+
 # =====================================================================
 # 1. Dossier Data Aggregation Engine
 # =====================================================================
@@ -780,7 +804,7 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
             y = 50.0
 
         ext_mode = doc_item.get('extraction_mode', '')
-        mode_tag = " [⚠️ SIMULATED OCR]" if ext_mode == 'simulated_fallback' else ""
+        mode_tag = " [⚠️ OCR unavailable - fallback mode]" if ext_mode == 'simulated_fallback' else ""
         page.insert_text(fitz.Point(MARGIN_LEFT + 4, y + 10), doc_item['id'], fontname="courier", fontsize=7, color=(15/255, 23/255, 42/255))
         page.insert_text(fitz.Point(MARGIN_LEFT + 95, y + 10), (doc_item['filename'][:20] + mode_tag)[:28], fontname="hebo", fontsize=7.5, color=(15/255, 23/255, 42/255) if not mode_tag else (180/255, 83/255, 9/255))
         page.insert_text(fitz.Point(MARGIN_LEFT + 250, y + 10), doc_item['category'][:14], fontname="helv", fontsize=7.5, color=(71/255, 85/255, 105/255))
@@ -1156,6 +1180,7 @@ def generate_dossier_pdf(case_id, output_path=None, user="Lead Investigator"):
     # Save document
     doc.save(str(file_path))
     doc.close()
+    _rotate_case_dossiers(case_id, max_keep=3)
 
     file_size = file_path.stat().st_size
     report_id = f"RPT-{case_id}-{timestamp_str}"
@@ -1215,7 +1240,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
         ext_mode = d.get('extraction_mode', '')
         mode_badge = ""
         if ext_mode == 'simulated_fallback':
-            mode_badge = "<br><span style='font-size:10px; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:3px; font-weight:700;'>⚠️ SIMULATED FALLBACK (OCR UNAVAILABLE)</span>"
+            mode_badge = "<br><span style='font-size:10px; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:3px; font-weight:700;'>⚠️ OCR unavailable - fallback mode (SIMULATED FALLBACK)</span>"
         elif ext_mode == 'ocr_unavailable':
             mode_badge = "<br><span style='font-size:10px; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:3px; font-weight:700;'>❌ OCR UNAVAILABLE</span>"
 
@@ -1683,6 +1708,7 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
 
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
+    _rotate_case_dossiers(case_id, max_keep=3)
 
     file_size = file_path.stat().st_size
     report_id = f"RPT-HTML-{case_id}-{timestamp_str}"

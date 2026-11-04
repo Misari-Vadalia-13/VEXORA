@@ -170,7 +170,7 @@ def check_error_level_analysis(pil_image, quality=90, threshold_multiplier=2.8, 
         page_median = float(np.median(means))
         page_std = float(np.std(means))
 
-        threshold = max(page_median * threshold_multiplier, page_median + (2.0 * page_std), 2.0)
+        threshold = max(page_median * threshold_multiplier, page_median + (3.0 * page_std), 4.5)
 
         anomalous_blocks = [r for r in block_records if r[4] > threshold]
 
@@ -264,7 +264,7 @@ def check_noise_and_sharpness_inconsistency(cv_image, block_size=64, page_num=1)
             if v > 0.5:
                 ratio = v / median_var
                 # Sharpness disparity > 3.5x higher than page content median
-                if ratio > 3.5 and v > 50.0:
+                if ratio > 10.0 and v > 100.0:
                     outlier_blocks.append((x0, y0, x1, y1, ratio))
 
         if outlier_blocks:

@@ -10,24 +10,6 @@ from pathlib import Path
 # Base project directory (c:\VEXORA)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Backend and database paths
-BACKEND_DIR = BASE_DIR / 'backend'
-DATABASE_PATH = BACKEND_DIR / 'vexora.db'
-SCHEMA_PATH = BACKEND_DIR / 'schema.sql'
-
-# Ingestion and report folders
-UPLOAD_FOLDER = BASE_DIR / 'uploads'
-REPORTS_FOLDER = BASE_DIR / 'reports'
-FRONTEND_DIR = BASE_DIR / 'frontend'
-
-# Allowed document file extensions for forensic intake
-ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp'}
-
-# Maximum allowed file upload size (16 Megabytes)
-MAX_CONTENT_LENGTH = 16 * 1024 * 1024
-
-TEST_DATABASE_PATH = BACKEND_DIR / 'test_vexora.db'
-
 # Environment variable and threading safety guard for Windows OpenBLAS
 os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 
@@ -47,6 +29,32 @@ if _env_file.exists():
                         os.environ[_k] = _v
     except Exception:
         pass
+
+# Backend and database paths
+BACKEND_DIR = BASE_DIR / 'backend'
+
+# Configurable database path via VEXORA_DB_PATH (defaults to backend/vexora.db)
+_custom_db = os.environ.get('VEXORA_DB_PATH')
+if _custom_db:
+    _p = Path(_custom_db)
+    DATABASE_PATH = _p if _p.is_absolute() else (BASE_DIR / _p)
+else:
+    DATABASE_PATH = BACKEND_DIR / 'vexora.db'
+
+SCHEMA_PATH = BACKEND_DIR / 'schema.sql'
+
+# Ingestion and report folders
+UPLOAD_FOLDER = BASE_DIR / 'uploads'
+REPORTS_FOLDER = BASE_DIR / 'reports'
+FRONTEND_DIR = BASE_DIR / 'frontend'
+
+# Allowed document file extensions for forensic intake
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp'}
+
+# Maximum allowed file upload size (16 Megabytes)
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024
+
+TEST_DATABASE_PATH = BACKEND_DIR / 'test_vexora.db'
 
 class Config:
     """Base application configuration class."""
@@ -76,5 +84,3 @@ class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
     TESTING = True
     DATABASE = str(TEST_DATABASE_PATH)  # Isolated SQLite file for repeatable tests
-
-

@@ -231,7 +231,7 @@
       explainBtn.onclick = function () {
         explainBtn.disabled = true;
         explainBtn.innerHTML = '⏳ Analyzing...';
-        fetch(`/api/findings/${encodeURIComponent(finding.id)}/explain`, {
+        vexoraFetch(`/findings/${encodeURIComponent(finding.id)}/explain`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -288,7 +288,8 @@
       if (imgEl) imgEl.style.display = 'none';
       if (toolbarEl) toolbarEl.style.display = 'none';
 
-      const imageUrl = `/api/findings/${encodeURIComponent(finding.id)}/evidence-image?t=${Date.now()}`;
+      const _apiBase = (typeof getApiBase === "function") ? getApiBase() : ((typeof window.getApiBase === "function") ? window.getApiBase() : "/api");
+      const imageUrl = `${_apiBase}/findings/${encodeURIComponent(finding.id)}/evidence-image?t=${Date.now()}`;
       if (openTabBtn) openTabBtn.href = imageUrl;
 
       // Load image
@@ -376,7 +377,7 @@
       </div>
     `;
 
-    fetch(`/api/cases/${encodeURIComponent(caseId)}/relationships`)
+    vexoraFetch(`/cases/${encodeURIComponent(caseId)}/relationships`)
       .then(res => {
         if (res.status === 403) {
           throw new Error('CORRELATOR_DISABLED');
@@ -402,7 +403,7 @@
           container.innerHTML = `
             <div style="padding:32px; text-align:center; color:var(--status-danger);">
               <div style="font-size:1.5rem; margin-bottom:8px;">⚠️</div>
-              Failed to load relationship graph: ${escapeHtml(err.message || 'Unknown network error')}
+              ${err.message === 'BACKEND_UNREACHABLE' ? 'VEXORA backend not reachable. Start <code>python -m backend.app</code> and open http://127.0.0.1:5000, then click Refresh.' : 'Failed to load relationship graph: ' + escapeHtml(err.message || 'Unknown network error')}
             </div>
           `;
         }
@@ -659,24 +660,33 @@
       aiBtn.innerHTML = '⏳ Testing AI...';
       statusSpan.textContent = 'Contacting configured provider...';
       try {
-        const res = await fetch('/api/system/ai-test', { method: 'POST' });
+        const res = await vexoraFetch('/system/ai-test', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
           statusSpan.style.color = 'var(--status-verified, #10b981)';
           statusSpan.textContent = `✓ Connected (${data.provider} / ${data.model}) — ${data.latency_ms}ms`;
+          if (typeof window.updateAiReasoningBadge === 'function') {
+            window.updateAiReasoningBadge(true, data.model);
+          }
           if (typeof window.showToast === 'function') {
             window.showToast(`AI Connection OK (${data.provider} / ${data.model}) - Latency: ${data.latency_ms}ms`, 'success');
           }
         } else {
           statusSpan.style.color = 'var(--status-danger, #ef4444)';
           statusSpan.textContent = `⚠️ Failed: ${data.error || 'Unavailable'}`;
+          if (typeof window.updateAiReasoningBadge === 'function') {
+            window.updateAiReasoningBadge(false);
+          }
           if (typeof window.showToast === 'function') {
-            window.showToast(`AI Test Failed: ${data.error || 'Check configuration'}`, 'danger');
+            window.showToast(`AI Test: ${data.error || 'Check configuration'}`, 'danger');
           }
         }
       } catch (err) {
         statusSpan.style.color = 'var(--status-danger, #ef4444)';
-        statusSpan.textContent = '⚠️ Network error calling /api/system/ai-test';
+        statusSpan.textContent = '⚠️ Backend unreachable calling /api/system/ai-test';
+        if (typeof window.updateAiReasoningBadge === 'function') {
+          window.updateAiReasoningBadge(false);
+        }
       } finally {
         setTimeout(() => {
           aiBtn.disabled = false;
@@ -715,7 +725,7 @@
           <strong style="font-size:0.9rem; color:var(--text-primary);">🤖 AI-Extracted Fields</strong>
           <span class="pill-tag pill-low" style="font-size:0.68rem;">Verified Grounding</span>
         </div>
-        <span style="font-size:0.75rem; color:#94a3b8; font-style:italic;">AI-assisted, requires human review</span>
+        <span style="font-size:0.75rem; color:#94a3b8; font-style:italic;">AI-assessed, requires human review</span>
       </div>
       <div id="v2AiFieldsContent" style="font-size:0.82rem; color:var(--text-muted); padding:8px 0;">
         Loading AI insights for ${escapeHtml(docId)}...
@@ -723,7 +733,7 @@
     `;
 
     try {
-      const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/ai-insights`);
+      const res = await vexoraFetch(`/documents/${encodeURIComponent(docId)}/ai-insights`);
       const resData = await res.json();
       const contentEl = document.getElementById('v2AiFieldsContent');
       if (!contentEl) return;
@@ -746,7 +756,7 @@
             extractBtn.disabled = true;
             extractBtn.innerHTML = '⏳ Extracting...';
             try {
-              const extRes = await fetch(`/api/documents/${encodeURIComponent(docId)}/ai-extract`, { method: 'POST' });
+              const extRes = await vexoraFetch(`/documents/${encodeURIComponent(docId)}/ai-extract`, { method: 'POST' });
               const extData = await extRes.json();
               if (extData.success) {
                 if (typeof window.showToast === 'function') {
@@ -756,6 +766,10 @@
               } else {
                 if (typeof window.showToast === 'function') {
                   window.showToast(extData.message || 'AI extraction failed', 'warning');
+                }
+                const hint = document.getElementById('v2AiFieldsContent');
+                if (hint && !hint.querySelector('.v2-llm-hint')) {
+                  hint.insertAdjacentHTML('beforeend', '<div class="v2-llm-hint" style="margin-top:6px;font-size:0.75rem;color:#f59e0b;">' + escapeHtml(extData.message || extData.error || 'AI extraction failed') + ' (Set ENABLE_LLM=true and VEXORA_LLM_API_KEY in .env, then restart the backend.)</div>');
                 }
                 extractBtn.disabled = false;
                 extractBtn.innerHTML = '⚡ Extract with AI';
@@ -884,26 +898,46 @@
 
     } catch (err) {
       console.warn('[V2 AI Insights Fetch Error]', err);
+      const errEl = document.getElementById('v2AiFieldsContent');
+      if (errEl) {
+        errEl.textContent = (err && err.message === 'BACKEND_UNREACHABLE')
+          ? '⚠ Backend not reachable — AI insights unavailable. Start the Flask server and click Retry in the red banner.'
+          : 'Could not load AI insights for this document.';
+      }
     }
   };
 
   // Pre-initialize on load
-  function initAllV2() {
-    ensureEvidenceModal();
-    window.v2SetupAiTestButton();
+  function setupGraphAndForensicSelectors() {
     const select = document.getElementById('relGraphCaseSelect');
-    if (select) {
-      window.v2LoadRelationshipGraph(select.value || 'CAS-2026-0891');
+    if (select && select.value) {
+      window.v2LoadRelationshipGraph(select.value);
     }
     const forensicSelect = document.getElementById('forensicDocSelector');
     if (forensicSelect) {
       forensicSelect.addEventListener('change', (e) => {
-        window.v2RenderAiExtractedFields(e.target.value);
+        if (e.target.value) {
+          window.v2RenderAiExtractedFields(e.target.value);
+        }
       });
       if (forensicSelect.value) {
         window.v2RenderAiExtractedFields(forensicSelect.value);
       }
     }
+  }
+
+  function initAllV2() {
+    ensureEvidenceModal();
+    window.v2SetupAiTestButton();
+
+    if (window.__vexoraDataReady) {
+      setupGraphAndForensicSelectors();
+    } else {
+      document.addEventListener('vexora:data-ready', () => {
+        setupGraphAndForensicSelectors();
+      }, { once: true });
+    }
+
     const navSettings = document.getElementById('navSettings');
     if (navSettings) {
       navSettings.addEventListener('click', () => {

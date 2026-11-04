@@ -39,14 +39,14 @@ class TestConfigurableModelAndErrorHandling(unittest.TestCase):
 
     def test_default_models_per_provider(self):
         """Verifies default model per provider matches expected defaults."""
-        self.assertEqual(DEFAULT_MODELS.get('gemini'), 'gemini-1.5-flash')
+        self.assertEqual(DEFAULT_MODELS.get('gemini'), 'gemini-2.5-flash')
         self.assertEqual(DEFAULT_MODELS.get('openai'), 'gpt-4o-mini')
         self.assertIn('claude-3-haiku', DEFAULT_MODELS.get('claude'))
 
         # Without override, get_model_name returns provider default
         with patch.object(Config, 'VEXORA_LLM_MODEL', ''):
             with patch.dict(os.environ, {'VEXORA_LLM_MODEL': ''}):
-                self.assertEqual(get_model_name('gemini'), 'gemini-1.5-flash')
+                self.assertEqual(get_model_name('gemini'), 'gemini-2.5-flash')
                 self.assertEqual(get_model_name('openai'), 'gpt-4o-mini')
                 self.assertEqual(get_model_name('claude'), 'claude-3-haiku-20240307')
 
@@ -226,7 +226,7 @@ class TestAiEndpoints(unittest.TestCase):
         mock_test.return_value = {
             'ok': True,
             'provider': 'gemini',
-            'model': 'gemini-1.5-flash',
+            'model': 'gemini-2.5-flash',
             'latency_ms': 214.5,
             'response_sample': 'OK',
             'disclaimer': AI_DISCLAIMER
@@ -236,7 +236,7 @@ class TestAiEndpoints(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data['ok'])
         self.assertEqual(data['provider'], 'gemini')
-        self.assertEqual(data['model'], 'gemini-1.5-flash')
+        self.assertEqual(data['model'], 'gemini-2.5-flash')
         self.assertGreater(data['latency_ms'], 0)
 
     def test_document_ai_insights_endpoint(self):

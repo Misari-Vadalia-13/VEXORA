@@ -73,8 +73,10 @@ def create_app(config_class=Config):
     # Initialize SQLite database and seed initial demonstration data
     with app.app_context():
         try:
-            init_db(app.config.get('DATABASE'))
-            seed_data(app.config.get('DATABASE'))
+            db_path = app.config.get('DATABASE')
+            app.logger.info(f"[*] VEXORA Database in use: {Path(db_path).resolve()}")
+            init_db(db_path)
+            seed_data(db_path)
         except Exception as e:
             app.logger.error(f"Error during database initialization: {e}")
 
@@ -1039,6 +1041,37 @@ def create_app(config_class=Config):
             return jsonify(get_ai_status()), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/demo/add', methods=['POST'])
+    def api_demo_add():
+        """
+        Non-destructive alternative: Seeds the showcase demo case CAS-DEMO-2026
+        without erasing existing cases, documents, or findings.
+        """
+        try:
+            from tools.reset_demo import seed_demo_case
+            res = seed_demo_case(preserve_existing=True)
+            return jsonify({
+                'success': True,
+                'message': 'Demo case CAS-DEMO-2026 added (existing data preserved).',
+                'data': res
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Demo add error: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to add demo data: {str(e)}"}), 500
+
+    @app.route('/api/demo/reset', methods=['POST'])
+    def api_demo_reset():
+        """
+        Phase 3: Resets database and seeds realistic demo case with 3 genuine docs + 1 tampered doc.
+        """
+        try:
+            from tools.reset_demo import reset_demo_database
+            res = reset_demo_database()
+            return jsonify({'success': True, 'message': 'Demo dataset successfully reset and seeded.', 'data': res}), 200
+        except Exception as e:
+            app.logger.error(f"Demo reset error: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to reset demo data: {str(e)}"}), 500
 
     @app.route('/api/system/ai-test', methods=['POST'])
     def api_system_ai_test():

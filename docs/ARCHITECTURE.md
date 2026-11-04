@@ -8,7 +8,7 @@ The system is constructed with a modular, layered architecture adhering strictly
 
 ---
 
-## 2. Forensic Dataflow Pipeline (Mermaid Diagram)
+## 2. Forensic Dataflow Pipeline (Mermaid Diagram 1)
 
 ```mermaid
 flowchart TD
@@ -64,37 +64,125 @@ flowchart TD
         Comparator --> MatrixUI["Discrepancy Matrix UI"]
         HallucinationGuard --> ExplainUI["Interactive AI Reasoning Explanations & Extracted Fields"]
         
-        %% 5-Part Complete Dossier
+        %% Complete Dossier
         EvidenceDB & Comparator & Correlator & LLM --> DossierEngine["Comprehensive Dossier Engine (backend/reporter.py)"]
-        DossierEngine --> SecK1["K1: Extracted Information & Confidence"]
-        DossierEngine --> SecK2["K2: Evidence & Traceability with Overlays"]
-        DossierEngine --> SecK3["K3: Plain-Language Investigation Summary"]
-        DossierEngine --> SecK4["K4: Areas Requiring Further Verification"]
-        DossierEngine --> SecK5["K5: Technical Boundaries & Limitations"]
+        DossierEngine --> Sec1["1. Executive Summary & Telemetry"]
+        DossierEngine --> Sec2["2. Ingested Evidence Inventory"]
+        DossierEngine --> Sec3["3. Forensic Observations & Visual Anomalies"]
+        DossierEngine --> Sec4["4. Cross-Document Discrepancy Matrix"]
+        DossierEngine --> Sec5["5. Extracted Information & Field Confidence"]
+        DossierEngine --> Sec6["6. Evidence & Traceability with Overlays"]
 
-        DossierEngine --> AuditTrail["SQLite Audit Trail (audit_log: Append-Only by Convention)"]
+        DossierEngine --> AuditTrail["SQLite Audit Trail (audit_logs: Chronological Event Log)"]
     end
 ```
 
 ---
 
-## 3. Subsystem Breakdown
+## 3. Cross-Document Comparison & Correlation Architecture (Mermaid Diagram 2)
 
-### 3.1 Document Ingestion & Safe Intake (`backend/uploader.py`)
+```mermaid
+flowchart LR
+    subgraph Documents ["Input Document Pair"]
+        DocA["Document A (e.g. Invoice)"]
+        DocB["Document B (e.g. Bank Statement)"]
+    end
+
+    subgraph EntityExtraction ["Entity Normalization"]
+        DocA --> NormA["Extract & Normalize Entities A\n(IDs, Amounts, Dates, Parties)"]
+        DocB --> NormB["Extract & Normalize Entities B\n(IDs, Amounts, Dates, Parties)"]
+    end
+
+    subgraph ComparatorEngine ["Pairwise Comparator (backend/comparator.py)"]
+        NormA --> Comp["Field-by-Field Comparator"]
+        NormB --> Comp
+        Comp --> RuleIdMatch{"Identifier Match?"}
+        Comp --> RuleAmtMatch{"Monetary Equivalence?"}
+        Comp --> RuleDateMatch{"Chronological Validity?"}
+        Comp --> RulePartyMatch{"Counterparty Equivalence?"}
+    end
+
+    subgraph OutputMatrix ["Discrepancy Results"]
+        RuleIdMatch -- Conflict --> Disc1["Identifier Clashes (ID-001)"]
+        RuleAmtMatch -- Disparity --> Disc2["Monetary Discrepancies (VAL-001)"]
+        RuleDateMatch -- Inversion --> Disc3["Timeline Inversion (DATE-001)"]
+        RulePartyMatch -- Mismatch --> Disc4["Counterparty Discrepancy (PTY-001)"]
+        Disc1 & Disc2 & Disc3 & Disc4 --> CompTable[("comparisons Table\n(status, diff_value, sev)")]
+    end
+
+    subgraph RelGraph ["Multi-Document Relational Graph (backend/correlator.py)"]
+        CompTable --> GraphGen["Graph Generator"]
+        GraphGen --> Nodes["Doc & Entity Nodes"]
+        GraphGen --> Edges["Typed Edges (Matched, Conflicting, Shared Party)"]
+        Edges --> SVGView["Vanilla SVG Interactive Graph (/api/cases/id/relationships)"]
+    end
+```
+
+---
+
+## 4. Case Dossier Report Generation Flow (Mermaid Diagram 3)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Investigator as Forensic Investigator
+    participant App as Flask API (/api/cases/id/report)
+    participant Reporter as Dossier Engine (backend/reporter.py)
+    participant Analyzer as Pipeline Auto-Complete (analyzer.py)
+    participant Comparator as Cross-Check Auto-Complete (comparator.py)
+    participant DB as SQLite Database
+    participant Output as Vector PDF / Print HTML
+
+    Investigator->>App: Request Case Report (format=pdf or html)
+    App->>Reporter: generate_dossier_pdf(case_id) / generate_dossier_html(case_id)
+    
+    Reporter->>Reporter: _ensure_case_analysis(case_id)
+    alt Unanalyzed Documents Found
+        Reporter->>Analyzer: analyze_document(doc_id)
+        Analyzer->>DB: Persist findings, entities, metadata
+    end
+    alt Multi-Document Case (>=2 documents)
+        Reporter->>Comparator: compare_case_documents(case_id)
+        Comparator->>DB: Persist comparisons matrix
+    end
+
+    Reporter->>DB: Query case, documents, findings, comparisons, audit entries
+    alt Case Has 0 Documents
+        Reporter-->>App: ValueError ("Case has no ingested documents")
+        App-->>Investigator: HTTP 400 Bad Request
+    else Complete Case Data Ready
+        Reporter->>Reporter: Build Section 1: Executive Case Summary & Telemetry
+        Reporter->>Reporter: Build Section 2: Ingested Evidence Inventory (SHA-256)
+        Reporter->>Reporter: Build Section 3: Forensic Observations & Visual Anomalies
+        Reporter->>Reporter: Build Section 4: Cross-Document Discrepancy Matrix
+        Reporter->>Reporter: Build Section 5: Extracted Information & Field Confidence
+        Reporter->>Reporter: Build Section 6: Evidence & Traceability with Overlays
+        Reporter->>Output: Render PyMuPDF Vector PDF / Print-Ready HTML
+        Output-->>App: File stream (application/pdf or text/html)
+        App-->>Investigator: Stream Report Download
+    end
+```
+
+---
+
+## 5. Subsystem Breakdown
+
+### 5.1 Document Ingestion & Safe Intake (`backend/uploader.py`)
 - Accepts PDF documents and raster images (`png`, `jpg`, `jpeg`, `tiff`, `bmp`).
-- Computes SHA-256 cryptographic digests upon upload to prevent duplicate collision attacks.
+- Computes SHA-256 cryptographic digests upon upload to guarantee forensic integrity and prevent collision attacks.
 - Sanitizes filenames via `secure_filename` and enforces a 16MB maximum content payload.
+- Ingestion status starts at `Pending`, transitioning to `Processing` then `Analyzed`, `Flagged`, or `Clean`.
 
-### 3.2 Classification & Content Fallback (`backend/classifier.py`, `backend/classifier_content.py`)
+### 5.2 Classification & Content Fallback (`backend/classifier.py`, `backend/classifier_content.py`)
 - **Primary Stage:** Filename and keyword heuristics classify documents into standardized domains (`Invoice`, `Bank Statement`, `Purchase Order`, `Tax Return`, `Contract`, `Customs Declaration`).
-- **Secondary Fallback:** If the primary stage returns `General Document` or `Uncategorized`, `classify_by_content` scans extracted text bodies for legal, banking, and accounting markers, refining the category without overriding filename rules.
+- **Secondary Fallback:** If the primary stage returns `General Document` or `Uncategorized`, `classify_by_content` scans extracted text bodies for legal, banking, and accounting markers, assigning an objective classification confidence score (`classification_confidence`).
 
-### 3.3 Text Extraction & Confidence Scoring (`backend/extractor.py`, `backend/ner.py`)
+### 5.3 Text Extraction & Confidence Scoring (`backend/extractor.py`, `backend/ner.py`)
 - **Digital PDFs:** Extracted with character-level bounding boxes and font matrices via PyMuPDF (`pymupdf`). Confidence is marked as `"n/a (digital text)"` to distinguish mathematical font glyphs from OCR probabilities.
 - **Scanned Images:** Processed via `pytesseract.image_to_data` extracting word-level confidence metrics (`0.0` - `100.0`). Extracted entities (monetary amounts, dates, IDs, organizations) compute an exact mathematical average of their constituent tokens.
 - **Offline / Fallback Protection:** Under `VEXORA_STRICT_OCR=False`, missing OCR binaries gracefully report `extraction_mode="simulated_fallback"`; under `VEXORA_STRICT_OCR=True`, they return an explicit error and log the status without fabricating text.
 
-### 3.4 Forensic Rule Engines
+### 5.4 Forensic Rule Engines
 1. **Typographic & Visual Analysis (`backend/analyzer.py`):**
    - `RULE-VIS-001`: Font size and typeface anomalies across text lines.
    - `RULE-VIS-002`: Spatial collisions and overlapping text bounding boxes.
@@ -114,26 +202,44 @@ flowchart TD
    - `IMG-003`: ORB keypoint descriptor matching detecting copy-move cloned stamps. Excludes detected text regions to avoid matching repeated font letters. Capped at Medium severity.
    - `IMG-004`: Contour aspect ratio analysis for signature region extraction.
 
-### 3.5 Contextual Intelligence & Cross-Document Graph (`backend/comparator.py`, `backend/correlator.py`)
+### 5.5 Contextual Intelligence & Cross-Document Graph (`backend/comparator.py`, `backend/correlator.py`)
 - **Pairwise Comparator:** Compares two documents within a case, extracting concrete discrepancy values (`attribute`, `doc_a_val`, `doc_b_val`) for monetary shifts, invoice ID clashes, and counterparty discrepancies.
 - **Label-Aware Totals:** Distinguishes invoice grand totals and amounts due from intermediate line items.
 - **Fuzzy Counterparty Matching:** Strips corporate suffixes (`LLC`, `Corp`, `Inc`, `Industries`) and computes sequence similarity ratios via Python standard library `difflib`.
 - **Chronological Conflict Discovery:** Identifies impossible timeline events (e.g. payment settlement preceding invoice issue date).
 - **Vanilla SVG Graph:** Renders a responsive, interactive SVG graph with document nodes, entity nodes, and typed correlation edges without external JavaScript graphing frameworks.
 
-### 3.6 Grounded AI Reasoning Layer (`backend/llm.py`)
+### 5.6 Grounded AI Reasoning Layer (`backend/llm.py`)
 - Connects over pure HTTPS via standard `requests` to Google Gemini, Anthropic Claude, or OpenAI without heavy SDKs.
 - **Configurable Model & Resilience:** Configurable via `VEXORA_LLM_MODEL` environment variable (defaults to `gemini-2.5-flash` for Gemini and `gpt-4o-mini` for OpenAI). Gracefully catches HTTP 404 / 400 "model not found" errors and provides actionable diagnostic remediation without application crashes.
 - **Live Health Diagnostics:** Provides `POST /api/system/ai-test` endpoint and settings UI button to verify live credentials, latency, and model availability.
-- **Privacy First:** Redacts PII (emails, phone numbers, long digit sequences) prior to outbound transmission. Transmits extracted text only; binary document files never leave the server.
+- **Privacy First:** Redacts PII (SSNs, EINs/Tax IDs, emails, phone numbers) prior to outbound transmission. Transmits extracted text only; binary document files never leave the server.
 - **Anti-Hallucination Quote Grounding:** Every extracted entity and explanation claim must match a verbatim substring from the source document text; claims failing this check are discarded.
 
-### 3.7 Comprehensive Dossier & Auditability (`backend/reporter.py`)
+### 5.7 Comprehensive Dossier & Auditability (`backend/reporter.py`)
 - Compiles complete case evidence into a publication-ready report (Vector PDF via PyMuPDF/ReportLab or HTML).
-- **Five Mandatory Problem Statement Sections:**
-  1. **Extracted Information & Confidence (K1):** Tabulates extracted business fields with field-level confidence scores (`"n/a (digital text)"` or percentage OCR confidence) and bounding-box coordinates.
-  2. **Evidence & Traceability with Overlays (K2):** Embedded evidence crops highlighting physical finding bounding boxes in red.
-  3. **Investigation Plain-Language Summary (K3):** Objective overview of case status, document count, and anomaly severity breakdown.
-  4. **Areas Requiring Further Verification (K4):** Actionable forensic checklist directing investigators to specific discrepancies, unverified line items, and missing metadata.
-  5. **Technical Boundaries & Limitations (K5):** Explicit disclosure of heuristic limits, OCR bounds, and legal non-adjudication disclaimers.
-- **Audit Trail:** Sequential SQLite `audit_log` recording all user and system operations (append-only by application convention).
+- **Six Problem Statement Sections:**
+  1. **Executive Case Summary & Telemetry:** Case overview, document count, risk score, and anomaly breakdown.
+  2. **Ingested Evidence Inventory:** Document list, file types, sizes, upload timestamps, and SHA-256 hashes.
+  3. **Forensic Observations & Visual Anomalies:** Tabulated visual, typographic, and primitive findings with rule IDs and severity badges.
+  4. **Cross-Document Discrepancy Matrix:** Direct side-by-side comparison of conflicting values across files.
+  5. **Extracted Information & Field Confidence:** Tabulates extracted business fields with field-level confidence scores (`"n/a (digital text)"` or percentage OCR confidence) and coordinates.
+  6. **Evidence & Traceability with Overlays:** Embedded evidence crops highlighting physical finding bounding boxes with jump-to-source traceability.
+- **Audit Trail:** Sequential SQLite `audit_logs` recording all user and system operations (append-only by application convention).
+
+---
+
+## 6. SQLite Relational Data Models
+
+The VEXORA database (`vexora.db`) is structured with SQLite relational integrity:
+
+| Table | Primary Key | Key Columns | Purpose |
+|---|---|---|---|
+| `users` | `id` (INTEGER) | `username`, `password_hash`, `role`, `created_at` | Investigator authentication & RBAC |
+| `cases` | `id` (TEXT) | `title`, `description`, `status`, `risk_score`, `created_by`, `created_at` | Master investigation cases |
+| `documents` | `id` (TEXT) | `case_id`, `filename`, `file_type`, `file_size`, `file_path`, `file_hash`, `category`, `classification_confidence`, `status`, `uploaded_by` | Ingested evidence files & SHA-256 hashes |
+| `findings` | `id` (TEXT) | `document_id`, `rule_id`, `title`, `severity`, `category`, `status`, `confidence`, `evidence_class`, `page_number`, `coordinates`, `description`, `evidence` | Granular forensic observations |
+| `entities` | `id` (TEXT) | `document_id`, `entity_type`, `entity_value`, `confidence`, `page_number`, `bbox` | Extracted business tokens & OCR confidence |
+| `comparisons` | `id` (TEXT) | `case_id`, `doc_a_id`, `doc_b_id`, `attribute`, `doc_a_val`, `doc_b_val`, `discrepancy_score`, `severity`, `status` | Cross-document field discrepancies |
+| `reports` | `id` (TEXT) | `case_id`, `report_type`, `file_path`, `generated_by`, `generated_at` | Generated case dossiers |
+| `audit_logs` | `id` (INTEGER) | `timestamp`, `action`, `entity_type`, `entity_id`, `details`, `user` | Chronological audit trail |

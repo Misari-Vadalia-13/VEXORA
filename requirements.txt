@@ -1,11 +1,12 @@
 # VEXORA — Dependencies
-# Python backend and analysis libraries (to be utilized in Phases 3-9)
+# Python backend and forensic analysis libraries
 
 Flask>=3.0.0
 PyMuPDF>=1.23.0
 pytesseract>=0.3.10
-spacy>=3.7.0
 Pillow>=10.0.0
-reportlab>=4.0.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
+reportlab>=4.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0

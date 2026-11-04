@@ -157,6 +157,11 @@ function navigateToView(viewName) {
   // Close mobile sidebar if open
   const sidebar = document.getElementById('vexoraSidebar');
   if (sidebar) sidebar.classList.remove('mobile-open');
+
+  // Phase 1: Repopulate all selectors & views on view switch
+  if (typeof window.refreshAll === 'function') {
+    window.refreshAll();
+  }
 }
 
 // Make navigateToView globally accessible for inline onclick handlers
@@ -370,7 +375,11 @@ function initUploadSimulator() {
           if (queue) queue.innerHTML = '';
 
           // Refresh live library and stats
-          initBackendSync();
+          if (typeof window.refreshAll === 'function') {
+            await window.refreshAll();
+          } else {
+            initBackendSync();
+          }
 
           setTimeout(() => {
             navigateToView('library');
@@ -379,13 +388,9 @@ function initUploadSimulator() {
           showToast(`Ingestion error: ${resData.error || 'Server rejected files.'}`, 'danger');
         }
       } catch (err) {
-        console.warn('[VEXORA Upload] Live upload failed, using fallback simulation.', err);
-        showToast('Processed staged documents locally (backend offline).', 'success');
-        stagedFilesList = [];
-        if (queue) queue.innerHTML = '';
-        setTimeout(() => {
-          navigateToView('library');
-        }, 800);
+        console.warn('[VEXORA Upload] Live upload failed:', err);
+        showToast('Upload failed: cannot reach the VEXORA backend. Start it with python -m backend.app and open http://127.0.0.1:5000', 'danger');
+        // Do not clear staged files or navigate away so the user can retry
       } finally {
         processBtn.disabled = false;
         processBtn.textContent = originalText;
@@ -612,6 +617,9 @@ function initCaseModal() {
       } else {
         showToast(`Case ${caseId} registered in active inventory!`, 'success');
       }
+      if (typeof window.refreshAll === 'function') {
+        await window.refreshAll();
+      }
     });
   }
 }
@@ -688,18 +696,542 @@ function escapeHtml(text) {
 /**
  * 11. Backend API Synchronizer & Live Database Integration
  */
+let __vexoraApiBase = null;
+const __vexoraApiTried = [];
+
+window.getApiBase = getApiBase;
 function getApiBase() {
-  if (window.location.port === '5000') {
-    return '/api';
-  }
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  if (__vexoraApiBase) return __vexoraApiBase;
+  let override = window.VEXORA_API_BASE || null;
+  try { override = override || localStorage.getItem('vexora_api_base'); } catch (e) {}
+  if (override) return String(override).replace(/\/+$/, '');
+  if (window.location.port === '5000') return '/api';
+  if (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return 'http://127.0.0.1:5000/api';
   }
   return '/api';
 }
 
-async function initBackendSync() {
+async function resolveApiBase() {
+  const cands = [];
+  let override = window.VEXORA_API_BASE || null;
+  try { override = override || localStorage.getItem('vexora_api_base'); } catch (e) {}
+  if (override) cands.push(String(override).replace(/\/+$/, ''));
+  if (window.location.protocol.startsWith('http')) cands.push('/api');
+  ['http://127.0.0.1:5000/api', 'http://localhost:5000/api', 'http://127.0.0.1:5001/api', 'http://127.0.0.1:8000/api']
+    .forEach(c => { if (!cands.includes(c)) cands.push(c); });
+  __vexoraApiTried.length = 0;
+  for (const base of cands) {
+    __vexoraApiTried.push(base);
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2500);
+      const res = await fetch(base + '/health', { signal: ctrl.signal });
+      clearTimeout(timer);
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('json')) continue;
+      const j = await res.json();
+      if (j && j.status === 'healthy') { __vexoraApiBase = base; return base; }
+    } catch (e) { /* try next candidate */ }
+  }
+  __vexoraApiBase = null;
+  return null;
+}
+window.vexoraApiReady = resolveApiBase();
+
+window.vexoraFetch = async function(path, opts) {
+  await window.vexoraApiReady;
+  if (!__vexoraApiBase) throw new Error('BACKEND_UNREACHABLE');
+  let res;
+  try { res = await fetch(__vexoraApiBase + path, opts); }
+  catch (e) { throw new Error('BACKEND_UNREACHABLE'); }
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('json')) throw new Error('BACKEND_UNREACHABLE');
+  return res;
+};
+
+function showBackendOfflineBanner() {
+  if (document.getElementById('vexoraOfflineBanner')) return;
+  const el = document.createElement('div');
+  el.id = 'vexoraOfflineBanner';
+  el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font-size:0.85rem;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-weight:600;box-shadow:0 -2px 10px rgba(0,0,0,0.5);';
+  el.innerHTML = '<span>⚠️ Backend offline - showing no live data. (Tried: ' + __vexoraApiTried.join(', ') + '). Start server with <code>python -m backend.app</code> at <strong>http://127.0.0.1:5000</strong></span>' +
+    '<button id="vexoraRetryBtn" style="background:#fff;color:#b91c1c;border:0;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;">Retry</button>';
+  document.body.appendChild(el);
+  document.getElementById('vexoraRetryBtn').onclick = async () => {
+    el.remove();
+    window.vexoraApiReady = resolveApiBase();
+    initBackendSync();
+  };
+}
+
+/**
+ * Phase 1: Unified Data Refresh and Selector Synchronization
+ * Fetches /api/stats, /api/cases, /api/documents and repopulates every selector independently.
+ */
+window.updateAiReasoningBadge = function(isAiOn, modelName) {
+  const badge = document.getElementById('aiReasoningBadge');
+  if (!badge) return;
+  if (isAiOn) {
+    badge.className = 'pill-tag pill-verified';
+    badge.style.background = 'rgba(16, 185, 129, 0.15)';
+    badge.style.color = '#10b981';
+    badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+    let mLabel = modelName || 'Gemini 2.5 Flash';
+    if (mLabel.toLowerCase().includes('gemini-2.5-flash')) mLabel = 'Gemini 2.5 Flash';
+    else if (mLabel.toLowerCase().includes('gpt-4o-mini')) mLabel = 'GPT-4o Mini';
+    badge.innerHTML = `🤖 AI reasoning: ON (${escapeHtml(mLabel)})`;
+  } else {
+    badge.className = 'pill-tag pill-status';
+    badge.style.background = 'rgba(148, 163, 184, 0.15)';
+    badge.style.color = 'var(--text-muted, #94a3b8)';
+    badge.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+    badge.innerHTML = '🤖 AI reasoning: OFF (deterministic mode)';
+  }
+};
+
+window.loadDemoCaseAction = async function() {
+  if (!confirm('This will ERASE all cases, documents and findings and load the demo case. Continue?')) {
+    return;
+  }
+  const btn = document.getElementById('loadDemoCaseBtn');
+  const originalText = btn ? btn.innerHTML : '⚡ Reset & Load Demo';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Loading Demo...';
+  }
+
+  showToast('Resetting database and loading benchmark showcase case (Apex Global Due Diligence)...', 'info');
+  try {
+    const apiBase = getApiBase();
+    const res = await fetch(`${apiBase}/demo/reset`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('Showcase case loaded successfully! 3 genuine docs, 1 tampered doc, and cross-document discrepancy matrix initialized.', 'success');
+      if (typeof window.refreshAll === 'function') {
+        await window.refreshAll();
+      }
+    } else {
+      showToast(`Failed to load demo case: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showToast('Failed to connect to backend to reset demo case.', 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+};
+
+window.addDemoCaseAction = async function() {
+  const btn = document.getElementById('addDemoCaseBtn');
+  const originalText = btn ? btn.innerHTML : '📁 Add Demo Case';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Adding Demo...';
+  }
+
+  showToast('Adding showcase demo case (Apex Global Due Diligence) while keeping your existing data...', 'info');
+  try {
+    const apiBase = getApiBase();
+    const res = await fetch(`${apiBase}/demo/add`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Demo case added successfully! Existing cases and documents were preserved.', 'success');
+      if (typeof window.refreshAll === 'function') {
+        await window.refreshAll();
+      }
+    } else {
+      showToast(`Failed to add demo case: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showToast('Failed to connect to backend to add demo case.', 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+};
+
+window.deleteDocumentRecord = async function(docId) {
+  if (!confirm(`Are you sure you want to delete document ${docId}?`)) return;
   const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast(`Document ${docId} deleted successfully.`, 'info');
+      if (typeof window.refreshAll === 'function') {
+        await window.refreshAll();
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast(`Failed to delete document: ${err.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showToast('Failed to connect to backend to delete document.', 'danger');
+  }
+};
+
+window.refreshAll = async function refreshAll() {
+  await window.vexoraApiReady;
+  if (!__vexoraApiBase) {
+    showBackendOfflineBanner();
+    return;
+  }
+  const offline = document.getElementById('vexoraOfflineBanner');
+  if (offline) offline.remove();
+
+  const apiBase = getApiBase();
+
+  // 1. Fetch live data endpoints
+  let statsData = null;
+  let casesList = [];
+  let docsList = [];
+
+  try {
+    const statsRes = await fetch(`${apiBase}/stats`);
+    if (statsRes.ok) {
+      const statsJson = await statsRes.json();
+      if (statsJson.success && statsJson.data) statsData = statsJson.data;
+    }
+  } catch (e) {
+    console.warn('[refreshAll] /api/stats failed:', e);
+  }
+
+  try {
+    const casesRes = await fetch(`${apiBase}/cases`);
+    if (casesRes.ok) {
+      const casesJson = await casesRes.json();
+      if (casesJson.success && Array.isArray(casesJson.data)) casesList = casesJson.data;
+    }
+  } catch (e) {
+    console.warn('[refreshAll] /api/cases failed:', e);
+  }
+
+  try {
+    const docsRes = await fetch(`${apiBase}/documents`);
+    if (docsRes.ok) {
+      const docsJson = await docsRes.json();
+      if (docsJson.success && Array.isArray(docsJson.data)) docsList = docsJson.data;
+    }
+  } catch (e) {
+    console.warn('[refreshAll] /api/documents failed:', e);
+  }
+
+  // 2. Update Stats Counter Cards
+  try {
+    if (statsData) {
+      const activeCounter = document.getElementById('activeCasesCount');
+      if (activeCounter && statsData.active_cases !== undefined) activeCounter.textContent = statsData.active_cases;
+      const docsCounter = document.getElementById('totalDocsCount');
+      if (docsCounter && statsData.total_documents !== undefined) docsCounter.textContent = statsData.total_documents;
+      const flagsCounter = document.getElementById('flaggedAnomaliesCount');
+      if (flagsCounter && statsData.critical_findings !== undefined) flagsCounter.textContent = statsData.critical_findings;
+      const evidenceCounter = document.getElementById('evidenceNodesCount');
+      if (evidenceCounter && statsData.total_findings !== undefined) evidenceCounter.textContent = statsData.total_findings;
+
+      const persistStats = document.getElementById('localPersistenceStats');
+      if (persistStats) {
+        const cCount = statsData.active_cases !== undefined ? statsData.active_cases : 0;
+        const dCount = statsData.total_documents !== undefined ? statsData.total_documents : 0;
+        persistStats.textContent = `${cCount} cases • ${dCount} documents`;
+      }
+
+      if (statsData.ai_reasoning_active) {
+        window.updateAiReasoningBadge(true, statsData.ai_model || 'Gemini 2.5 Flash');
+      } else {
+        window.updateAiReasoningBadge(false);
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] Stats update failed:', e);
+  }
+
+  // 3. Populate targetCaseSelect (Upload Page Case Selector)
+  try {
+    const targetCaseSelect = document.getElementById('targetCaseSelect');
+    if (targetCaseSelect) {
+      const prevVal = targetCaseSelect.value;
+      targetCaseSelect.innerHTML = '';
+      if (casesList.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No cases yet - create one';
+        targetCaseSelect.appendChild(opt);
+      } else {
+        casesList.forEach((c) => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.id}: ${c.title}`;
+          targetCaseSelect.appendChild(opt);
+        });
+        const savedCaseId = localStorage.getItem('vexora_selected_case_id');
+        if (prevVal && [...targetCaseSelect.options].some((o) => o.value === prevVal)) {
+          targetCaseSelect.value = prevVal;
+        } else if (savedCaseId && [...targetCaseSelect.options].some((o) => o.value === savedCaseId)) {
+          targetCaseSelect.value = savedCaseId;
+        }
+        targetCaseSelect.onchange = (e) => {
+          if (e.target.value) localStorage.setItem('vexora_selected_case_id', e.target.value);
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] targetCaseSelect update failed:', e);
+  }
+
+  // 4. Populate dossierCaseSelector (Dossier Report Case Selector)
+  try {
+    const dossierCaseSelect = document.getElementById('dossierCaseSelector');
+    if (dossierCaseSelect) {
+      const prevVal = dossierCaseSelect.value;
+      dossierCaseSelect.innerHTML = '<option value="">Select Investigation Case...</option>';
+      if (casesList.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No cases yet - create one';
+        dossierCaseSelect.appendChild(opt);
+      } else {
+        casesList.forEach((c) => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.id}: ${c.title}`;
+          dossierCaseSelect.appendChild(opt);
+        });
+        const savedCaseId = localStorage.getItem('vexora_selected_case_id');
+        if (prevVal && [...dossierCaseSelect.options].some((o) => o.value === prevVal)) {
+          dossierCaseSelect.value = prevVal;
+        } else if (savedCaseId && [...dossierCaseSelect.options].some((o) => o.value === savedCaseId)) {
+          dossierCaseSelect.value = savedCaseId;
+        } else if (casesList.length > 0 && !dossierCaseSelect.value) {
+          dossierCaseSelect.selectedIndex = 1;
+        }
+        dossierCaseSelect.onchange = (e) => {
+          if (e.target.value) {
+            localStorage.setItem('vexora_selected_case_id', e.target.value);
+            if (typeof window.loadCaseDossierPreview === 'function') {
+              window.loadCaseDossierPreview(e.target.value);
+            }
+          }
+        };
+        if (dossierCaseSelect.value && typeof window.loadCaseDossierPreview === 'function') {
+          window.loadCaseDossierPreview(dossierCaseSelect.value);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] dossierCaseSelector update failed:', e);
+  }
+
+  // 5. Populate relGraphCaseSelect (Cross-Document Relationship Graph Case Selector)
+  try {
+    const relGraphSelect = document.getElementById('relGraphCaseSelect');
+    if (relGraphSelect) {
+      const prevVal = relGraphSelect.value;
+      relGraphSelect.innerHTML = '';
+      if (casesList.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No cases yet - create one';
+        relGraphSelect.appendChild(opt);
+      } else {
+        casesList.forEach((c) => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.id} (${c.title})`;
+          relGraphSelect.appendChild(opt);
+        });
+        const savedCaseId = localStorage.getItem('vexora_selected_case_id');
+        if (prevVal && [...relGraphSelect.options].some((o) => o.value === prevVal)) {
+          relGraphSelect.value = prevVal;
+        } else if (savedCaseId && [...relGraphSelect.options].some((o) => o.value === savedCaseId)) {
+          relGraphSelect.value = savedCaseId;
+        }
+        relGraphSelect.onchange = (e) => {
+          if (e.target.value) {
+            localStorage.setItem('vexora_selected_case_id', e.target.value);
+            if (typeof window.v2LoadRelationshipGraph === 'function') {
+              window.v2LoadRelationshipGraph(e.target.value);
+            }
+          }
+        };
+        if (relGraphSelect.value && typeof window.v2LoadRelationshipGraph === 'function') {
+          window.v2LoadRelationshipGraph(relGraphSelect.value);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] relGraphCaseSelect update failed:', e);
+  }
+
+  // 6. Populate forensicDocSelector (Forensic Inspector Document Selector)
+  try {
+    const forensicDocSelector = document.getElementById('forensicDocSelector');
+    if (forensicDocSelector) {
+      const prevVal = forensicDocSelector.value;
+      forensicDocSelector.innerHTML = '';
+      if (docsList.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No documents yet - upload one';
+        forensicDocSelector.appendChild(opt);
+      } else {
+        docsList.forEach((doc) => {
+          const opt = document.createElement('option');
+          opt.value = doc.id;
+          opt.textContent = `${doc.filename} (${doc.id})`;
+          forensicDocSelector.appendChild(opt);
+        });
+        if (prevVal && [...forensicDocSelector.options].some((o) => o.value === prevVal)) {
+          forensicDocSelector.value = prevVal;
+        }
+        forensicDocSelector.onchange = (e) => {
+          if (e.target.value && typeof window.loadDocumentFindings === 'function') {
+            window.loadDocumentFindings(e.target.value);
+          }
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] forensicDocSelector update failed:', e);
+  }
+
+  // 7. Populate compareDocA and compareDocB (Cross-Document Comparison Selectors)
+  try {
+    const compareDocA = document.getElementById('compareDocA');
+    const compareDocB = document.getElementById('compareDocB');
+    if (compareDocA && compareDocB) {
+      const prevA = compareDocA.value;
+      const prevB = compareDocB.value;
+      compareDocA.innerHTML = '';
+      compareDocB.innerHTML = '';
+
+      if (docsList.length === 0) {
+        const optA = document.createElement('option');
+        optA.value = '';
+        optA.textContent = 'No documents yet - upload one';
+        compareDocA.appendChild(optA);
+
+        const optB = document.createElement('option');
+        optB.value = '';
+        optB.textContent = 'No documents yet - upload one';
+        compareDocB.appendChild(optB);
+      } else {
+        docsList.forEach((doc) => {
+          const optA = document.createElement('option');
+          optA.value = doc.id;
+          optA.textContent = `${doc.filename} (${doc.id})`;
+          compareDocA.appendChild(optA);
+
+          const optB = document.createElement('option');
+          optB.value = doc.id;
+          optB.textContent = `${doc.filename} (${doc.id})`;
+          compareDocB.appendChild(optB);
+        });
+
+        if (prevA && [...compareDocA.options].some((o) => o.value === prevA)) {
+          compareDocA.value = prevA;
+        }
+        if (prevB && [...compareDocB.options].some((o) => o.value === prevB)) {
+          compareDocB.value = prevB;
+        } else if (docsList.length > 1) {
+          compareDocB.selectedIndex = 1;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] comparison selectors update failed:', e);
+  }
+
+  // 8. Populate Document Library Grid Cards
+  try {
+    const docLibraryGrid = document.getElementById('docLibraryGrid');
+    if (docLibraryGrid) {
+      docLibraryGrid.innerHTML = '';
+      if (docsList.length === 0) {
+        docLibraryGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
+            <div style="font-size: 2rem; margin-bottom: 8px;">📂</div>
+            <p>No documents uploaded yet. Go to <a href="#upload" onclick="navigateToView('upload')">Upload</a> to stage and ingest files.</p>
+          </div>
+        `;
+      } else {
+        docsList.forEach((doc) => {
+          const sizeMb = (doc.file_size / (1024 * 1024)).toFixed(1) + ' MB';
+          const icon = doc.file_type === 'pdf' ? '📄' : '🖼️';
+          const catLower = (doc.category || 'general').toLowerCase();
+          const filterCat = catLower.includes('invoice') || catLower.includes('financial') || catLower.includes('bank')
+            ? 'financial'
+            : catLower.includes('id') || catLower.includes('identity') || catLower.includes('passport')
+            ? 'identity'
+            : catLower.includes('tax') || catLower.includes('return')
+            ? 'tax'
+            : catLower.includes('contract') || catLower.includes('agreement')
+            ? 'legal'
+            : 'all';
+
+          const card = document.createElement('div');
+          card.className = 'doc-card';
+          card.setAttribute('data-category', filterCat);
+          card.innerHTML = `
+            <div class="doc-card-top">
+              <div class="doc-badge-icon">${icon}</div>
+              <span class="pill-tag pill-status">${escapeHtml(doc.category || 'Document')}</span>
+            </div>
+            <h3 class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</h3>
+            <div class="doc-card-meta">
+              <span>${escapeHtml((doc.file_type || 'PDF').toUpperCase())}</span> • <span>${sizeMb}</span> • <span style="color:var(--status-verified);">${doc.classification_confidence || 95}% Conf</span>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+              Case: <strong>${escapeHtml(doc.case_id || 'General Vault')}</strong>
+            </div>
+            ${doc.extraction_mode === 'simulated_fallback' ? `
+              <div style="margin-top:6px;">
+                <span class="pill-tag pill-medium" style="font-size:0.7rem; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">
+                  ⚠️ OCR unavailable - fallback mode
+                </span>
+              </div>` : ''}
+            <div class="doc-card-footer">
+              <button class="table-action-btn" onclick="triggerDocumentExtraction('${doc.id}')" title="Run OCR & Entity Extraction">⚡ Extract</button>
+              <button class="table-action-btn" onclick="analyzeDocumentAndInspect('${doc.id}')" title="Run Forensic & Contextual Analysis">🔬 Analyze</button>
+              <button class="table-action-btn" onclick="deleteDocumentRecord('${doc.id}')" title="Delete Document" style="color:var(--status-danger);">🗑️ Delete</button>
+              <a href="${apiBase}/documents/${doc.id}/download" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">Download</a>
+            </div>
+          `;
+          docLibraryGrid.appendChild(card);
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[refreshAll] docLibraryGrid update failed:', e);
+  }
+
+  // 9. Auxiliary report, audit trail, and graph loading
+  try {
+    if (typeof loadGeneratedReportsList === 'function') loadGeneratedReportsList();
+    if (typeof loadAuditTrailLogs === 'function') loadAuditTrailLogs();
+    if (typeof loadEvidenceProvenanceGraph === 'function') loadEvidenceProvenanceGraph();
+  } catch (e) {
+    console.warn('[refreshAll] Auxiliary sync failed:', e);
+  }
+
+  // 10. Dispatch data ready event to eliminate race condition
+  window.__vexoraDataReady = true;
+  document.dispatchEvent(new CustomEvent('vexora:data-ready', { detail: { cases: casesList, docs: docsList } }));
+};
+
+async function initBackendSync() {
+  await window.vexoraApiReady;
+  if (!__vexoraApiBase) {
+    showBackendOfflineBanner();
+    return;
+  }
+  const offline = document.getElementById('vexoraOfflineBanner');
+  if (offline) offline.remove();
+  const apiBase = getApiBase();
+
   try {
     const healthRes = await fetch(`${apiBase}/health`, { method: 'GET' });
     if (!healthRes.ok) return;
@@ -707,195 +1239,14 @@ async function initBackendSync() {
 
     if (healthData.status === 'healthy') {
       console.log('[VEXORA API] Connected to Flask backend & SQLite database.');
-
-      // Update banner pill to show connected state
       const bannerPill = document.querySelector('.banner-pill');
       if (bannerPill) {
         bannerPill.textContent = '⚡ VEXORA Intelligence Engine • Phase 6 Active (Forensic & Contextual Analysis)';
       }
-
-      // 1. Fetch live stats
-      try {
-        const statsRes = await fetch(`${apiBase}/stats`);
-        if (statsRes.ok) {
-          const statsJson = await statsRes.json();
-          if (statsJson.success && statsJson.data) {
-            const stats = statsJson.data;
-            const activeCounter = document.getElementById('activeCasesCount');
-            if (activeCounter && stats.active_cases !== undefined) {
-              activeCounter.textContent = stats.active_cases;
-            }
-            const docsCounter = document.getElementById('totalDocsCount');
-            if (docsCounter && stats.total_documents !== undefined) {
-              docsCounter.textContent = stats.total_documents;
-            }
-            const flagsCounter = document.getElementById('flaggedAnomaliesCount');
-            if (flagsCounter && stats.critical_findings !== undefined) {
-              flagsCounter.textContent = stats.critical_findings;
-            }
-            const evidenceCounter = document.getElementById('evidenceNodesCount');
-            if (evidenceCounter && stats.total_findings !== undefined) {
-              evidenceCounter.textContent = stats.total_findings;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[VEXORA API] Stats fetch failed:', e);
-      }
-
-      // 2. Fetch active cases and populate upload case selector & dossier case selector
-      const targetCaseSelect = document.getElementById('targetCaseSelect');
-      const dossierCaseSelect = document.getElementById('dossierCaseSelector');
-      if (targetCaseSelect || dossierCaseSelect) {
-        try {
-          const casesRes = await fetch(`${apiBase}/cases`);
-          if (casesRes.ok) {
-            const casesJson = await casesRes.json();
-            if (casesJson.success && casesJson.data && casesJson.data.length > 0) {
-              if (targetCaseSelect) {
-                targetCaseSelect.innerHTML = '';
-                casesJson.data.forEach((c) => {
-                  const opt = document.createElement('option');
-                  opt.value = c.id;
-                  opt.textContent = `${c.id}: ${c.title}`;
-                  targetCaseSelect.appendChild(opt);
-                });
-              }
-
-              // Phase 8: Populate Dossier Case Selector
-              if (dossierCaseSelect) {
-                dossierCaseSelect.innerHTML = '<option value="">Select Investigation Case...</option>';
-                casesJson.data.forEach((c) => {
-                  const opt = document.createElement('option');
-                  opt.value = c.id;
-                  opt.textContent = `${c.id}: ${c.title}`;
-                  dossierCaseSelect.appendChild(opt);
-                });
-                // Auto load the first active case
-                dossierCaseSelect.selectedIndex = 1;
-                loadCaseDossierPreview(casesJson.data[0].id);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('[VEXORA API] Cases sync failed:', e);
-        }
-      }
-
-      // Phase 8: Load generated reports list
-      loadGeneratedReportsList();
-
-      // Phase 9: Load live investigation audit trail
-      loadAuditTrailLogs();
-
-      // 3. Fetch live documents and populate Document Library cards & Inspector selector
-      const docLibraryGrid = document.getElementById('docLibraryGrid');
-      const forensicDocSelector = document.getElementById('forensicDocSelector');
-
-      if (docLibraryGrid) {
-        try {
-          const docsRes = await fetch(`${apiBase}/documents`);
-          if (docsRes.ok) {
-            const docsJson = await docsRes.json();
-            if (docsJson.success && docsJson.data && docsJson.data.length > 0) {
-              docLibraryGrid.innerHTML = '';
-
-              if (forensicDocSelector) {
-                forensicDocSelector.innerHTML = '';
-              }
-
-              docsJson.data.forEach((doc) => {
-                const sizeMb = (doc.file_size / (1024 * 1024)).toFixed(1) + ' MB';
-                const icon = doc.file_type === 'pdf' ? '📄' : '🖼️';
-                const catLower = (doc.category || 'general').toLowerCase();
-                const filterCat = catLower.includes('invoice') || catLower.includes('financial') || catLower.includes('bank')
-                  ? 'financial'
-                  : catLower.includes('id') || catLower.includes('identity') || catLower.includes('passport')
-                  ? 'identity'
-                  : catLower.includes('tax') || catLower.includes('return')
-                  ? 'tax'
-                  : catLower.includes('contract') || catLower.includes('agreement')
-                  ? 'legal'
-                  : 'all';
-
-                // Populate selector in Forensic Inspector
-                if (forensicDocSelector) {
-                  const opt = document.createElement('option');
-                  opt.value = doc.id;
-                  opt.textContent = `${doc.filename} (${doc.id})`;
-                  forensicDocSelector.appendChild(opt);
-                }
-
-                const card = document.createElement('div');
-                card.className = 'doc-card';
-                card.setAttribute('data-category', filterCat);
-                card.innerHTML = `
-                  <div class="doc-card-top">
-                    <div class="doc-badge-icon">${icon}</div>
-                    <span class="pill-tag pill-status">${escapeHtml(doc.category || 'Document')}</span>
-                  </div>
-                  <h3 class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</h3>
-                  <div class="doc-card-meta">
-                    <span>${escapeHtml(doc.file_type.toUpperCase())}</span> • <span>${sizeMb}</span> • <span style="color:var(--status-verified);">${doc.classification_confidence || 95}% Conf</span>
-                  </div>
-                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
-                    Case: <strong>${escapeHtml(doc.case_id || 'General Vault')}</strong>
-                  </div>
-                  ${doc.extraction_mode === 'simulated_fallback' ? `
-                    <div style="margin-top:6px;">
-                      <span class="pill-tag pill-medium" style="font-size:0.7rem; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">
-                        ⚠️ Simulated Fallback (OCR Unavailable)
-                      </span>
-                    </div>` : ''}
-                  <div class="doc-card-footer">
-                    <button class="table-action-btn" onclick="triggerDocumentExtraction('${doc.id}')" title="Run OCR & Entity Extraction">⚡ Extract</button>
-                    <button class="table-action-btn" onclick="analyzeDocumentAndInspect('${doc.id}')" title="Run Forensic & Contextual Analysis">🔬 Analyze</button>
-                    <a href="${apiBase}/documents/${doc.id}/download" target="_blank" class="table-action-btn" style="text-decoration:none; display:inline-flex; align-items:center;">Download</a>
-                  </div>
-                `;
-                docLibraryGrid.appendChild(card);
-              });
-
-              if (forensicDocSelector) {
-                forensicDocSelector.onchange = (e) => {
-                  loadDocumentFindings(e.target.value);
-                };
-              }
-
-              // Phase 7: Populate comparison document selectors
-              const compareDocA = document.getElementById('compareDocA');
-              const compareDocB = document.getElementById('compareDocB');
-              if (compareDocA && compareDocB && docsJson.data.length > 0) {
-                compareDocA.innerHTML = '';
-                compareDocB.innerHTML = '';
-                docsJson.data.forEach((doc) => {
-                  const optA = document.createElement('option');
-                  optA.value = doc.id;
-                  optA.textContent = `${doc.filename} (${doc.id})`;
-                  compareDocA.appendChild(optA);
-
-                  const optB = document.createElement('option');
-                  optB.value = doc.id;
-                  optB.textContent = `${doc.filename} (${doc.id})`;
-                  compareDocB.appendChild(optB);
-                });
-                if (docsJson.data.length > 1) {
-                  compareDocB.selectedIndex = 1;
-                }
-              }
-
-              // Phase 7: Load live evidence provenance graph
-              loadEvidenceProvenanceGraph();
-            }
-          }
-        } catch (e) {
-          console.warn('[VEXORA API] Documents sync failed:', e);
-        }
-      }
+      await window.refreshAll();
     }
-  } catch (err) {
-    // Backend server not currently running on port 5000; running in static client mode
-    console.log('[VEXORA API] Running in standalone frontend mode.');
+  } catch (e) {
+    console.warn('[initBackendSync] Connection check failed:', e);
   }
 }
 
@@ -1049,7 +1400,61 @@ function renderForensicFindings(findings) {
  * Phase 7: Cross-Document Comparison & Discrepancy Matrix
  * ============================================================================
  */
+window.triggerAiCaseCrosscheck = async function() {
+  const btn = document.getElementById('runAiCrosscheckBtn');
+  const originalText = btn ? btn.innerHTML : '🤖 AI Cross-Check';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ AI Checking...';
+  }
+
+  const relSelect = document.getElementById('relGraphCaseSelect');
+  const targetSelect = document.getElementById('targetCaseSelect');
+  const dossierSelect = document.getElementById('dossierCaseSelector');
+  const caseId = (relSelect && relSelect.value) || (targetSelect && targetSelect.value) || (dossierSelect && dossierSelect.value);
+
+  if (!caseId) {
+    showToast('Please select or create an investigation case first.', 'warning');
+    if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+    return;
+  }
+
+  showToast(`Running AI contextual cross-check on Case ${caseId}...`, 'info');
+  try {
+    const apiBase = getApiBase();
+    const res = await fetch(`${apiBase}/cases/${encodeURIComponent(caseId)}/ai-crosscheck`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      const count = data.count || (data.findings ? data.findings.length : 0);
+      if (count > 0) {
+        showToast(`AI cross-check flagged ${count} contextual inconsistency item(s) (AI-assessed, requires human review).`, 'warning');
+        if (typeof window.v2LoadRelationshipGraph === 'function') {
+          window.v2LoadRelationshipGraph(caseId);
+        }
+      } else {
+        showToast('AI cross-check complete: No contextual inconsistencies found across case documents.', 'success');
+      }
+    } else {
+      showToast(data.message || data.error || 'AI reasoning unavailable: set VEXORA_LLM_API_KEY in .env. Falling back to deterministic rules.', 'warning');
+    }
+  } catch (err) {
+    showToast('AI cross-check unavailable. Falling back to deterministic rules.', 'warning');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+};
+
 window.triggerCrossDocumentComparison = async function() {
+  const compBtn = document.getElementById('runComparisonBtn');
+  const originalBtnText = compBtn ? compBtn.innerHTML : 'Run Cross-Check';
+  if (compBtn) {
+    compBtn.disabled = true;
+    compBtn.innerHTML = '⏳ Comparing...';
+  }
+
   const docASelect = document.getElementById('compareDocA');
   const docBSelect = document.getElementById('compareDocB');
   const docAId = docASelect ? docASelect.value : null;
@@ -1057,10 +1462,12 @@ window.triggerCrossDocumentComparison = async function() {
 
   if (!docAId || !docBId) {
     showToast('Please select two documents to compare.', 'warning');
+    if (compBtn) { compBtn.disabled = false; compBtn.innerHTML = originalBtnText; }
     return;
   }
   if (docAId === docBId) {
     showToast('Please select two distinct documents for cross-comparison.', 'warning');
+    if (compBtn) { compBtn.disabled = false; compBtn.innerHTML = originalBtnText; }
     return;
   }
 
@@ -1092,6 +1499,11 @@ window.triggerCrossDocumentComparison = async function() {
   } catch (err) {
     console.error('[VEXORA Comparison Error]', err);
     showToast('Failed to connect to comparison engine.', 'danger');
+  } finally {
+    if (compBtn) {
+      compBtn.disabled = false;
+      compBtn.innerHTML = originalBtnText;
+    }
   }
 };
 

@@ -336,7 +336,8 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
         missing_fields = []
         if not entities.get('dates'):
             missing_fields.append("Effective / Execution Date")
-        if len(entities.get('organizations', [])) + len(entities.get('persons', [])) < 2:
+        parties_count = len(entities.get('organizations', [])) + len(entities.get('persons', []))
+        if parties_count < 2 and not ('employer' in (extracted_text or '').lower() and 'employee' in (extracted_text or '').lower()):
             missing_fields.append("Contracting Counterparties")
 
         if missing_fields:
@@ -359,8 +360,11 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
     # Filter identifiers to invoice-like patterns (e.g. INV-..., BILL-...)
     inv_ids = set()
     for ident in identifiers:
-        if any(prefix in ident.upper() for prefix in ['INV', 'BILL', 'PO-', 'DOC-', 'REF-']):
-            inv_ids.add(ident.upper())
+        ident_clean = ident.strip().upper()
+        if ident_clean in ('BILL TO', 'SHIP TO', 'DELIVER TO', 'REMIT TO', 'INVOICE NUMBER', 'INVOICE DATE', 'TAX INVOICE'):
+            continue
+        if any(prefix in ident_clean for prefix in ['INV-', 'INV:', 'INV#', 'BILL-', 'BILL:', 'BILL#']):
+            inv_ids.add(ident_clean)
 
     if len(inv_ids) > 1 and 'invoice' in category:
         rule = RULES['RULE-CTX-002']
@@ -620,10 +624,10 @@ def analyze_document(doc_id, user="System"):
             return {'success': False, 'error': f"Failed to extract document for analysis: {str(e)}"}
 
     # Phase F Hook: Content-Based Classification Fallback (used strictly if 'General Document' or 'Uncategorized')
-    if (doc.get('category') in ('General Document', 'Uncategorized', None)) and extracted_text:
+    if (doc.get('category') in ('General Document', 'Uncategorized', 'Scanned Artifact', None)) and extracted_text:
         try:
             from backend.classifier_content import classify_by_content
-            new_cat, new_conf = classify_by_content(extracted_text, file_type=doc.get('file_type', 'pdf'))
+            new_cat, new_conf = classify_by_content(extracted_text, filename=doc.get('filename', ''), file_type=doc.get('file_type', 'pdf'))
             if new_cat and new_cat != 'General Document':
                 doc['category'] = new_cat
                 doc['classification_confidence'] = new_conf

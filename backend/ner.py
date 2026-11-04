@@ -23,15 +23,16 @@ PATTERNS = {
         r'\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s*(?:USD|EUR|GBP|INR|dollars|cents)\b'
     ),
     'identifier': (
-        r'\b(?:INV|BILL|PO|SWIFT|BIC|IBAN|CAS|DOC|TXN|REF|ID|VAT|PAN|GST)[-:\s#]+[A-Z0-9_-]{2,32}\b|'
+        r'\b(?:INV|BILL|PO|SWIFT|BIC|IBAN|CAS|DOC|TXN|REF|ID|VAT|PAN|GST)[-:#]+[A-Z0-9_-]{2,32}\b|'
+        r'\b(?:INV|BILL|PO|SWIFT|BIC|IBAN|CAS|DOC|TXN|REF|ID|VAT|PAN|GST)\s*#\s*[A-Z0-9_-]{2,32}\b|'
         r'\b(?:INV|BILL|PO|SWIFT|BIC|IBAN|CAS|DOC|TXN|REF|ID|VAT|PAN|GST)\d{3,24}\b'
     ),
     'person': (
-        r'\b(?:Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|Lead:|Investigator:|Director:)[^\S\r\n]+[A-Z][a-z]+(?:[^\S\r\n]+[A-Z][a-z]+){1,2}\b'
+        r'\b(?:Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|Lead:|Investigator:|Director:|Employee:|Employer:|Party:|Consultant:|Signatory:|Name:|Tax Payer:|Taxpayer:|Beneficiary:)[^\S\r\n]+[A-Z][a-z]+(?:[^\S\r\n]+[A-Z][a-z]+){1,2}\b'
     ),
     'organization': (
-        r'\b[A-Z][A-Za-z0-9&.\'-]+(?:\s+[A-Z][A-Za-z0-9&.\'-]+)*\s+'
-        r'(?:Inc\.?|LLC|Ltd\.?|Corp\.?|Corporation|GmbH|Bank|Technologies|Energy|Logistics|Systems|Services|Audit|Group|Holdings)\b'
+        r'\b[A-Z][A-Za-z0-9&.\'-]+(?:[^\S\r\n]+[A-Z][A-Za-z0-9&.\'-]+)*[^\S\r\n]+'
+        r'(?:Inc\.?|LLC|Ltd\.?|Corp\.?|Corporation|GmbH|Bank|Technologies|Energy|Logistics|Systems|Services|Audit|Group|Holdings|Industries)\b'
     )
 }
 
