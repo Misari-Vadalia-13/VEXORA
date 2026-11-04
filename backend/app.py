@@ -70,7 +70,11 @@ from backend.reporter import (
 def create_app(config_class=Config):
     """Application factory for VEXORA Flask backend."""
     app = Flask(__name__, static_folder=None)
-    app.config.from_object(config_class)
+    if isinstance(config_class, dict):
+        app.config.from_object(Config)
+        app.config.update(config_class)
+    else:
+        app.config.from_object(config_class)
 
     # Initialize SQLite database and seed initial demonstration data
     with app.app_context():

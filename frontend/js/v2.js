@@ -265,7 +265,7 @@
       };
     }
 
-    // Determine if visual coordinates exist
+    // Determine if visual coordinates or visual artifacts exist
     let hasCoords = false;
     if (coords) {
       try {
@@ -279,9 +279,11 @@
         }
       }
     }
+    const hasEvidenceUrl = Boolean(finding.evidence_url || (finding.evidence && String(finding.evidence).includes('saved: ')));
+    const hasVisualEvidence = (hasCoords || hasEvidenceUrl) && (finding.id || hasEvidenceUrl);
 
-    if (hasCoords && finding.id) {
-      // Visual finding with coordinates
+    if (hasVisualEvidence) {
+      // Visual finding with coordinates or evidence artifact
       if (canvasWrap) canvasWrap.style.display = 'flex';
       if (noCoordsAlert) noCoordsAlert.style.display = 'none';
       if (loadingEl) loadingEl.style.display = 'block';
@@ -289,7 +291,14 @@
       if (toolbarEl) toolbarEl.style.display = 'none';
 
       const _apiBase = (typeof getApiBase === "function") ? getApiBase() : ((typeof window.getApiBase === "function") ? window.getApiBase() : "/api");
-      const imageUrl = `${_apiBase}/findings/${encodeURIComponent(finding.id)}/evidence-image?t=${Date.now()}`;
+      let imageUrl = "";
+      if (finding.evidence_url) {
+        imageUrl = finding.evidence_url.startsWith('http') || finding.evidence_url.startsWith('/')
+          ? finding.evidence_url
+          : `${_apiBase}/${finding.evidence_url}`;
+      } else {
+        imageUrl = `${_apiBase}/findings/${encodeURIComponent(finding.id)}/evidence-image?t=${Date.now()}`;
+      }
       if (openTabBtn) openTabBtn.href = imageUrl;
 
       // Load image
@@ -333,6 +342,10 @@
 
     // Avoid duplicate buttons if re-rendered
     if (cardElement.querySelector('.v2-btn-evidence')) return;
+
+    // Check if finding has spatial coordinates or visual evidence file
+    const hasVisual = finding.coordinates || finding.evidence_url || (finding.evidence && String(finding.evidence).includes('saved: '));
+    if (!hasVisual) return;
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -907,21 +920,381 @@
     }
   };
 
+  // =========================================================================
+  // Phase J: Dynamic Forensic Document Viewer & Extraction Mode
+  // =========================================================================
+  let _viewerCurrentDocId = null;
+  let _viewerCurrentPage = 1;
+  let _viewerTotalPages = 1;
+  let _viewerZoom = 1.0;
+  let _viewerShowText = false;
+  let _viewerCachedDoc = null;
+
+  window.v2RenderDynamicForensicViewer = async function(docId) {
+    if (!docId) {
+      const sel = document.getElementById('forensicDocSelector');
+      docId = sel ? sel.value : null;
+    }
+    if (!docId) return;
+
+    _viewerCurrentDocId = docId;
+    _viewerCurrentPage = 1;
+    _viewerZoom = 1.0;
+    _viewerShowText = false;
+
+    const titleHeader = document.getElementById('forensicDocTitleHeader');
+    const modeBadge = document.getElementById('forensicExtractionModeBadge');
+    const countBadge = document.getElementById('forensicFindingsCountBadge');
+    const downloadBtn = document.getElementById('forensicDownloadBtn');
+    const loadingEl = document.getElementById('forensicViewerLoading');
+    const imgEl = document.getElementById('forensicPageOverlayImg');
+    const textWrap = document.getElementById('forensicTextTranscriptWrap');
+
+    if (loadingEl) {
+      loadingEl.style.display = 'block';
+      loadingEl.innerHTML = '<div style="font-size:1.6rem; margin-bottom:8px;">⏳</div> Loading document overlay...';
+    }
+    if (imgEl) imgEl.style.display = 'none';
+    if (textWrap) textWrap.style.display = 'none';
+
+    try {
+      const res = await vexoraFetch(`/documents/${encodeURIComponent(docId)}`);
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        if (loadingEl) {
+          loadingEl.innerHTML = `<div style="color:var(--status-danger);">⚠️ ${escapeHtml(resData.error || 'Failed to load document')}</div>`;
+        }
+        return;
+      }
+
+      const doc = resData.data;
+      _viewerCachedDoc = doc;
+      _viewerTotalPages = Math.max(1, doc.page_count || 1);
+
+      if (titleHeader) {
+        titleHeader.textContent = `📄 ${doc.filename || doc.id}`;
+      }
+
+      // Extraction Mode Badge
+      let modeText = '📄 Native Digital';
+      let modeClass = 'pill-low';
+      const extMode = (doc.extraction_mode || '').toLowerCase();
+      const fileType = (doc.file_type || '').toLowerCase();
+
+      if (extMode === 'hybrid_pdf' || extMode.includes('hybrid')) {
+        modeText = '⚡ Hybrid OCR (Native + Scanned)';
+        modeClass = 'pill-medium';
+      } else if (extMode === 'ocr_fallback' || extMode.includes('ocr') || extMode === 'scanned_image') {
+        modeText = '📷 Scanned OCR (Tesseract Engine)';
+        modeClass = 'pill-medium';
+      } else if (fileType === 'pdf') {
+        modeText = '📄 Native Digital (Vector Text)';
+        modeClass = 'pill-low';
+      } else if (['png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp'].includes(fileType)) {
+        modeText = '🖼️ Raster Image Analysis';
+        modeClass = 'pill-low';
+      }
+
+      if (modeBadge) {
+        modeBadge.textContent = modeText;
+        modeBadge.className = `pill-tag ${modeClass}`;
+      }
+
+      if (countBadge) {
+        const count = (doc.findings || []).length;
+        countBadge.textContent = `${count} Anomal${count === 1 ? 'y' : 'ies'}`;
+        countBadge.className = 'pill-tag ' + (count > 0 ? 'pill-high' : 'pill-low');
+      }
+
+      if (downloadBtn) {
+        const _apiBase = (typeof getApiBase === "function") ? getApiBase() : ((typeof window.getApiBase === "function") ? window.getApiBase() : "/api");
+        downloadBtn.href = `${_apiBase}/documents/${encodeURIComponent(docId)}/download`;
+      }
+
+      _setupViewerControls();
+      _updateViewerPage();
+
+    } catch (err) {
+      console.warn('[Viewer Load Error]', err);
+      if (loadingEl) {
+        loadingEl.innerHTML = `<div style="color:var(--status-danger);">⚠️ Failed to connect to document service.</div>`;
+      }
+    }
+  };
+
+  function _setupViewerControls() {
+    const prevBtn = document.getElementById('forensicPrevPageBtn');
+    const nextBtn = document.getElementById('forensicNextPageBtn');
+    const zoomInBtn = document.getElementById('forensicZoomInBtn');
+    const zoomOutBtn = document.getElementById('forensicZoomOutBtn');
+    const toggleTextBtn = document.getElementById('forensicToggleTextBtn');
+
+    if (prevBtn) {
+      prevBtn.onclick = () => {
+        if (_viewerCurrentPage > 1) {
+          _viewerCurrentPage--;
+          _updateViewerPage();
+        }
+      };
+    }
+    if (nextBtn) {
+      nextBtn.onclick = () => {
+        if (_viewerCurrentPage < _viewerTotalPages) {
+          _viewerCurrentPage++;
+          _updateViewerPage();
+        }
+      };
+    }
+    if (zoomInBtn) {
+      zoomInBtn.onclick = () => {
+        _viewerZoom = Math.min(_viewerZoom + 0.25, 3.0);
+        _applyViewerZoom();
+      };
+    }
+    if (zoomOutBtn) {
+      zoomOutBtn.onclick = () => {
+        _viewerZoom = Math.max(_viewerZoom - 0.25, 0.5);
+        _applyViewerZoom();
+      };
+    }
+    if (toggleTextBtn) {
+      toggleTextBtn.onclick = () => {
+        _viewerShowText = !_viewerShowText;
+        toggleTextBtn.textContent = _viewerShowText ? '🖼️ Visual' : '🔤 Text';
+        _updateViewerPage();
+      };
+    }
+  }
+
+  function _applyViewerZoom() {
+    const imgEl = document.getElementById('forensicPageOverlayImg');
+    const zoomText = document.getElementById('forensicZoomText');
+    if (imgEl) {
+      imgEl.style.transform = `scale(${_viewerZoom})`;
+    }
+    if (zoomText) {
+      zoomText.textContent = `${Math.round(_viewerZoom * 100)}%`;
+    }
+  }
+
+  function _updateViewerPage() {
+    const pageIndicator = document.getElementById('forensicPageIndicator');
+    const loadingEl = document.getElementById('forensicViewerLoading');
+    const imgEl = document.getElementById('forensicPageOverlayImg');
+    const textWrap = document.getElementById('forensicTextTranscriptWrap');
+
+    if (pageIndicator) {
+      pageIndicator.textContent = `Page ${_viewerCurrentPage} of ${_viewerTotalPages}`;
+    }
+
+    if (_viewerShowText) {
+      if (imgEl) imgEl.style.display = 'none';
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (textWrap) {
+        textWrap.style.display = 'block';
+        const txt = (_viewerCachedDoc && (_viewerCachedDoc.extracted_text || 'No text extracted for this document.')) || '';
+        textWrap.textContent = txt;
+      }
+      return;
+    }
+
+    if (textWrap) textWrap.style.display = 'none';
+    if (loadingEl) {
+      loadingEl.style.display = 'block';
+      loadingEl.innerHTML = '<div style="font-size:1.4rem; margin-bottom:6px;">🔍</div> Rendering page overlay...';
+    }
+    if (imgEl) imgEl.style.display = 'none';
+
+    const _apiBase = (typeof getApiBase === "function") ? getApiBase() : ((typeof window.getApiBase === "function") ? window.getApiBase() : "/api");
+    const overlayUrl = `${_apiBase}/documents/${encodeURIComponent(_viewerCurrentDocId)}/pages/${_viewerCurrentPage}/overlay?zoom=2.0&t=${Date.now()}`;
+
+    const tempImg = new Image();
+    tempImg.onload = function() {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (imgEl) {
+        imgEl.src = overlayUrl;
+        imgEl.style.display = 'block';
+        _applyViewerZoom();
+      }
+    };
+    tempImg.onerror = function() {
+      if (loadingEl) {
+        loadingEl.innerHTML = `
+          <div style="color:var(--text-muted); padding:20px; font-size:0.85rem;">
+            <div style="font-size:1.5rem; margin-bottom:6px;">📄</div>
+            Document page preview unavailable for this format.
+          </div>
+        `;
+        loadingEl.style.display = 'block';
+      }
+    };
+    tempImg.src = overlayUrl;
+  }
+
+  // =========================================================================
+  // Phase K: Cross-Document Chronological Timeline & Sequence Anomalies
+  // =========================================================================
+  window.v2ReloadCaseTimeline = function() {
+    const sel = document.getElementById('relGraphCaseSelect');
+    const caseId = sel ? sel.value : null;
+    window.v2LoadCaseTimeline(caseId);
+  };
+
+  window.v2LoadCaseTimeline = async function(caseId) {
+    if (!caseId) {
+      const sel = document.getElementById('relGraphCaseSelect');
+      caseId = sel ? sel.value : null;
+    }
+    if (!caseId) return;
+
+    const statsBadge = document.getElementById('timelineStatsBadge');
+    const bannerEl = document.getElementById('timelineAnomalyBanner');
+    const feedEl = document.getElementById('caseTimelineFeed');
+
+    if (feedEl) {
+      feedEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); font-size:0.85rem;"><div style="font-size:1.5rem; margin-bottom:8px;">⏳</div> Synthesizing cross-document chronological event timeline...</div>';
+    }
+    if (bannerEl) bannerEl.style.display = 'none';
+
+    try {
+      const res = await vexoraFetch(`/cases/${encodeURIComponent(caseId)}/timeline`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (feedEl) feedEl.innerHTML = `<div style="text-align:center; padding:20px; color:var(--status-danger); font-size:0.85rem;">⚠️ ${escapeHtml(data.error || 'Failed to load timeline')}</div>`;
+        return;
+      }
+
+      const events = data.events || [];
+      const anomalies = data.anomalies || [];
+
+      if (statsBadge) {
+        statsBadge.textContent = `${events.length} Event${events.length === 1 ? '' : 's'} Synthesized`;
+        statsBadge.className = 'pill-tag ' + (anomalies.length > 0 ? 'pill-high' : 'pill-low');
+      }
+
+      // Render Temporal Sequence Anomalies Banner
+      if (anomalies.length > 0 && bannerEl) {
+        let anomalyHtml = `
+          <div class="v2-anomaly-summary-banner">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <span style="font-size:1.1rem;">⚠️</span>
+              <strong style="color:#ef4444; font-size:0.9rem;">Temporal Sequence Anomalies Detected (${anomalies.length})</strong>
+              <span class="pill-tag pill-high" style="font-size:0.7rem;">Chronological Conflict</span>
+            </div>
+            <p style="margin:0 0 10px 0; font-size:0.82rem; color:var(--text-secondary); line-height:1.45;">
+              Automated business workflow correlation detected out-of-order document issuance or settlements that contradict standard commercial sequencing:
+            </p>
+        `;
+        anomalies.forEach((a) => {
+          anomalyHtml += `
+            <div style="background:rgba(239,68,68,0.1); border-left:3px solid #ef4444; padding:8px 12px; border-radius:4px; margin-bottom:6px; font-size:0.8rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <strong style="color:#fca5a5;">[${escapeHtml(a.rule_id || 'RULE-TIME')}] ${escapeHtml(a.type || 'Temporal Conflict')}</strong>
+                <span class="pill-tag pill-high" style="font-size:0.68rem;">${escapeHtml(a.severity || 'Critical')}</span>
+              </div>
+              <div style="color:var(--text-primary); margin-bottom:4px;">${escapeHtml(a.description)}</div>
+              <div style="font-size:0.75rem; color:#94a3b8; font-style:italic;">
+                ℹ️ Recommendation: Verify bank clearing logs and formal contract authorization before confirming intentional alteration.
+              </div>
+            </div>
+          `;
+        });
+        anomalyHtml += `</div>`;
+        bannerEl.innerHTML = anomalyHtml;
+        bannerEl.style.display = 'block';
+      } else if (bannerEl) {
+        bannerEl.style.display = 'none';
+      }
+
+      // Render Chronological Timeline Feed
+      if (events.length === 0) {
+        if (feedEl) {
+          feedEl.innerHTML = `
+            <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:0.85rem;">
+              <div style="font-size:1.6rem; margin-bottom:8px;">📅</div>
+              No dated events extracted from documents in this case. Ingest invoices, purchase orders, or bank statements with transaction dates.
+            </div>
+          `;
+        }
+        return;
+      }
+
+      const anomalyDocNames = new Set();
+      anomalies.forEach(a => {
+        if (a.event_earlier && a.event_earlier.document_filename) anomalyDocNames.add(a.event_earlier.document_filename);
+        if (a.event_later && a.event_later.document_filename) anomalyDocNames.add(a.event_later.document_filename);
+      });
+
+      let feedHtml = '';
+      events.forEach((ev) => {
+        const isAnomaly = anomalyDocNames.has(ev.document_filename);
+        const itemClass = isAnomaly ? 'v2-timeline-item has-anomaly' : 'v2-timeline-item';
+
+        let typeIcon = '📄';
+        const docType = (ev.doc_type || '').toLowerCase();
+        if (docType.includes('po') || docType.includes('order')) typeIcon = '🛒';
+        else if (docType.includes('invoice')) typeIcon = '🧾';
+        else if (docType.includes('bank') || docType.includes('payment')) typeIcon = '🏦';
+        else if (docType.includes('contract')) typeIcon = '📜';
+        else if (docType.includes('ship') || docType.includes('delivery')) typeIcon = '🚚';
+
+        feedHtml += `
+          <div class="${itemClass}">
+            <div class="v2-timeline-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="v2-timeline-date">${escapeHtml(ev.date || 'Undated')}</span>
+                <span class="v2-timeline-type" style="color:var(--text-muted);">${typeIcon} ${escapeHtml(ev.doc_type || 'Event')}</span>
+              </div>
+              <div>
+                ${isAnomaly ? '<span class="pill-tag pill-high" style="font-size:0.68rem; margin-right:6px;">Sequence Conflict</span>' : ''}
+                <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">${escapeHtml(ev.document_filename || ev.document_id || '')}</span>
+              </div>
+            </div>
+            <div class="v2-timeline-body">
+              <strong>${escapeHtml(ev.description || 'Transaction recorded')}</strong>
+            </div>
+            <div class="v2-timeline-meta">
+              ${ev.amount ? `<span>Amount: <strong>${escapeHtml(String(ev.amount))}</strong></span>` : ''}
+              ${ev.counterparty ? `<span>Counterparty: <strong>${escapeHtml(ev.counterparty)}</strong></span>` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      if (feedEl) feedEl.innerHTML = feedHtml;
+
+    } catch (err) {
+      console.warn('[Timeline Load Error]', err);
+      if (feedEl) {
+        feedEl.innerHTML = `<div style="text-align:center; padding:20px; color:var(--status-danger); font-size:0.85rem;">⚠️ Error connecting to timeline synthesis endpoint.</div>`;
+      }
+    }
+  };
+
   // Pre-initialize on load
   function setupGraphAndForensicSelectors() {
     const select = document.getElementById('relGraphCaseSelect');
     if (select && select.value) {
       window.v2LoadRelationshipGraph(select.value);
+      if (typeof window.v2LoadCaseTimeline === 'function') {
+        window.v2LoadCaseTimeline(select.value);
+      }
     }
     const forensicSelect = document.getElementById('forensicDocSelector');
     if (forensicSelect) {
       forensicSelect.addEventListener('change', (e) => {
         if (e.target.value) {
           window.v2RenderAiExtractedFields(e.target.value);
+          if (typeof window.v2RenderDynamicForensicViewer === 'function') {
+            window.v2RenderDynamicForensicViewer(e.target.value);
+          }
         }
       });
       if (forensicSelect.value) {
         window.v2RenderAiExtractedFields(forensicSelect.value);
+        if (typeof window.v2RenderDynamicForensicViewer === 'function') {
+          window.v2RenderDynamicForensicViewer(forensicSelect.value);
+        }
       }
     }
   }

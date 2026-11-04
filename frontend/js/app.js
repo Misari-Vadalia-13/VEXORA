@@ -1155,10 +1155,18 @@ window.refreshAll = async function refreshAll() {
             if (typeof window.v2LoadRelationshipGraph === 'function') {
               window.v2LoadRelationshipGraph(e.target.value);
             }
+            if (typeof window.v2LoadCaseTimeline === 'function') {
+              window.v2LoadCaseTimeline(e.target.value);
+            }
           }
         };
-        if (relGraphSelect.value && typeof window.v2LoadRelationshipGraph === 'function') {
-          window.v2LoadRelationshipGraph(relGraphSelect.value);
+        if (relGraphSelect.value) {
+          if (typeof window.v2LoadRelationshipGraph === 'function') {
+            window.v2LoadRelationshipGraph(relGraphSelect.value);
+          }
+          if (typeof window.v2LoadCaseTimeline === 'function') {
+            window.v2LoadCaseTimeline(relGraphSelect.value);
+          }
         }
       }
     }
@@ -1626,6 +1634,11 @@ window.loadDocumentFindings = async function(docId) {
     }
   } catch (err) {
     console.warn('[VEXORA Load Findings Error]', err);
+  }
+
+  // Trigger dynamic live page viewer overlay & extraction mode badge
+  if (typeof window.v2RenderDynamicForensicViewer === 'function') {
+    window.v2RenderDynamicForensicViewer(docId);
   }
 };
 

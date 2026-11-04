@@ -943,52 +943,42 @@
           <!-- Split-View: Document Canvas vs Forensic Findings Log -->
           <div class="forensic-split-view">
             
-            <!-- Left: Simulated Document Page with Bounding Boxes -->
+            <!-- Left: Dynamic Document Viewer with Live Page Overlay & Extraction Mode -->
             <div class="document-inspection-pane">
-              <div class="section-header" style="margin-bottom:10px;">
-                <span style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">📄 Document Viewer • Page 2 of 3</span>
-                <span class="pill-tag pill-high">2 Visual Anomalies Flagged</span>
+              <div class="section-header" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span id="forensicDocTitleHeader" style="font-size:0.85rem; font-weight:700; color:var(--text-primary);">📄 Document Viewer</span>
+                  <span id="forensicExtractionModeBadge" class="pill-tag pill-low" title="Engine extraction mode">⚡ Hybrid OCR</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span id="forensicFindingsCountBadge" class="pill-tag pill-high">0 Anomalies</span>
+                </div>
               </div>
 
-              <!-- Paper Canvas -->
-              <div class="simulated-doc-page">
-                <div class="doc-page-header">
-                  <span class="doc-page-title">EMPLOYEE EARNINGS STATEMENT • PRIVATE & CONFIDENTIAL</span>
-                  <span style="font-family:var(--font-mono); font-size:0.75rem; color:#64748b;">DOC-REF: 9941-X</span>
+              <!-- Viewer Toolbar -->
+              <div class="forensic-viewer-toolbar">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" class="btn-secondary" id="forensicPrevPageBtn" style="padding:2px 8px; font-size:0.75rem;" title="Previous Page">◀</button>
+                  <span id="forensicPageIndicator" style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-secondary); min-width:80px; text-align:center;">Page 1 of 1</span>
+                  <button type="button" class="btn-secondary" id="forensicNextPageBtn" style="padding:2px 8px; font-size:0.75rem;" title="Next Page">▶</button>
                 </div>
-
-                <div class="doc-page-body">
-                  <p><strong>Employee Name:</strong> Misari Vadalia &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Designation:</strong> Lead System Architect</p>
-                  <p><strong>Department:</strong> Core Security Systems &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Pay Period:</strong> 01-Jun-2025 to 30-Jun-2025</p>
-                  
-                  <div style="margin:24px 0; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
-                    <p style="margin:0 0 10px 0; font-weight:700;">Earnings Breakdown:</p>
-                    <p style="margin:4px 0;">• Basic Component: INR 65,000.00</p>
-                    <p style="margin:4px 0;">• Special Allowance: INR 22,000.00</p>
-                    
-                    <!-- Critical Highlight Bounding Box -->
-                    <p style="margin:8px 0;">
-                      • Net Disbursed Salary: 
-                      <span class="forensic-bbox bbox-critical" id="bboxSalary" onclick="showToast('Inspecting: Typographic Overwrite detected on Salary Field', 'warning')">
-                        <span class="bbox-tag">Typographic Overwrite</span>
-                        INR 95,000.00
-                      </span>
-                    </p>
-
-                    <!-- Warning Highlight Bounding Box -->
-                    <p style="margin:8px 0;">
-                      • Disbursement Date: 
-                      <span class="forensic-bbox bbox-warning" id="bboxDate" onclick="showToast('Inspecting: Baseline Kerning anomaly on Disbursement Date', 'warning')">
-                        <span class="bbox-tag">Kerning Irregularity</span>
-                        30-Jun-2025
-                      </span>
-                    </p>
-                  </div>
-
-                  <p style="font-size:0.75rem; color:#64748b; margin-top:28px;">
-                    * This computer generated statement is digitally signed by Financial Operations. Any visual alteration renders this document subject to forensic scrutiny under Section 12-B.
-                  </p>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" class="btn-secondary" id="forensicZoomOutBtn" style="padding:2px 8px; font-size:0.75rem;" title="Zoom Out">−</button>
+                  <span id="forensicZoomText" style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted); min-width:40px; text-align:center;">100%</span>
+                  <button type="button" class="btn-secondary" id="forensicZoomInBtn" style="padding:2px 8px; font-size:0.75rem;" title="Zoom In">+</button>
+                  <button type="button" class="btn-secondary" id="forensicToggleTextBtn" style="padding:2px 8px; font-size:0.75rem;" title="Toggle text transcript / visual overlay">🔤 Text</button>
+                  <a id="forensicDownloadBtn" href="#" target="_blank" class="btn-secondary" style="padding:2px 8px; font-size:0.75rem; text-decoration:none;" title="Open original document in new tab">↗ Open</a>
                 </div>
+              </div>
+
+              <!-- Dynamic Document Canvas Container -->
+              <div id="forensicViewerCanvasWrap" class="forensic-viewer-canvas-wrap">
+                <div id="forensicViewerLoading" style="color:var(--text-muted); font-size:0.85rem; padding:30px; text-align:center;">
+                  <div style="font-size:1.6rem; margin-bottom:8px;">📄</div>
+                  Select a document above to inspect page overlays and visual bounding boxes.
+                </div>
+                <img id="forensicPageOverlayImg" src="" alt="Forensic Page Overlay" style="display:none;" />
+                <div id="forensicTextTranscriptWrap" style="display:none; width:100%; height:100%; padding:14px; overflow-y:auto; font-family:var(--font-mono); font-size:0.78rem; color:var(--text-secondary); line-height:1.6; background:#0b1120; white-space:pre-wrap;"></div>
               </div>
             </div>
 
@@ -1191,7 +1181,7 @@
               </div>
               <div style="display:flex; gap:10px; align-items:center;">
                 <label for="relGraphCaseSelect" style="font-size:0.85rem; color:var(--text-secondary); white-space:nowrap;">Select Case:</label>
-                <select class="form-control" id="relGraphCaseSelect" style="max-width:240px; font-size:0.85rem;" onchange="window.v2LoadRelationshipGraph(this.value)">
+                <select class="form-control" id="relGraphCaseSelect" style="max-width:240px; font-size:0.85rem;" onchange="window.v2LoadRelationshipGraph(this.value); if(window.v2LoadCaseTimeline) window.v2LoadCaseTimeline(this.value);">
                   <option value="" disabled selected>Loading cases...</option>
                 </select>
                 <button class="btn-secondary" type="button" onclick="window.v2ReloadCurrentRelationshipGraph()" style="font-size:0.85rem;">🔄 Refresh</button>
@@ -1219,6 +1209,30 @@
                 <button type="button" class="btn-secondary" style="padding:2px 8px; font-size:0.75rem;" onclick="document.getElementById('relGraphDetailsCard').style.display='none'">Dismiss</button>
               </div>
               <div id="relGraphDetailsContent" style="font-size:0.85rem; color:var(--text-secondary); line-height:1.5;"></div>
+            </div>
+          </div>
+
+          <!-- Cross-Document Investigation Chronology & Temporal Timeline -->
+          <div class="card-panel" style="margin-top:24px;">
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div class="section-title-group">
+                <h2 class="section-title">Investigation Chronology & Temporal Timeline</h2>
+                <span class="section-subtitle">Cross-document chronological event synthesis with automated detection of retroactive or out-of-sequence transactions</span>
+              </div>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <span id="timelineStatsBadge" class="pill-tag pill-low" style="font-size:0.75rem;">0 Events Synthesized</span>
+                <button class="btn-secondary" type="button" onclick="if (window.v2ReloadCaseTimeline) window.v2ReloadCaseTimeline();" style="font-size:0.85rem;">🔄 Refresh Timeline</button>
+              </div>
+            </div>
+
+            <!-- Sequence Anomaly Alert Banner (displayed if anomalies exist) -->
+            <div id="timelineAnomalyBanner" style="display:none;"></div>
+
+            <!-- Chronological Timeline Feed -->
+            <div id="caseTimelineFeed" class="v2-timeline-feed">
+              <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:0.85rem;">
+                Select a case above to synthesize and inspect the cross-document event timeline...
+              </div>
             </div>
           </div>
         </section>

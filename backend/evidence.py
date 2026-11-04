@@ -205,9 +205,51 @@ def get_finding_evidence_image(finding_id, zoom=2.0):
             'code': 'NOT_FOUND'
         }
 
-    # Verify presence of valid visual coordinates
+    # Verify presence of valid visual coordinates or visual evidence artifacts
     raw_coords = finding.get('coordinates')
     parsed_coords = parse_coordinates(raw_coords)
+
+    # Check if a visual artifact (e.g. ELA difference map) was generated for this finding
+    vis_path = finding.get('visualization_path')
+    ev_url = finding.get('evidence_url')
+    if not parsed_coords:
+        candidate_path = None
+        if vis_path and os.path.exists(vis_path):
+            candidate_path = vis_path
+        elif ev_url:
+            filename = os.path.basename(ev_url)
+            try:
+                from flask import current_app
+                raw_up = current_app.config.get('UPLOAD_FOLDER')
+                upload_folder = Path(raw_up) if raw_up else Path(Config.UPLOAD_FOLDER)
+            except Exception:
+                from backend.config import Config
+                upload_folder = Path(Config.UPLOAD_FOLDER)
+            possible = upload_folder / 'evidence' / filename
+            if possible.exists():
+                candidate_path = str(possible)
+        elif finding.get('evidence') and 'saved: ' in str(finding.get('evidence')):
+            try:
+                fn = str(finding.get('evidence')).split('saved: ')[1].split(')')[0].strip()
+                try:
+                    from flask import current_app
+                    upload_folder = Path(current_app.config.get('UPLOAD_FOLDER'))
+                except Exception:
+                    from backend.config import Config
+                    upload_folder = Path(Config.UPLOAD_FOLDER)
+                possible = upload_folder / 'evidence' / fn
+                if possible.exists():
+                    candidate_path = str(possible)
+            except Exception:
+                pass
+
+        if candidate_path and os.path.exists(candidate_path):
+            try:
+                with open(candidate_path, 'rb') as f:
+                    return f.read(), None
+            except Exception as e:
+                logger.warning(f"Failed to read visual evidence artifact {candidate_path}: {e}")
+
     if not parsed_coords:
         return None, {
             'success': False,

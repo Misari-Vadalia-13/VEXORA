@@ -379,6 +379,9 @@ def build_case_timeline(case_id):
         full_text = d.get('extracted_text') or ext.get('full_text') or ''
         entities = ext.get('entities') or {}
         dates = [parse_date_robust(item['value']) for item in entities.get('dates', []) if parse_date_robust(item['value'])]
+        if not dates and full_text:
+            found_raw_dates = re.findall(PATTERNS['date'], full_text)
+            dates = [d for d in (parse_date_robust(fd) for fd in found_raw_dates) if d]
         totals = extract_labeled_invoice_totals(full_text)
         monetary = [t['amount'] for t in totals] or [parse_numeric_amount(m['value']) for m in entities.get('monetary_values', []) if parse_numeric_amount(m['value'])]
         top_amt = max(monetary) if monetary else None
@@ -487,5 +490,7 @@ def build_case_timeline(case_id):
         'case_id': case_id,
         'events': events,
         'anomalies': anomalies,
-        'summary': summary
+        'summary': summary,
+        'event_count': len(events),
+        'anomaly_count': len(anomalies)
     }
