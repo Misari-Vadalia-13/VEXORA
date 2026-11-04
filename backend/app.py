@@ -795,6 +795,20 @@ def create_app(config_class=Config):
             app.logger.error(f"Failed to build relationship graph for case {case_id}: {str(e)}")
             return jsonify({'success': False, 'error': f"Failed to build relationship graph: {str(e)}"}), 500
 
+    @app.route('/api/cases/<case_id>/timeline', methods=['GET'])
+    def api_case_timeline(case_id):
+        """
+        Synthesizes an ordered cross-document chronological event timeline
+        and identifies temporal sequence anomalies across case documents.
+        """
+        try:
+            from backend.correlator import build_case_timeline
+            timeline = build_case_timeline(case_id)
+            return jsonify(timeline), 200
+        except Exception as e:
+            app.logger.error(f"Failed to build timeline for case {case_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to build case timeline: {str(e)}"}), 500
+
     # ==========================================
     # Investigation Dossier & Report Routes (Phase 8)
     # ==========================================

@@ -33,7 +33,8 @@ LABEL_TOTAL_PATTERNS = [
 CORPORATE_SUFFIXES = {
     'inc', 'incorporated', 'llc', 'ltd', 'limited', 'corp', 'corporation',
     'gmbh', 'co', 'company', 'group', 'holdings', 'technologies', 'services', 'systems',
-    'industries', 'enterprises', 'solutions', 'international', 'global', 'ventures', 'associates'
+    'industries', 'enterprises', 'solutions', 'international', 'global', 'ventures', 'associates',
+    'pvt', 'private', 'plc', 'llp', 'sa', 'ag', 'pte', 'bv', 'srl', 'sarl', 'nv', 'spa'
 }
 
 
@@ -49,10 +50,15 @@ def parse_numeric_amount(val_str):
 
 
 def normalize_party_name(name):
-    """Strips corporate suffixes and punctuation for robust fuzzy matching."""
+    """
+    Strips corporate suffixes, compound legal forms (e.g. 'Pvt Ltd'), and punctuation
+    for robust cross-document party name normalization.
+    """
     if not name:
         return ""
-    words = [re.sub(r'[^\w]', '', w.lower()) for w in str(name).split()]
+    clean = re.sub(r'[^\w\s]', ' ', str(name).lower())
+    clean = re.sub(r'\b(pvt\s+ltd|private\s+limited|pte\s+ltd|co\s+ltd|gmbh\s+&\s+co\s+kg)\b', '', clean)
+    words = clean.split()
     meaningful = [w for w in words if w and w not in CORPORATE_SUFFIXES]
     return " ".join(meaningful) if meaningful else " ".join(words)
 
@@ -287,7 +293,22 @@ def build_case_relationship_graph(case_id):
                             page=txn.get('line_number', 1)
                         )
 
-            # E. Chronological Date Conflicts
+            # E. Near-Duplicate Document Variant (Jaccard Token Overlap)
+            try:
+                from backend.comparator import calculate_jaccard_token_similarity
+                jaccard_sim = calculate_jaccard_token_similarity(doc_a['full_text'], doc_b['full_text'])
+                if jaccard_sim >= 0.78 and doc_a['meta'].get('file_hash') != doc_b['meta'].get('file_hash'):
+                    add_edge(
+                        doc_a['node_id'],
+                        doc_b['node_id'],
+                        'near_duplicate_variant',
+                        f"Near-duplicate template: {round(jaccard_sim * 100, 1)}% token overlap",
+                        confidence=round(jaccard_sim, 2)
+                    )
+            except Exception:
+                pass
+
+            # F. Chronological Date Conflicts
             dates_a = [parse_date_robust(d['value']) for d in doc_a['entities'].get('dates', []) if parse_date_robust(d['value'])]
             dates_b = [parse_date_robust(d['value']) for d in doc_b['entities'].get('dates', []) if parse_date_robust(d['value'])]
 
@@ -317,4 +338,154 @@ def build_case_relationship_graph(case_id):
             'entity_nodes': entity_node_count,
             'total_edges': len(edges)
         }
+    }
+
+
+def build_case_timeline(case_id):
+    """
+    Synthesizes an ordered, cross-document chronological event timeline for all
+    documents in a case. Correlates business sequence logic:
+    - Purchase Order (PO) authorization
+    - Commercial Invoice generation
+    - Shipping / Delivery notes
+    - Bank Statement / Payment settlement
+    - Contract execution
+
+    Identifies temporal sequence anomalies:
+    1. Invoice issued before Purchase Order was authorized.
+    2. Bank payment / settlement cleared before Invoice was issued.
+    """
+    docs = get_all_documents(case_id=case_id)
+    if not docs:
+        return {
+            'success': True,
+            'case_id': case_id,
+            'events': [],
+            'anomalies': [],
+            'summary': 'No documents found for timeline synthesis.'
+        }
+
+    events = []
+    anomalies = []
+    doc_data = []
+
+    for d in docs:
+        ext = {}
+        if d.get('extracted_data'):
+            try:
+                ext = json.loads(d['extracted_data']) if isinstance(d['extracted_data'], str) else d['extracted_data']
+            except Exception:
+                ext = {}
+        full_text = d.get('extracted_text') or ext.get('full_text') or ''
+        entities = ext.get('entities') or {}
+        dates = [parse_date_robust(item['value']) for item in entities.get('dates', []) if parse_date_robust(item['value'])]
+        totals = extract_labeled_invoice_totals(full_text)
+        monetary = [t['amount'] for t in totals] or [parse_numeric_amount(m['value']) for m in entities.get('monetary_values', []) if parse_numeric_amount(m['value'])]
+        top_amt = max(monetary) if monetary else None
+
+        cat = (d.get('category') or 'General Document').lower()
+        doc_data.append({
+            'doc': d,
+            'category': d.get('category') or 'General Document',
+            'cat_clean': cat,
+            'dates': dates,
+            'amount': top_amt,
+            'full_text': full_text
+        })
+
+        if dates:
+            primary_date = min(dates)
+            event_type = "Document Executed"
+            if 'purchase order' in cat or 'po' in cat:
+                event_type = "Purchase Order Authorized"
+            elif 'invoice' in cat:
+                event_type = "Invoice Issued"
+            elif 'bank' in cat:
+                event_type = "Payment Settled / Statement Recorded"
+            elif 'contract' in cat or 'agreement' in cat:
+                event_type = "Contract Agreement Executed"
+
+            events.append({
+                'date': primary_date.strftime('%Y-%m-%d'),
+                'datetime_iso': primary_date.isoformat(),
+                'document_id': d['id'],
+                'document_name': d['filename'],
+                'category': d.get('category') or 'General Document',
+                'event_type': event_type,
+                'amount': top_amt,
+                'description': f"{d['filename']}: {event_type} on {primary_date.strftime('%Y-%m-%d')}" + (f" (Amount: ${top_amt:,.2f})" if top_amt else "")
+            })
+
+    # Sort events chronologically
+    events.sort(key=lambda e: e['date'])
+
+    # Cross-document sequence anomaly evaluation
+    for i in range(len(doc_data)):
+        for j in range(i + 1, len(doc_data)):
+            d1 = doc_data[i]
+            d2 = doc_data[j]
+            if not d1['dates'] or not d2['dates']:
+                continue
+
+            date1 = min(d1['dates'])
+            date2 = min(d2['dates'])
+
+            # Case A: Invoice vs Purchase Order
+            if 'invoice' in d1['cat_clean'] and ('purchase order' in d2['cat_clean'] or 'po' in d2['cat_clean']):
+                inv_date, po_date = date1, date2
+                inv_doc, po_doc = d1['doc'], d2['doc']
+            elif 'invoice' in d2['cat_clean'] and ('purchase order' in d1['cat_clean'] or 'po' in d1['cat_clean']):
+                inv_date, po_date = date2, date1
+                inv_doc, po_doc = d2['doc'], d1['doc']
+            else:
+                inv_date, po_date = None, None
+
+            if inv_date and po_date and inv_date < po_date:
+                anomalies.append({
+                    'type': 'pre_dated_invoice',
+                    'severity': 'High',
+                    'title': 'Invoice Predates Purchase Order Authorization',
+                    'description': (
+                        f"Invoice '{inv_doc['filename']}' ({inv_date.strftime('%Y-%m-%d')}) was issued before "
+                        f"Purchase Order '{po_doc['filename']}' ({po_date.strftime('%Y-%m-%d')}) was authorized. "
+                        f"Violates procurement control hierarchy."
+                    ),
+                    'document_a': inv_doc['filename'],
+                    'document_b': po_doc['filename'],
+                    'date_a': inv_date.strftime('%Y-%m-%d'),
+                    'date_b': po_date.strftime('%Y-%m-%d')
+                })
+
+            # Case B: Bank Statement vs Invoice
+            if 'bank' in d1['cat_clean'] and 'invoice' in d2['cat_clean']:
+                bank_date, inv_date2 = date1, date2
+                bank_doc, inv_doc2 = d1['doc'], d2['doc']
+            elif 'bank' in d2['cat_clean'] and 'invoice' in d1['cat_clean']:
+                bank_date, inv_date2 = date2, date1
+                bank_doc, inv_doc2 = d2['doc'], d1['doc']
+            else:
+                bank_date, inv_date2 = None, None
+
+            if bank_date and inv_date2 and bank_date < inv_date2:
+                anomalies.append({
+                    'type': 'pre_invoice_payment',
+                    'severity': 'High',
+                    'title': 'Bank Settlement Predates Invoice Issuance',
+                    'description': (
+                        f"Bank record '{bank_doc['filename']}' ({bank_date.strftime('%Y-%m-%d')}) settled payment "
+                        f"prior to the issuance of Invoice '{inv_doc2['filename']}' ({inv_date2.strftime('%Y-%m-%d')})."
+                    ),
+                    'document_a': bank_doc['filename'],
+                    'document_b': inv_doc2['filename'],
+                    'date_a': bank_date.strftime('%Y-%m-%d'),
+                    'date_b': inv_date2.strftime('%Y-%m-%d')
+                })
+
+    summary = f"Synthesized {len(events)} timeline events across {len(docs)} documents; {len(anomalies)} temporal anomalies discovered."
+    return {
+        'success': True,
+        'case_id': case_id,
+        'events': events,
+        'anomalies': anomalies,
+        'summary': summary
     }

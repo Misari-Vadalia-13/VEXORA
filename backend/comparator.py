@@ -51,6 +51,39 @@ def calculate_similarity(s1, s2):
         return 1.0
     return difflib.SequenceMatcher(None, n1, n2).ratio()
 
+
+def calculate_jaccard_token_similarity(text_a, text_b):
+    """
+    Computes Jaccard token similarity ratio between two document text strings.
+    Formula: J(A, B) = |tokens(A) ∩ tokens(B)| / |tokens(A) ∪ tokens(B)|
+    Ignores short punctuation and common stopwords.
+    """
+    if not text_a or not text_b:
+        return 0.0
+
+    stop_words = {
+        'the', 'and', 'for', 'with', 'this', 'that', 'from', 'are', 'was',
+        'were', 'will', 'have', 'has', 'had', 'been', 'each', 'any', 'all',
+        'doc', 'pdf', 'page'
+    }
+
+    def tokenize(txt):
+        words = re.findall(r'[a-zA-Z0-9]{3,}', str(txt).lower())
+        return set(w for w in words if w not in stop_words)
+
+    tokens_a = tokenize(text_a)
+    tokens_b = tokenize(text_b)
+
+    if not tokens_a or not tokens_b:
+        return 0.0
+
+    intersection = len(tokens_a.intersection(tokens_b))
+    union = len(tokens_a.union(tokens_b))
+    if union == 0:
+        return 0.0
+
+    return round(intersection / float(union), 4)
+
 # =====================================================================
 # 1. Pairwise Document Comparison Engine
 # =====================================================================
@@ -114,6 +147,26 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
             'verdict': '🚨 IDENTICAL FILE DUPLICATE',
             'explanation': 'Both files share the identical cryptographic SHA-256 hash. Re-uploaded under distinct filenames.'
         })
+    else:
+        # Near-duplicate text similarity check via Jaccard token overlap
+        txt_a = data_a.get('full_text') or doc_a.get('extracted_text') or ''
+        txt_b = data_b.get('full_text') or doc_b.get('extracted_text') or ''
+        jaccard_score = calculate_jaccard_token_similarity(txt_a, txt_b)
+        if jaccard_score >= 0.78:
+            alignment_matrix.append({
+                'attribute': 'Document Content Near-Duplicate',
+                'val_a': f"{len(txt_a.split())} words",
+                'val_b': f"{len(txt_b.split())} words",
+                'page_a': 1,
+                'page_b': 1,
+                'status': 'Conflict',
+                'verdict': '⚠️ Near-Duplicate Document Variant',
+                'explanation': (
+                    f"Significant textual content overlap (Jaccard token similarity: {round(jaccard_score * 100, 1)}%) detected "
+                    f"between distinct physical files. Strongly indicates a cloned invoice or contract template "
+                    f"with altered line items, amounts, or parties (double-billing or substitution risk)."
+                )
+            })
 
     # 2. Monetary Values Comparison
     money_a = entities_a.get('monetary_values', [])
@@ -202,12 +255,17 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
         best_sim = 0.0
         best_pair = (orgs_a[0], orgs_b[0])
 
+        from backend.correlator import fuzzy_party_similarity, normalize_party_name
+        is_fuzzy_match = False
         for oa in orgs_a:
             for ob in orgs_b:
                 sim = calculate_similarity(oa, ob)
-                if sim > best_sim:
-                    best_sim = sim
+                f_match, f_score = fuzzy_party_similarity(oa, ob)
+                effective_score = max(sim, f_score)
+                if effective_score > best_sim:
+                    best_sim = effective_score
                     best_pair = (oa, ob)
+                    is_fuzzy_match = f_match
 
         if best_sim >= 0.95:
             alignment_matrix.append({
