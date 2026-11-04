@@ -98,11 +98,14 @@ def render_page_overlay(file_path, page_number=1, findings=None, zoom=2.0):
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat, alpha=False)
         base_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        page_rotation = page.rotation
+        rot_mat = page.rotation_matrix
         doc.close()
         coord_scale = zoom
     else:
-        # Standard raster image (PNG, JPG, TIFF, BMP)
         base_img = Image.open(str(path_obj)).convert("RGB")
+        page_rotation = 0
+        rot_mat = None
         coord_scale = 1.0
 
     # Normalize findings list
@@ -137,11 +140,24 @@ def render_page_overlay(file_path, page_number=1, findings=None, zoom=2.0):
         if not parsed:
             continue
 
-        # Convert PDF points / image coords to pixels using scale factor
-        x0 = max(0.0, min(parsed[0], parsed[2]) * coord_scale)
-        y0 = max(0.0, min(parsed[1], parsed[3]) * coord_scale)
-        x1 = min(float(img_w), max(parsed[0], parsed[2]) * coord_scale)
-        y1 = min(float(img_h), max(parsed[1], parsed[3]) * coord_scale)
+        # Convert PDF points / image coords to pixels with rotation normalization
+        if page_rotation != 0 and fitz is not None and rot_mat is not None:
+            try:
+                r = fitz.Rect(parsed[0], parsed[1], parsed[2], parsed[3]) * rot_mat
+                x0 = max(0.0, min(r.x0, r.x1) * coord_scale)
+                y0 = max(0.0, min(r.y0, r.y1) * coord_scale)
+                x1 = min(float(img_w), max(r.x0, r.x1) * coord_scale)
+                y1 = min(float(img_h), max(r.y0, r.y1) * coord_scale)
+            except Exception:
+                x0 = max(0.0, min(parsed[0], parsed[2]) * coord_scale)
+                y0 = max(0.0, min(parsed[1], parsed[3]) * coord_scale)
+                x1 = min(float(img_w), max(parsed[0], parsed[2]) * coord_scale)
+                y1 = min(float(img_h), max(parsed[1], parsed[3]) * coord_scale)
+        else:
+            x0 = max(0.0, min(parsed[0], parsed[2]) * coord_scale)
+            y0 = max(0.0, min(parsed[1], parsed[3]) * coord_scale)
+            x1 = min(float(img_w), max(parsed[0], parsed[2]) * coord_scale)
+            y1 = min(float(img_h), max(parsed[1], parsed[3]) * coord_scale)
 
         # Minimum visible box dimensions (at least 8px high/wide)
         if (x1 - x0) < 8.0:

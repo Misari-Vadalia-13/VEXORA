@@ -65,3 +65,4 @@ When an individual document is analyzed in isolation, certain high-impact financ
   The external LLM reasoning layer (Google Gemini / OpenAI) is strictly an advisory intelligence synthesizer. It assists investigators by generating plain-language summaries, formulating plausible innocent hypotheses, and suggesting verification steps.
 - **Anti-Hallucination Constraints:**
   Although VEXORA enforces verbatim source-quote substring matching to discard ungrounded assertions, AI responses must never be used as autonomous or unreviewed decisions.
+

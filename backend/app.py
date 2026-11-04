@@ -27,6 +27,9 @@ from backend.config import Config, FRONTEND_DIR, DATABASE_PATH
 from backend.database import init_db, seed_data, query_db, execute_db
 from backend.models import (
     ValidationError,
+    check_case_access,
+    check_document_access,
+    check_finding_access,
     validate_case_data,
     validate_user_registration,
     get_all_cases,
@@ -76,6 +79,12 @@ def create_app(config_class=Config):
     else:
         app.config.from_object(config_class)
 
+    # Production safety check for cryptographic signing key
+    if app.config.get('ENV') == 'production' or os.environ.get('FLASK_ENV') == 'production':
+        sec = app.config.get('SECRET_KEY') or os.environ.get('SECRET_KEY')
+        if not sec or sec == 'vexora-forensics-dev-secret-key-2026':
+            raise RuntimeError('CRITICAL: Production environment requires an explicitly configured, non-default SECRET_KEY.')
+
     # Initialize SQLite database and seed initial demonstration data
     with app.app_context():
         try:
@@ -87,16 +96,36 @@ def create_app(config_class=Config):
             app.logger.error(f"Error during database initialization: {e}")
 
     # ==========================================
-    # CORS Header Hook (Enables Cross-Origin Dev)
+    def _get_auth_context():
+        """Extracts current session user or defaults to baseline demo investigator."""
+        username = session.get('username')
+        user_id = session.get('user_id')
+        role = session.get('role')
+        if not app.config.get('VEXORA_REQUIRE_AUTH', False) and not username:
+            return None, None, 'admin'
+        return user_id, username, role
+
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if app.config.get('VEXORA_REQUIRE_AUTH', False):
+                if not session.get('username') and not session.get('user_id'):
+                    return jsonify({'success': False, 'error': 'Authentication required. Please log in.'}), 401
+            return f(*args, **kwargs)
+        return decorated_function
+
+        # CORS Header Hook (Enables Cross-Origin Dev)
     # ==========================================
     @app.after_request
     def add_cors_headers(response):
-        """Allows restricted origins or local development servers to access APIs."""
+        """Allows restricted origins or local development servers to access APIs securely."""
         raw_origins = os.environ.get('VEXORA_CORS_ORIGINS', 'http://127.0.0.1:5000,http://localhost:5000,http://127.0.0.1:5500,http://localhost:3000')
         allowed = [o.strip() for o in raw_origins.split(',') if o.strip()]
         origin = request.headers.get('Origin')
-        if origin and ('*' in allowed or origin in allowed):
-            response.headers['Access-Control-Allow-Origin'] = origin
+        if origin:
+            if '*' in allowed or origin in allowed:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
         else:
             response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
@@ -185,13 +214,14 @@ def create_app(config_class=Config):
     # Case Management API Routes
     # ==========================================
     @app.route('/api/cases', methods=['GET'])
+    @login_required
     def api_list_cases():
-        """Lists cases with optional priority, status, or search filters."""
+        """Lists cases with optional priority, status, search, and RBAC filters."""
         priority = request.args.get('priority')
         status = request.args.get('status')
         search = request.args.get('search')
-        
-        cases = get_all_cases(priority=priority, status=status, search=search)
+        user_id, username, role = _get_auth_context()
+        cases = get_all_cases(priority=priority, status=status, search=search, username=username, role=role)
         return jsonify({
             'success': True,
             'count': len(cases),
@@ -208,7 +238,10 @@ def create_app(config_class=Config):
         try:
             validated = validate_case_data(payload)
             custom_id = payload.get('id')
-            user = session.get('username', 'alex.turner')
+            user_id, username, role = _get_auth_context()
+            validated['owner_username'] = username or 'alex.turner'
+            validated['owner_id'] = user_id
+            user = username or 'alex.turner'
             case = create_case(validated, custom_id=custom_id, user=user)
             return jsonify({
                 'success': True,
@@ -221,22 +254,30 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to create case: {str(e)}"}), 500
 
     @app.route('/api/cases/<case_id>', methods=['GET'])
+    @login_required
     def api_get_case(case_id):
-        """Retrieves details of a specific case with attached documents and findings."""
+        """Retrieves details of a specific case with attached documents and findings (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
         case = get_case_by_id(case_id)
-        if not case:
-            return jsonify({'success': False, 'error': f"Case with ID '{case_id}' was not found."}), 404
         return jsonify({'success': True, 'data': case}), 200
 
     @app.route('/api/cases/<case_id>', methods=['PUT'])
+    @login_required
     def api_update_case(case_id):
-        """Updates an existing case."""
+        """Updates an existing case (IDOR protected)."""
         payload = request.get_json(silent=True)
         if not payload:
             return jsonify({'success': False, 'error': 'Invalid or missing JSON payload.'}), 400
 
         try:
-            user = session.get('username', 'alex.turner')
+            user_id, username, role = _get_auth_context()
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
+            user = username or 'alex.turner'
             updated = update_case(case_id, payload, user=user)
             if not updated:
                 return jsonify({'success': False, 'error': f"Case with ID '{case_id}' was not found."}), 404
@@ -251,9 +292,14 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/cases/<case_id>', methods=['DELETE'])
+    @login_required
     def api_delete_case(case_id):
-        """Deletes an investigation case."""
-        user = session.get('username', 'alex.turner')
+        """Deletes an investigation case (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        user = username or 'alex.turner'
         success = delete_case(case_id, user=user)
         if not success:
             return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
@@ -295,6 +341,12 @@ def create_app(config_class=Config):
         if not target_case:
             log_audit("UPLOAD_FAILED", "document", "upload_request", f"Upload rejected: Case not found: '{case_id}'", user=user)
             return jsonify({'success': False, 'error': f"Case not found: '{case_id}'"}), 400
+
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            log_audit("UPLOAD_FAILED", "document", "upload_request", f"Upload rejected: {res}", user=user)
+            return jsonify({'success': False, 'error': res}), code
 
         # Collect files from multipart form
         file_list = []
@@ -361,17 +413,25 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/documents/<doc_id>', methods=['GET'])
+    @login_required
     def api_get_document(doc_id):
-        """Retrieves details of a specific document."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        """Retrieves details of a specific document (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
         return jsonify({'success': True, 'data': doc}), 200
 
     @app.route('/api/documents/<doc_id>/download', methods=['GET'])
+    @login_required
     def api_download_document(doc_id):
-        """Safely streams document file from uploads folder."""
-        doc = get_document_by_id(doc_id)
+        """Safely streams document file from uploads folder (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
         if not doc or not doc.get('file_path'):
             return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
 
@@ -397,13 +457,18 @@ def create_app(config_class=Config):
         return send_from_directory(evidence_dir, filename)
 
     @app.route('/api/documents/<doc_id>/integrity', methods=['GET'])
+    @login_required
     def api_check_document_integrity(doc_id):
         """
         Recomputes SHA-256 of the physical document file on disk and verifies
-        it against the immutable stored hash captured at ingest time.
+        it against the immutable stored hash captured at ingest time (IDOR protected).
         Records an INTEGRITY_CHECK event into the immutable audit trail.
         """
-        doc = get_document_by_id(doc_id)
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
         if not doc:
             return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
 
@@ -448,6 +513,7 @@ def create_app(config_class=Config):
         try:
             file_bytes = target_file.read_bytes()
             current_hash = hashlib.sha256(file_bytes).hexdigest()
+            md5_hash = hashlib.md5(file_bytes).hexdigest()
             match = (current_hash.lower() == stored_hash.lower())
 
             log_audit(
@@ -466,20 +532,29 @@ def create_app(config_class=Config):
                 'current_hash': current_hash,
                 'match': match,
                 'checked_at': checked_at,
-                'status': 'verified' if match else 'tampered'
+                'status': 'verified' if match else 'tampered',
+                'tamper_status': 'VERIFIED' if match else 'TAMPERED',
+                'sha256_hash': current_hash,
+                'md5_hash': md5_hash,
+                'file_size_bytes': len(file_bytes),
+                'standard_alignment': 'Aligned with ISO/IEC 27037 principles for digital evidence handling (no formal compliance claimed)'
             }), 200
         except Exception as e:
             app.logger.error(f"Error computing file integrity for {doc_id}: {e}")
             return jsonify({'success': False, 'error': f"Error computing file integrity: {str(e)}"}), 500
 
     @app.route('/api/documents/<doc_id>/custody', methods=['GET'])
+    @login_required
     def api_get_document_custody(doc_id):
         """
         Retrieves ordered chronological chain of custody events for a specific document
-        from the immutable audit trail (upload, extraction, classification, analysis,
-        cross-document comparison, dossier reporting, and integrity verifications).
+        from the immutable audit trail (IDOR protected).
         """
-        doc = get_document_by_id(doc_id)
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
         if not doc:
             return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
 
@@ -531,13 +606,15 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/documents/<doc_id>', methods=['DELETE'])
+    @login_required
     def api_delete_document(doc_id):
-        """Deletes a document record and removes physical file from disk."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
-
-        user = session.get('username', 'alex.turner')
+        """Deletes a document record and removes physical file from disk (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
+        user = username or 'alex.turner'
         delete_document(doc_id, user=user)
 
         # Remove physical file if exists
@@ -718,11 +795,14 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Cross-document comparison failed: {str(e)}"}), 500
 
     @app.route('/api/cases/<case_id>/analyze', methods=['POST'])
+    @login_required
     def api_analyze_case_documents(case_id):
-        """Executes full-case analysis on all unanalyzed documents and runs cross-document discrepancy discovery."""
-        case = get_case_by_id(case_id)
-        if not case:
-            return jsonify({'success': False, 'error': f"Case not found: '{case_id}'"}), 404
+        """Executes full-case analysis on all unanalyzed documents and runs cross-document discrepancy discovery (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        case = res
 
         try:
             from backend.reporter import _ensure_case_analysis
@@ -744,11 +824,14 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/cases/<case_id>/compare', methods=['GET'])
+    @login_required
     def api_compare_case_documents(case_id):
-        """Executes full-case cross-document discrepancy discovery across all assigned files."""
-        case = get_case_by_id(case_id)
-        if not case:
-            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+        """Executes full-case cross-document discrepancy discovery across all assigned files (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        case = res
 
         try:
             user = session.get('username', 'alex.turner')
@@ -774,7 +857,12 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/cases/<case_id>/relationships', methods=['GET'])
+    @login_required
     def api_case_relationships(case_id):
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
         """
         Phase F: Cross-document correlation & relationship graph.
         Protected by ENABLE_CORRELATOR feature flag.
@@ -801,7 +889,12 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to build relationship graph: {str(e)}"}), 500
 
     @app.route('/api/cases/<case_id>/timeline', methods=['GET'])
+    @login_required
     def api_case_timeline(case_id):
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
         """
         Synthesizes an ordered cross-document chronological event timeline
         and identifies temporal sequence anomalies across case documents.
@@ -818,13 +911,18 @@ def create_app(config_class=Config):
     # Investigation Dossier & Report Routes (Phase 8)
     # ==========================================
     @app.route('/api/cases/<case_id>/dossier', methods=['GET'])
+    @login_required
     def api_get_case_dossier(case_id):
         """
-        Retrieves complete structured JSON investigation dossier:
+        Retrieves complete structured JSON investigation dossier (IDOR protected):
         case metadata, evidence inventory, extracted entities, visual & contextual findings,
         cross-document discrepancies, provenance nodes, risk scores, and mandatory disclaimer.
         """
         try:
+            user_id, username, role = _get_auth_context()
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
             dossier = generate_case_dossier_data(case_id)
             return jsonify({
                 'success': True,
@@ -838,15 +936,16 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to generate dossier data: {str(e)}"}), 500
 
     @app.route('/api/cases/<case_id>/report', methods=['POST'])
+    @login_required
     def api_generate_case_report(case_id):
         """
-        Generates a publication-ready investigation dossier report (PDF or HTML).
-        Accepts JSON: { "format": "pdf" | "html" } (defaults to 'pdf').
-        Stores file in reports directory, registers record in database, and returns metadata.
+        Generates a publication-ready investigation dossier report (IDOR protected).
         """
-        case = get_case_by_id(case_id)
-        if not case:
-            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        case = res
 
         payload = request.get_json(silent=True) or {}
         report_format = payload.get('format', 'pdf').lower().strip()
@@ -1150,6 +1249,14 @@ def create_app(config_class=Config):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/auth/logout', methods=['POST'])
+    def api_logout():
+        """Terminates active session and records logout audit event."""
+        username = session.get('username', 'Anonymous')
+        session.clear()
+        log_audit("USER_LOGOUT", "auth", "session", f"Investigator '{username}' logged out.", username)
+        return jsonify({'success': True, 'message': 'Logged out successfully.'}), 200
+
     @app.route('/api/auth/current-user', methods=['GET'])
     def api_current_user():
         """Returns the current investigator's identity."""
@@ -1201,13 +1308,17 @@ def create_app(config_class=Config):
     # Phase A: Visual Evidence Overlay Routes
     # ==========================================
     @app.route('/api/findings/<finding_id>/evidence-image', methods=['GET'])
+    @login_required
     def api_get_finding_evidence_image(finding_id):
         """
         Renders the document page where this finding was detected, highlighting its
-        bounding box in red with its rule ID badge.
-        If the finding has no bounding box coordinates, returns a clear JSON message.
+        bounding box in red with its rule ID badge (IDOR protected).
         """
         try:
+            user_id, username, role = _get_auth_context()
+            allowed, res, code = check_finding_access(finding_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res, 'code': 'NOT_FOUND' if code == 404 else 'FORBIDDEN'}), code
             from backend.evidence import get_finding_evidence_image
             zoom = request.args.get('zoom', 2.0, type=float)
             png_bytes, error_dict = get_finding_evidence_image(finding_id, zoom=zoom)
@@ -1220,11 +1331,16 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to render evidence image: {str(e)}"}), 500
 
     @app.route('/api/documents/<doc_id>/pages/<int:page_num>/overlay', methods=['GET'])
+    @login_required
     def api_get_document_page_overlay(doc_id, page_num):
         """
-        Renders a document page with all forensic findings on that page highlighted.
+        Renders a document page with all forensic findings on that page highlighted (IDOR protected).
         """
         try:
+            user_id, username, role = _get_auth_context()
+            allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
             from backend.evidence import get_document_page_overlay
             zoom = request.args.get('zoom', 2.0, type=float)
             png_bytes, error_dict = get_document_page_overlay(doc_id, page_number=page_num, zoom=zoom)

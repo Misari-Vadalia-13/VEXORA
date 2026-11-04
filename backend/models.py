@@ -130,10 +130,15 @@ def generate_case_id():
             pass
     return f"CAS-{year}-0001"
 
-def get_all_cases(priority=None, status=None, search=None):
-    """Retrieves all cases with optional filtering."""
+def get_all_cases(priority=None, status=None, search=None, username=None, role=None):
+    """Retrieves all cases with optional filtering and RBAC access control."""
     query = "SELECT * FROM cases WHERE 1=1"
     args = []
+
+    admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+    if username and (not role or role.strip().lower() not in admin_roles):
+        query += " AND (owner_username = ? OR owner_username IS NULL OR owner_username IN ('alex.turner', 'system'))"
+        args.append(username)
 
     if priority and priority in VALID_PRIORITIES:
         query += " AND priority = ?"
@@ -150,6 +155,62 @@ def get_all_cases(priority=None, status=None, search=None):
 
     query += " ORDER BY created_at DESC"
     return query_db(query, args)
+
+
+def check_case_access(case_id, user_id=None, username=None, role=None):
+    """
+    IDOR Security Guard: Verifies whether the specified user has authorization
+    to access or operate on the requested case.
+    Returns: (allowed: bool, case_or_msg: dict|str, status_code: int)
+    """
+    case = query_db("SELECT * FROM cases WHERE id = ?", (case_id,), one=True)
+    if not case:
+        return False, "Case not found", 404
+
+    admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+    if role and role.strip().lower() in admin_roles:
+        return True, case, 200
+
+    if not username and not user_id:
+        return True, case, 200
+
+    owner_u = (case.get('owner_username') or '').strip().lower()
+    owner_i = case.get('owner_id')
+    req_u = (username or '').strip().lower()
+
+    if req_u and owner_u and req_u == owner_u:
+        return True, case, 200
+    if user_id and owner_i and user_id == owner_i:
+        return True, case, 200
+
+    if (not owner_u or owner_u in ('alex.turner', 'system')) and req_u == 'alex.turner':
+        return True, case, 200
+
+    return False, f"Access denied: You do not have permission for case '{case_id}'.", 403
+
+def check_document_access(doc_id, user_id=None, username=None, role=None):
+    """IDOR Security Guard for document records."""
+    doc = get_document_by_id(doc_id)
+    if not doc:
+        return False, "Document not found", 404
+    if not doc.get('case_id'):
+        return True, doc, 200
+    allowed, res, code = check_case_access(doc['case_id'], user_id, username, role)
+    if not allowed:
+        return False, res, code
+    return True, doc, 200
+
+def check_finding_access(finding_id, user_id=None, username=None, role=None):
+    """IDOR Security Guard for finding records."""
+    f = get_finding_by_id(finding_id)
+    if not f:
+        return False, "Finding not found", 404
+    if not f.get('case_id'):
+        return True, f, 200
+    allowed, res, code = check_case_access(f['case_id'], user_id, username, role)
+    if not allowed:
+        return False, res, code
+    return True, f, 200
 
 def get_case_by_id(case_id):
     """Retrieves a single case by its ID along with associated documents and findings."""
@@ -168,14 +229,26 @@ def get_case_by_id(case_id):
 
 @_synchronized_model
 def create_case(validated_data, custom_id=None, user="System"):
-    """Inserts a new investigation case into SQLite with audit logging."""
+    """Inserts a new investigation case into SQLite with audit logging and ownership assignment."""
     case_id = custom_id or generate_case_id()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    owner_username = validated_data.get('owner_username')
+    owner_id = validated_data.get('owner_id')
+    if not owner_username:
+        if user and user not in ("System", "Lead Investigator"):
+            owner_username = user
+        else:
+            owner_username = 'alex.turner'
+    if not owner_id and owner_username:
+        u_row = query_db("SELECT id FROM users WHERE username = ?", (owner_username,), one=True)
+        if u_row:
+            owner_id = u_row['id']
+
     execute_db(
         """
-        INSERT INTO cases (id, title, type, priority, status, investigator, description, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cases (id, title, type, priority, status, investigator, owner_id, owner_username, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             case_id,
@@ -184,6 +257,8 @@ def create_case(validated_data, custom_id=None, user="System"):
             validated_data['priority'],
             validated_data['status'],
             validated_data['investigator'],
+            owner_id,
+            owner_username,
             validated_data['description'],
             now,
             now

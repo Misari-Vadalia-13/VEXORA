@@ -270,5 +270,105 @@ class TestCrossDocumentIntelligence(unittest.TestCase):
         self.assertIn('summary', data)
 
 
+    def test_06_label_aware_financial_comparison(self):
+        """Verifies label-aware financial matching accurately flags grand total discrepancy."""
+        with self.app.app_context():
+            case = create_case({
+                'title': 'Label Financial Test Case',
+                'type': 'Financial Audit',
+                'priority': 'High',
+                'status': 'Active',
+                'investigator': 'Lead Investigator',
+                'description': 'Test case'
+            })
+            doc_a = create_document({
+                'case_id': case['id'],
+                'filename': 'invoice_vendor.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+            doc_b = create_document({
+                'case_id': case['id'],
+                'filename': 'invoice_client.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+
+            data_a = {
+                'structured_fields': {
+                    'document_type': 'invoice',
+                    'financials': {'grand_total': 15000.0, 'subtotal': 14000.0, 'tax_amount': 1000.0}
+                },
+                'entities': {'monetary_values': [{'value': '$15,000.00', 'page': 1}]}
+            }
+            data_b = {
+                'structured_fields': {
+                    'document_type': 'invoice',
+                    'financials': {'grand_total': 18500.0, 'subtotal': 17000.0, 'tax_amount': 1500.0}
+                },
+                'entities': {'monetary_values': [{'value': '$18,500.00', 'page': 1}]}
+            }
+            save_document_extraction(doc_a['id'], data_a)
+            save_document_extraction(doc_b['id'], data_b)
+
+            res = compare_two_documents(doc_a['id'], doc_b['id'])
+            self.assertTrue(res['success'])
+            gt_diff = next((m for m in res['discrepancies'] if m['attribute'] == 'Normalized Grand Total'), None)
+            self.assertIsNotNone(gt_diff)
+            self.assertIn("Grand Total Discrepancy", gt_diff['verdict'])
+            self.assertIn("$3,500.00", gt_diff['explanation'])
+
+    def test_07_cross_document_pre_invoice_anomaly(self):
+        """Verifies pre-invoice settlement anomaly is flagged when bank clearing precedes invoice."""
+        with self.app.app_context():
+            case = create_case({
+                'title': 'Pre-Invoice Test Case',
+                'type': 'Financial Audit',
+                'priority': 'High',
+                'status': 'Active',
+                'investigator': 'Lead Investigator',
+                'description': 'Test case'
+            })
+            doc_inv = create_document({
+                'case_id': case['id'],
+                'filename': 'commercial_invoice.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+            doc_bank = create_document({
+                'case_id': case['id'],
+                'filename': 'bank_statement.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+
+            data_inv = {
+                'structured_fields': {
+                    'document_type': 'invoice',
+                    'dates': {'issue_date': '2026-03-15'}
+                },
+                'entities': {'dates': [{'value': '2026-03-15', 'page': 1}]}
+            }
+            data_bank = {
+                'structured_fields': {
+                    'document_type': 'bank_statement'
+                },
+                'entities': {'dates': [{'value': '2026-02-10', 'page': 1}]} # Cleared 1 month before invoice
+            }
+            save_document_extraction(doc_inv['id'], data_inv)
+            save_document_extraction(doc_bank['id'], data_bank)
+
+            res = compare_two_documents(doc_inv['id'], doc_bank['id'])
+            self.assertTrue(res['success'])
+            chrono = next((m for m in res['discrepancies'] if m['attribute'] == 'Cross-Document Chronology'), None)
+            self.assertIsNotNone(chrono)
+            self.assertIn("Pre-Invoice Settlement Anomaly", chrono['verdict'])
+
+
 if __name__ == '__main__':
     unittest.main()
+

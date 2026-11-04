@@ -120,3 +120,4 @@ Image forensics are strictly gated to raster uploads (`.png`, `.jpg`, `.jpeg`, `
 - **Timing-Safe Password Verification:** Employs PBKDF2 with SHA-256 password hashing.
 - **Session Cookie Hardening:** `HttpOnly = True`, `SameSite = 'Lax'`, and configurable `Secure` flags.
 - **Multi-Thread Process Mutex:** Thread-safe SQLite transactions protected by `@_synchronized_model` mutex locks, preventing concurrent ID collisions.
+

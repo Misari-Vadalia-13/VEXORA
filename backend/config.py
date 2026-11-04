@@ -57,6 +57,12 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024
 TEST_DATABASE_PATH = BACKEND_DIR / 'test_vexora.db'
 
 class Config:
+    # Security check for production environments
+    if os.environ.get('FLASK_ENV') == 'production':
+        _sec = os.environ.get('SECRET_KEY')
+        if not _sec or _sec == 'vexora-forensics-dev-secret-key-2026':
+            raise RuntimeError("CRITICAL: Production environment requires an explicitly configured, non-default SECRET_KEY.")
+
     """Base application configuration class."""
     BASE_DIR = BASE_DIR
     BACKEND_DIR = BACKEND_DIR

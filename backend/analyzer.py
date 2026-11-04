@@ -93,6 +93,38 @@ RULES = {
         'confidence': 0.93,
         'recommendation': 'Reconcile individual line-item sums against the stated grand total and verify currency consistency.'
     },
+        'RULE-DOC-001': {
+        'id': 'RULE-DOC-001',
+        'title': 'Arithmetic Calculation Inconsistency',
+        'category': 'Document Logic',
+        'severity': 'Critical',
+        'confidence': 0.96,
+        'recommendation': 'Audit line-item calculations. Verify whether subtotal, tax rate, or grand total was digitally altered.'
+    },
+    'RULE-DOC-002': {
+        'id': 'RULE-DOC-002',
+        'title': 'Chronological Sequence Inversion',
+        'category': 'Document Logic',
+        'severity': 'High',
+        'confidence': 0.92,
+        'recommendation': 'Verify billing workflow. Check why payment due date or delivery date precedes document issuance.'
+    },
+    'RULE-DOC-004': {
+        'id': 'RULE-DOC-004',
+        'title': 'Conflicting Duplicate Financial Values',
+        'category': 'Document Logic',
+        'severity': 'High',
+        'confidence': 0.94,
+        'recommendation': 'Examine header vs summary figures for evidence of cut-and-paste tampering or mismatched form fields.'
+    },
+    'RULE-DOC-005': {
+        'id': 'RULE-DOC-005',
+        'title': 'Expired Identification Credential',
+        'category': 'Compliance & Identity',
+        'severity': 'High',
+        'confidence': 0.95,
+        'recommendation': 'Verify validity dates against issuing authority standards. Expired credentials cannot substantiate transactions.'
+    },
     'RULE-CTX-005': {
         'id': 'RULE-CTX-005',
         'title': 'Metadata Timestamp Mismatch',
@@ -443,6 +475,74 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
                 })
         except ValueError:
             pass
+
+
+    # -------------------------------------------------------------
+    # Deep Document Understanding: Cross-Field Arithmetic (RULE-DOC-001)
+    # -------------------------------------------------------------
+    from backend.ner import normalize_structured_document_fields
+    structured_doc = normalize_structured_document_fields(text, entities, category)
+    fin = structured_doc.get('financials', {})
+    val_sub = fin.get('subtotal')
+    val_tax = fin.get('tax_amount')
+    val_tot = fin.get('grand_total')
+
+    if val_sub is not None and val_tax is not None and val_tot is not None:
+        expected = round(val_sub + val_tax, 2)
+        diff = round(abs(expected - val_tot), 2)
+        if diff > 0.05:
+            rule = RULES['RULE-DOC-001']
+            findings.append({
+                'rule_id': rule['id'],
+                'title': rule['title'],
+                'severity': rule['severity'],
+                'category': rule['category'],
+                'status': 'Potential Anomaly',
+                'confidence': rule['confidence'],
+                'page_number': 1,
+                'coordinates': None,
+                'description': (
+                    f"Calculated arithmetic total (Subtotal: ${val_sub:,.2f} + Tax: ${val_tax:,.2f} = ${expected:,.2f}) "
+                    f"does not match stated Grand Total: ${val_tot:,.2f} (Discrepancy: ${diff:,.2f}). "
+                    "Indicates numerical modification of itemized breakdown or final total."
+                ),
+                'evidence': f"Subtotal (${val_sub:,.2f}) + Tax (${val_tax:,.2f}) = ${expected:,.2f} != Total (${val_tot:,.2f})"
+            })
+
+    # -------------------------------------------------------------
+    # Deep Document Understanding: Duplicate Conflicting Totals (RULE-DOC-004)
+    # -------------------------------------------------------------
+    # Search for all mentions of "Total: $..." in document text
+    all_totals = re.findall(r'(?:total\s+amount|grand\s+total|balance\s+due|amount\s+due|invoice\s+total|\btotal\b)[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text, re.I)
+    unique_totals = set()
+    for t_str in all_totals:
+        try:
+            val = float(re.sub(r'[^0-9.]', '', t_str))
+            if val > 0:
+                unique_totals.add(val)
+        except ValueError:
+            pass
+
+    # If there are 2 or more distinct total figures differing by more than $1.00
+    if len(unique_totals) >= 2:
+        sorted_totals = sorted(list(unique_totals))
+        if sorted_totals[-1] - sorted_totals[0] > 1.00 and 'invoice' in category:
+            rule = RULES['RULE-DOC-004']
+            findings.append({
+                'rule_id': rule['id'],
+                'title': rule['title'],
+                'severity': rule['severity'],
+                'category': rule['category'],
+                'status': 'Potential Anomaly',
+                'confidence': rule['confidence'],
+                'page_number': 1,
+                'coordinates': None,
+                'description': (
+                    f"Document states contradictory grand total figures: {', '.join(f'${t:,.2f}' for t in sorted_totals)}. "
+                    "Indicates disparate financial summaries or digital stamping over original totals."
+                ),
+                'evidence': f"Contradictory totals: {', '.join(f'${t:,.2f}' for t in sorted_totals)}"
+            })
 
     # Rule 4: Conflicting Monetary Values & Currencies (RULE-CTX-004)
     money_entries = entities.get('monetary_values', [])

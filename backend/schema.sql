@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS cases (
     priority TEXT NOT NULL CHECK(priority IN ('Critical', 'High', 'Medium', 'Low')),
     status TEXT NOT NULL CHECK(status IN ('Active', 'In Review', 'Pending', 'Archived', 'Solved')),
     investigator TEXT NOT NULL,
+    owner_id INTEGER DEFAULT NULL,
+    owner_username TEXT DEFAULT 'alex.turner',
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -185,3 +185,120 @@ def merge_entities(entity_list):
                     combined[cat].append(merged_entry)
 
     return combined
+
+
+def normalize_structured_document_fields(text, entities=None, category=None):
+    """
+    Normalizes unstructured document entities into high-fidelity semantic models:
+    - Commercial Invoices: subtotal, tax rate/amount, grand total, invoice ID, issue/due dates.
+    - Bank Statements: account number, opening/closing balances, period dates.
+    - Identity Documents: ID number, bearer name, issue/expiration dates.
+    - Contracts: counterparties, execution date, monetary obligations.
+    Computes deterministic intra-document arithmetic consistency flags.
+    """
+    entities = entities or {}
+    text_clean = text or ""
+    cat_lower = (category or "").lower()
+
+    # Determine primary document archetype
+    doc_type = "general"
+    if "invoice" in cat_lower or re.search(r'\b(?:tax\s+invoice|commercial\s+invoice|invoice\s+#|bill\s+to)\b', text_clean, re.I):
+        doc_type = "invoice"
+    elif "bank" in cat_lower or "statement" in cat_lower or re.search(r'\b(?:bank\s+statement|account\s+statement|opening\s+balance)\b', text_clean, re.I):
+        doc_type = "bank_statement"
+    elif "id" in cat_lower or "identity" in cat_lower or "card" in cat_lower or re.search(r'\b(?:identification\s+card|driver\s+license|passport|national\s+id)\b', text_clean, re.I):
+        doc_type = "id_card"
+    elif "contract" in cat_lower or "agreement" in cat_lower or re.search(r'\b(?:employment\s+agreement|service\s+contract|agreement\s+by\s+and\s+between)\b', text_clean, re.I):
+        doc_type = "contract"
+
+    structured = {
+        'document_type': doc_type,
+        'detected_category': category or doc_type.replace('_', ' ').title(),
+        'identifiers': {},
+        'dates': {},
+        'parties': {},
+        'financials': {},
+        'validation_flags': {}
+    }
+
+    # Helper to extract monetary float
+    def _parse_amount(s):
+        if not s:
+            return None
+        cleaned = re.sub(r'[^0-9.]', '', s)
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+
+    if doc_type == "invoice":
+        # Extract invoice ID
+        inv_id_match = re.search(r'(?:invoice\s*(?:#|no\.?|number|id|code)|inv\s*#|invoice\s*:)\s*[:#]?\s*([A-Z0-9_-]{3,30})', text_clean, re.I)
+        if inv_id_match:
+            structured['identifiers']['invoice_number'] = inv_id_match.group(1).strip()
+        elif entities.get('identifiers'):
+            for ident in entities['identifiers']:
+                val = ident.get('value', '')
+                if any(val.upper().startswith(p) for p in ('INV', 'BILL')):
+                    structured['identifiers']['invoice_number'] = val
+                    break
+            if 'invoice_number' not in structured['identifiers'] and entities['identifiers']:
+                structured['identifiers']['invoice_number'] = entities['identifiers'][0]['value']
+
+        # Dates: issue and due
+        issue_match = re.search(r'(?:invoice\s+date|issue\s+date|dated)[:\s]*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})', text_clean, re.I)
+        due_match = re.search(r'(?:due\s+date|payment\s+due|payable\s+by)[:\s]*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})', text_clean, re.I)
+        if issue_match:
+            structured['dates']['issue_date'] = issue_match.group(1).strip()
+        if due_match:
+            structured['dates']['due_date'] = due_match.group(1).strip()
+
+        # Parties: Vendor / Client
+        if entities.get('organizations'):
+            structured['parties']['vendor'] = entities['organizations'][0]['value']
+            if len(entities['organizations']) > 1:
+                structured['parties']['customer'] = entities['organizations'][1]['value']
+
+        # Financials: Subtotal, Tax, Grand Total
+        sub_m = re.search(r'(?:subtotal|sub-total|net\s+amount|items\s+total)[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text_clean, re.I)
+        tax_m = re.search(r'(?:tax|vat|gst|sales\s+tax)(?:\s*\([0-9.]+%{0,1}\))?[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text_clean, re.I)
+        tot_m = re.search(r'(?:total\s+amount|grand\s+total|balance\s+due|amount\s+due|invoice\s+total|\btotal\b)[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text_clean, re.I)
+
+        val_sub = _parse_amount(sub_m.group(1)) if sub_m else None
+        val_tax = _parse_amount(tax_m.group(1)) if tax_m else None
+        val_tot = _parse_amount(tot_m.group(1)) if tot_m else None
+
+        structured['financials'] = {
+            'subtotal': val_sub,
+            'tax_amount': val_tax,
+            'grand_total': val_tot,
+            'currency': 'USD' if '$' in text_clean else 'EUR' if '€' in text_clean else 'GBP' if '£' in text_clean else 'USD'
+        }
+
+        # Cross-field arithmetic verification
+        if val_sub is not None and val_tax is not None and val_tot is not None:
+            expected_total = round(val_sub + val_tax, 2)
+            discrepancy = round(abs(expected_total - val_tot), 2)
+            is_valid = discrepancy <= 0.05
+            structured['validation_flags']['arithmetic_consistent'] = is_valid
+            structured['validation_flags']['arithmetic_discrepancy'] = discrepancy
+            structured['validation_flags']['expected_grand_total'] = expected_total
+
+    elif doc_type == "bank_statement":
+        acc_match = re.search(r'(?:account\s*(?:#|no\.?|number)?|iban)[:\s]*([A-Z0-9-]{6,34})', text_clean, re.I)
+        if acc_match:
+            structured['identifiers']['account_number'] = acc_match.group(1).strip()
+
+        open_m = re.search(r'(?:opening\s+balance|starting\s+balance)[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text_clean, re.I)
+        close_m = re.search(r'(?:closing\s+balance|ending\s+balance)[:\s]*[\$€£₹]?\s*([\d,]+(?:\.\d{1,2})?)', text_clean, re.I)
+        structured['financials']['opening_balance'] = _parse_amount(open_m.group(1)) if open_m else None
+        structured['financials']['closing_balance'] = _parse_amount(close_m.group(1)) if close_m else None
+
+    elif doc_type == "id_card":
+        id_m = re.search(r'(?:id\s*(?:#|no\.?|number)?|card\s*#|passport\s*#)[:\s]*([A-Z0-9-]{4,20})', text_clean, re.I)
+        if id_m:
+            structured['identifiers']['document_number'] = id_m.group(1).strip()
+        if entities.get('persons'):
+            structured['parties']['bearer_name'] = entities['persons'][0]['value']
+
+    return structured

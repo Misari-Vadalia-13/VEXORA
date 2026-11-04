@@ -64,6 +64,13 @@ def init_db(db_path=None):
         if 'extraction_mode' not in cols and len(cols) > 0:
             cursor.execute("ALTER TABLE documents ADD COLUMN extraction_mode TEXT DEFAULT NULL")
 
+        cursor.execute("PRAGMA table_info(cases)")
+        c_cols = [row['name'] for row in cursor.fetchall()]
+        if 'owner_id' not in c_cols and len(c_cols) > 0:
+            cursor.execute("ALTER TABLE cases ADD COLUMN owner_id INTEGER DEFAULT NULL")
+        if 'owner_username' not in c_cols and len(c_cols) > 0:
+            cursor.execute("ALTER TABLE cases ADD COLUMN owner_username TEXT DEFAULT 'alex.turner'")
+
         cursor.execute("PRAGMA table_info(findings)")
         f_cols = [row['name'] for row in cursor.fetchall()]
         if 'page_number' not in f_cols and len(f_cols) > 0:

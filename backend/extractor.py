@@ -1,9 +1,10 @@
 """
 VEXORA Document Text & Layout Extraction Module
 Extracts digital PDF text, block coordinates, metadata, and page layouts using PyMuPDF.
-Implements a robust hybrid extraction pipeline that seamlessly detects scanned / image-only pages,
-renders them to high-resolution raster images, and performs Tesseract OCR with coordinate scaling.
-Processes standalone scanned images using Pillow and Tesseract OCR with resilient fallback handling.
+Implements a robust hybrid extraction pipeline that detects scanned / image-only pages,
+applies OpenCV deskewing and adaptive binarization, and performs Tesseract OCR with coordinate scaling.
+Provides discrete forensic extraction statuses (SUCCESS, PARTIAL_SUCCESS, LOW_CONFIDENCE,
+OCR_UNAVAILABLE, OCR_FAILED, EXTRACTION_FAILED) without generating misleading placeholder text.
 """
 
 import io
@@ -13,8 +14,20 @@ from pathlib import Path
 import pymupdf
 from PIL import Image, ImageOps
 import pytesseract
+import numpy as np
+import cv2
 
-from backend.ner import extract_entities_from_text, merge_entities
+from backend.ner import extract_entities_from_text, merge_entities, normalize_structured_document_fields
+
+
+class ExtractionStatus:
+    """Discrete forensic extraction status enums."""
+    SUCCESS = "SUCCESS"
+    PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
+    LOW_CONFIDENCE = "LOW_CONFIDENCE"
+    OCR_UNAVAILABLE = "OCR_UNAVAILABLE"
+    OCR_FAILED = "OCR_FAILED"
+    EXTRACTION_FAILED = "EXTRACTION_FAILED"
 
 
 class ExtractionError(Exception):
@@ -40,24 +53,92 @@ def _is_strict_ocr_enabled():
         return False
 
 
-def _enhance_scanned_image_for_ocr(pil_img):
+def deskew_image_for_ocr(cv_img):
     """
-    Applies adaptive contrast normalization and grayscale conversion
-    to improve OCR character recognition on faded or low-quality scans.
+    Estimates skew angle of text lines using minAreaRect on foreground points.
+    If angle is between -25.0 and 25.0 degrees and |angle| >= 0.5, rotates image to align lines.
     """
     try:
-        gray = pil_img.convert('L')
-        enhanced = ImageOps.autocontrast(gray, cutoff=2)
-        return enhanced
+        if len(cv_img.shape) == 3:
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = cv_img.copy()
+
+        # Threshold to locate text pixels
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        coords = np.column_stack(np.where(thresh > 0))
+        if len(coords) < 100:
+            return cv_img, 0.0
+
+        angle = cv2.minAreaRect(coords)[-1]
+        if angle < -45:
+            angle = -(90 + angle)
+        elif angle > 45:
+            angle = 90 - angle
+        else:
+            angle = -angle
+
+        if 0.5 <= abs(angle) <= 25.0:
+            (h, w) = cv_img.shape[:2]
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(cv_img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            return rotated, round(float(angle), 2)
+        return cv_img, 0.0
     except Exception:
-        return pil_img
+        return cv_img, 0.0
+
+
+def preprocess_image_for_ocr(pil_img):
+    """
+    Applies OpenCV preprocessing pipeline:
+    1. Deskewing to normalize rotated scans.
+    2. Grayscale conversion.
+    3. Bilateral filtering for edge-preserving denoising.
+    4. Otsu adaptive binarization for high-contrast character separation.
+    """
+    try:
+        arr = np.array(pil_img)
+        if len(arr.shape) == 2:
+            cv_img = arr
+        elif arr.shape[2] == 4:
+            cv_img = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+        else:
+            cv_img = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+        # 1. Deskew
+        deskewed, skew_angle = deskew_image_for_ocr(cv_img)
+
+        # 2. Grayscale
+        if len(deskewed.shape) == 3:
+            gray = cv2.cvtColor(deskewed, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = deskewed
+
+        # 3. Bilateral filter
+        filtered = cv2.bilateralFilter(gray, 9, 75, 75)
+
+        # 4. Otsu binarization
+        _, binarized = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+        out_pil = Image.fromarray(binarized)
+        return out_pil, skew_angle
+    except Exception:
+        gray = pil_img.convert('L')
+        return ImageOps.autocontrast(gray, cutoff=2), 0.0
+
+
+def _enhance_scanned_image_for_ocr(pil_img):
+    """Legacy helper maintained for backward compatibility."""
+    out_pil, _ = preprocess_image_for_ocr(pil_img)
+    return out_pil
 
 
 def _run_tesseract_ocr(pil_img, scale_x=1.0, scale_y=1.0, page_num=1, page_width=595.0, page_height=842.0):
     """
     Executes Tesseract OCR on a PIL image, captures word-level coordinates and confidence scores,
     scales coordinates to PDF page points, and groups words into structured blocks.
-    Degrades safely to simulated fallback if Tesseract is uninstalled and strict OCR is disabled.
+    Reports discrete extraction status without generating mock text.
     """
     ocr_text = ""
     word_confidences = []
@@ -65,12 +146,12 @@ def _run_tesseract_ocr(pil_img, scale_x=1.0, scale_y=1.0, page_num=1, page_width
     avg_conf = None
     ocr_engine = "Tesseract-OCR"
     extraction_method = "tesseract_ocr"
+    ocr_status = ExtractionStatus.SUCCESS
+    error_msg = None
 
     try:
-        # Pre-process image for optimal OCR yield
-        proc_img = _enhance_scanned_image_for_ocr(pil_img)
+        proc_img, skew_angle = preprocess_image_for_ocr(pil_img)
 
-        # 1. Run image_to_data for structural bounding boxes and confidence scores
         ocr_data = pytesseract.image_to_data(proc_img, output_type=pytesseract.Output.DICT)
         texts = ocr_data.get('text', [])
         confs = ocr_data.get('conf', [])
@@ -106,6 +187,7 @@ def _run_tesseract_ocr(pil_img, scale_x=1.0, scale_y=1.0, page_num=1, page_width
                 valid_words.append((w_str, c_num))
                 word_confidences.append({
                     'word': w_str.lower(),
+                    'confidence_score': c_num,
                     'conf': c_num,
                     'bbox': [bx0, by0, bx1, by1]
                 })
@@ -130,13 +212,15 @@ def _run_tesseract_ocr(pil_img, scale_x=1.0, scale_y=1.0, page_num=1, page_width
 
         if valid_words:
             avg_conf = round(sum(c for _, c in valid_words) / len(valid_words), 1)
+            if avg_conf < 60.0:
+                ocr_status = ExtractionStatus.LOW_CONFIDENCE
+        else:
+            ocr_status = ExtractionStatus.SUCCESS
 
-        # 2. Capture full text string
         ocr_text = pytesseract.image_to_string(proc_img).strip()
         if not ocr_text and valid_words:
             ocr_text = " ".join(w for w, _ in valid_words)
 
-        # Build structured blocks with scaled coordinates
         for b_id, b_data in raw_blocks_dict.items():
             b_text = " ".join(b_data['words'])
             b_conf = round(sum(b_data['confs']) / len(b_data['confs']), 1) if b_data['confs'] else avg_conf
@@ -151,35 +235,32 @@ def _run_tesseract_ocr(pil_img, scale_x=1.0, scale_y=1.0, page_num=1, page_width
     except (pytesseract.TesseractNotFoundError, Exception) as err:
         is_missing_binary = isinstance(err, pytesseract.TesseractNotFoundError)
         if _is_strict_ocr_enabled() and is_missing_binary:
-            return "", [], [], None, "None", "ocr_unavailable"
+            return "", [], [], None, "None", "ocr_unavailable", ExtractionStatus.OCR_UNAVAILABLE, "Tesseract OCR binary not found in PATH."
 
         ocr_engine = "Image Structural Analysis (OCR Binary Fallback)"
         extraction_method = "ocr_fallback"
-        ocr_text = (
-            f"[Scanned Page {page_num} - OCR Fallback]\n"
-            f"Dimensions: {round(page_width)}x{round(page_height)} points.\n"
-            f"Status: High-resolution raster scan indexed. Visual bounding coordinates mapped."
-        )
+        ocr_status = ExtractionStatus.OCR_UNAVAILABLE if is_missing_binary else ExtractionStatus.OCR_FAILED
+        error_msg = "Tesseract OCR binary not found in PATH." if is_missing_binary else f"OCR engine error: {str(err)}"
+        ocr_text = ""
         blocks = [{
             'block_number': 0,
             'bbox': [0.0, 0.0, float(page_width), float(page_height)],
-            'text': ocr_text,
+            'text': '',
             'type': 'raster_fallback',
             'confidence': None
         }]
 
-    return ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_method
+    return ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_method, ocr_status, error_msg
 
 
 def extract_pdf_document(source):
     """
     Extracts text, structural blocks, metadata, and entities from a PDF document.
-    Implements a hybrid pipeline:
+    Hybrid pipeline:
     - Digital pages: Native PyMuPDF text & block extraction with vector bounding boxes.
-    - Scanned pages: 200 DPI pixmap rasterization + Tesseract OCR with point coordinate scaling.
+    - Scanned pages: 200 DPI rasterization + OpenCV deskewing/binarization + Tesseract OCR.
     - Mixed documents: Independent per-page evaluation avoiding duplicate content.
-    - Empty pages: Clean handling without crashes.
-    `source` can be a filesystem path (str/Path) or raw bytes.
+    - Discrete extraction statuses: SUCCESS, PARTIAL_SUCCESS, LOW_CONFIDENCE, OCR_UNAVAILABLE, OCR_FAILED.
     """
     try:
         if isinstance(source, pymupdf.Document):
@@ -210,12 +291,14 @@ def extract_pdf_document(source):
                 'success': True,
                 'format': 'PDF',
                 'extraction_mode': 'digital_pdf',
+                'extraction_status': ExtractionStatus.SUCCESS,
                 'ocr_applied': False,
                 'page_count': 0,
                 'total_words': 0,
                 'total_characters': 0,
                 'metadata': metadata,
                 'pages': [],
+                'page_errors': [],
                 'entities': {
                     'dates': [],
                     'monetary_values': [],
@@ -229,10 +312,13 @@ def extract_pdf_document(source):
 
         pages = []
         page_entities_list = []
+        page_errors = []
         full_text_chunks = []
         digital_pages_count = 0
         scanned_pages_count = 0
         successful_ocr_count = 0
+        low_confidence_count = 0
+        unavailable_ocr_count = 0
 
         for page_idx in range(page_count):
             page_num = page_idx + 1
@@ -240,21 +326,16 @@ def extract_pdf_document(source):
             page_width = round(page.rect.width, 1)
             page_height = round(page.rect.height, 1)
 
-            # 1. Inspect native digital text
             digital_text = page.get_text("text").strip()
             digital_words = digital_text.split()
             has_native_text = len(digital_text) >= 32 and len(digital_words) >= 3
 
             if has_native_text:
-                # -----------------------------------------------------------
-                # Digital Page: Extract native text and block coordinates
-                # -----------------------------------------------------------
                 digital_pages_count += 1
                 raw_blocks = page.get_text("blocks")
                 blocks = []
 
                 for b in raw_blocks:
-                    # b[6] == 0 indicates a text block in PyMuPDF
                     if len(b) >= 7 and b[6] == 0:
                         text_content = b[4].strip()
                         if text_content:
@@ -283,22 +364,17 @@ def extract_pdf_document(source):
                     'blocks': blocks,
                     'entities': page_entities,
                     'extraction_method': 'native_pymupdf',
+                    'extraction_status': ExtractionStatus.SUCCESS,
                     'ocr_applied': False,
                     'ocr_confidence': None
                 })
 
             else:
-                # -----------------------------------------------------------
-                # Scanned / Raster Page: Render high-res image & execute OCR
-                # -----------------------------------------------------------
                 scanned_pages_count += 1
-
-                # Check if page has visual content or is completely blank
                 has_images = len(page.get_images()) > 0
                 has_drawings = len(page.get_drawings()) > 0
 
                 if not has_images and not has_drawings and not digital_text:
-                    # Completely blank page: no graphics, no text
                     pages.append({
                         'page_number': page_num,
                         'width': page_width,
@@ -316,12 +392,12 @@ def extract_pdf_document(source):
                             'emails': []
                         },
                         'extraction_method': 'blank_page',
+                        'extraction_status': ExtractionStatus.SUCCESS,
                         'ocr_applied': False,
                         'ocr_confidence': None
                     })
                     continue
 
-                # Render page at 200 DPI for reliable OCR accuracy
                 pix = page.get_pixmap(dpi=200)
                 img_width = pix.width
                 img_height = pix.height
@@ -330,7 +406,7 @@ def extract_pdf_document(source):
                 img_bytes = pix.tobytes("png")
 
                 with Image.open(io.BytesIO(img_bytes)) as pil_img:
-                    ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_method = _run_tesseract_ocr(
+                    res_tuple = _run_tesseract_ocr(
                         pil_img,
                         scale_x=scale_x,
                         scale_y=scale_y,
@@ -338,20 +414,24 @@ def extract_pdf_document(source):
                         page_width=page_width,
                         page_height=page_height
                     )
+                    ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_method, p_status, err_msg = res_tuple
 
-                if extraction_method == 'ocr_unavailable':
-                    if _is_strict_ocr_enabled():
-                        raise ExtractionError("Tesseract OCR is not installed or not in PATH. See README for installation instructions.")
+                if extraction_method == 'ocr_unavailable' and _is_strict_ocr_enabled():
+                    raise ExtractionError("Tesseract OCR is not installed or not in PATH. See README for installation instructions.")
 
                 if extraction_method == 'tesseract_ocr':
                     successful_ocr_count += 1
+                    if p_status == ExtractionStatus.LOW_CONFIDENCE:
+                        low_confidence_count += 1
+                else:
+                    unavailable_ocr_count += 1
+                    if err_msg:
+                        page_errors.append({'page_number': page_num, 'error': err_msg, 'status': p_status})
 
-                # If digital text had minor sparse fragments, merge cleanly without duplication
                 final_page_text = ocr_text
-                if digital_text and digital_text not in ocr_text and not ocr_text.startswith('[Scanned Page'):
-                    final_page_text = f"{digital_text}\n{ocr_text}"
+                if digital_text and digital_text not in ocr_text:
+                    final_page_text = (digital_text + "\n" + ocr_text).strip()
 
-                # Extract entities from OCR text
                 page_entities = extract_entities_from_text(
                     final_page_text,
                     page_number=page_num,
@@ -359,7 +439,8 @@ def extract_pdf_document(source):
                     default_confidence=avg_conf
                 )
                 page_entities_list.append(page_entities)
-                full_text_chunks.append(final_page_text)
+                if final_page_text:
+                    full_text_chunks.append(final_page_text)
 
                 words = final_page_text.split()
                 pages.append({
@@ -372,8 +453,10 @@ def extract_pdf_document(source):
                     'blocks': blocks,
                     'entities': page_entities,
                     'extraction_method': extraction_method,
+                    'extraction_status': p_status,
                     'ocr_applied': True,
-                    'ocr_confidence': avg_conf
+                    'ocr_confidence': avg_conf,
+                    'error': err_msg
                 })
 
         full_text = "\n\n--- Page Break ---\n\n".join(full_text_chunks)
@@ -381,18 +464,28 @@ def extract_pdf_document(source):
         total_characters = sum(p['character_count'] for p in pages)
         unified_entities = merge_entities(page_entities_list)
 
-        # Determine overarching document extraction mode
+        # Determine overarching document extraction mode & status
         if scanned_pages_count == 0:
             extraction_mode = 'digital_pdf'
+            doc_status = ExtractionStatus.SUCCESS
         elif digital_pages_count == 0:
             extraction_mode = 'scanned_pdf_ocr' if successful_ocr_count > 0 else 'simulated_fallback'
+            if successful_ocr_count > 0:
+                doc_status = ExtractionStatus.LOW_CONFIDENCE if (low_confidence_count > 0) else ExtractionStatus.SUCCESS
+            else:
+                doc_status = ExtractionStatus.OCR_UNAVAILABLE if unavailable_ocr_count > 0 else ExtractionStatus.OCR_FAILED
         else:
             extraction_mode = 'hybrid_pdf'
+            if unavailable_ocr_count > 0 or low_confidence_count > 0:
+                doc_status = ExtractionStatus.PARTIAL_SUCCESS
+            else:
+                doc_status = ExtractionStatus.SUCCESS
 
         return {
             'success': True,
             'format': 'PDF',
             'extraction_mode': extraction_mode,
+            'extraction_status': doc_status,
             'ocr_applied': scanned_pages_count > 0,
             'page_count': page_count,
             'digital_pages_count': digital_pages_count,
@@ -401,7 +494,9 @@ def extract_pdf_document(source):
             'total_characters': total_characters,
             'metadata': metadata,
             'pages': pages,
+            'page_errors': page_errors,
             'entities': unified_entities,
+            'structured_fields': normalize_structured_document_fields(full_text, unified_entities),
             'full_text': full_text
         }
 
@@ -412,7 +507,7 @@ def extract_pdf_document(source):
 def extract_image_document(source, filename="scanned_artifact.png"):
     """
     Extracts text, image dimensions, and entities from a scanned image (PNG, JPG, TIFF, BMP).
-    Uses pytesseract OCR with automatic fallback if the binary is absent.
+    Applies OpenCV preprocessing (deskewing, adaptive thresholding).
     Preserves word-level confidences and bounding coordinates.
     """
     try:
@@ -430,7 +525,7 @@ def extract_image_document(source, filename="scanned_artifact.png"):
             img_format = img.format or Path(filename).suffix.replace('.', '').upper()
             mode = img.mode
 
-            ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_mode = _run_tesseract_ocr(
+            res_tuple = _run_tesseract_ocr(
                 img,
                 scale_x=1.0,
                 scale_y=1.0,
@@ -438,13 +533,14 @@ def extract_image_document(source, filename="scanned_artifact.png"):
                 page_width=float(width),
                 page_height=float(height)
             )
+            ocr_text, word_confidences, blocks, avg_conf, ocr_engine, extraction_mode, doc_status, err_msg = res_tuple
 
-            # Strict OCR mode check for images
             if extraction_mode in ('ocr_unavailable', 'ocr_fallback') and _is_strict_ocr_enabled():
                 return {
                     'success': False,
                     'status': 'OCR unavailable',
                     'extraction_mode': 'ocr_unavailable',
+                    'extraction_status': ExtractionStatus.OCR_UNAVAILABLE,
                     'ocr_engine': 'None',
                     'error': 'OCR unavailable',
                     'format': img_format,
@@ -459,6 +555,7 @@ def extract_image_document(source, filename="scanned_artifact.png"):
                         'extraction_mode': 'ocr_unavailable'
                     },
                     'pages': [],
+                    'page_errors': [{'page_number': 1, 'error': err_msg, 'status': doc_status}],
                     'entities': {
                         'dates': [],
                         'monetary_values': [],
@@ -498,25 +595,14 @@ def extract_image_document(source, filename="scanned_artifact.png"):
     )
     words = ocr_text.split()
 
-    pages = [{
-        'page_number': 1,
-        'width': float(width),
-        'height': float(height),
-        'text': ocr_text,
-        'word_count': len(words),
-        'character_count': len(ocr_text),
-        'blocks': blocks,
-        'entities': entities,
-        'extraction_method': extraction_mode,
-        'ocr_applied': True,
-        'ocr_confidence': avg_conf
-    }]
-
     return {
         'success': True,
         'format': img_format,
-        'ocr_engine': ocr_engine,
         'extraction_mode': extraction_mode,
+        'extraction_status': doc_status,
+        'ocr_applied': True,
+        'ocr_engine': ocr_engine,
+        'ocr_confidence': avg_conf,
         'page_count': 1,
         'total_words': len(words),
         'total_characters': len(ocr_text),
@@ -525,28 +611,45 @@ def extract_image_document(source, filename="scanned_artifact.png"):
             'mode': mode,
             'format': img_format,
             'page_count': 1,
-            'extraction_mode': extraction_mode
+            'extraction_mode': extraction_mode,
+            'extraction_status': doc_status
         },
-        'pages': pages,
+        'pages': [{
+            'page_number': 1,
+            'width': float(width),
+            'height': float(height),
+            'text': ocr_text,
+            'word_count': len(words),
+            'character_count': len(ocr_text),
+            'blocks': blocks,
+            'entities': entities,
+            'extraction_method': extraction_mode,
+            'extraction_status': doc_status,
+            'ocr_applied': True,
+            'ocr_confidence': avg_conf,
+            'error': err_msg
+        }],
+        'page_errors': [{'page_number': 1, 'error': err_msg, 'status': doc_status}] if err_msg else [],
         'entities': entities,
+        'structured_fields': normalize_structured_document_fields(ocr_text, entities),
         'full_text': ocr_text
     }
 
 
 def extract_document_content(file_path):
     """
-    Unified extraction dispatcher: automatically inspects file extension,
-    executes PDF extraction or Image OCR, and returns standardized forensic data.
+    Unified extraction router:
+    Directs PDF files to extract_pdf_document and raster images to extract_image_document.
+    Raises ExtractionError on unsupported file extensions or decoding failures.
     """
     path = Path(file_path)
     if not path.exists():
-        raise ExtractionError(f"File not found on disk: {file_path}")
+        raise ExtractionError(f"Target document does not exist: {file_path}")
 
     ext = path.suffix.lower().replace('.', '')
-
     if ext == 'pdf':
         return extract_pdf_document(path)
     elif ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp'):
         return extract_image_document(path, filename=path.name)
     else:
-        raise ExtractionError(f"Unsupported file format for extraction: '{ext}'")
+        raise ExtractionError(f"Unsupported file format '.{ext}' for forensic document extraction.")

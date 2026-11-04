@@ -168,7 +168,71 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
                 )
             })
 
-    # 2. Monetary Values Comparison
+    # 2. Priority 5 Upgrade: Structured Label-Aware Financial Comparison
+    struct_a = data_a.get('structured_fields', {})
+    struct_b = data_b.get('structured_fields', {})
+    fin_a = struct_a.get('financials', {})
+    fin_b = struct_b.get('financials', {})
+
+    # Check grand totals if structured fields are present
+    if fin_a.get('grand_total') is not None and fin_b.get('grand_total') is not None:
+        tot_a = fin_a['grand_total']
+        tot_b = fin_b['grand_total']
+        if abs(tot_a - tot_b) < 0.02:
+            alignment_matrix.append({
+                'attribute': 'Normalized Grand Total',
+                'val_a': f"${tot_a:,.2f}",
+                'val_b': f"${tot_b:,.2f}",
+                'page_a': 1,
+                'page_b': 1,
+                'status': 'Match',
+                'verdict': '✓ Exact Grand Total Match',
+                'explanation': f"Structured grand totals match identically (${tot_a:,.2f}) across both files."
+            })
+        else:
+            diff = abs(tot_a - tot_b)
+            pct = round((diff / max(tot_a, tot_b)) * 100, 1)
+            alignment_matrix.append({
+                'attribute': 'Normalized Grand Total',
+                'val_a': f"${tot_a:,.2f}",
+                'val_b': f"${tot_b:,.2f}",
+                'page_a': 1,
+                'page_b': 1,
+                'status': 'Conflict',
+                'verdict': '⚠️ Grand Total Discrepancy',
+                'explanation': f"Financial variance of ${diff:,.2f} ({pct}%) detected between Document A (${tot_a:,.2f}) and Document B (${tot_b:,.2f})."
+            })
+
+    # Cross-document PO to Invoice or Bank Statement Sequence Anomaly Check
+    dates_dict_a = struct_a.get('dates', {})
+    dates_dict_b = struct_b.get('dates', {})
+    type_a = struct_a.get('document_type', '')
+    type_b = struct_b.get('document_type', '')
+
+    if type_a == 'invoice' and type_b == 'bank_statement':
+        inv_dt_str = dates_dict_a.get('issue_date')
+        if inv_dt_str and data_b.get('entities', {}).get('dates'):
+            try:
+                from backend.correlator import parse_date_robust
+                d_inv = parse_date_robust(inv_dt_str)
+                for d_entry in data_b['entities']['dates']:
+                    d_bank = parse_date_robust(d_entry['value'])
+                    if d_inv and d_bank and d_bank < d_inv:
+                        alignment_matrix.append({
+                            'attribute': 'Cross-Document Chronology',
+                            'val_a': f"Invoice: {inv_dt_str}",
+                            'val_b': f"Bank: {d_entry['value']}",
+                            'page_a': 1,
+                            'page_b': d_entry.get('page', 1),
+                            'status': 'Conflict',
+                            'verdict': '⚠️ Pre-Invoice Settlement Anomaly',
+                            'explanation': f"Bank record reflects transaction clearing ({d_entry['value']}) prior to invoice issue date ({inv_dt_str})."
+                        })
+                        break
+            except Exception:
+                pass
+
+    # 2. General Monetary Values Comparison (Fallback / Supplementary)
     money_a = entities_a.get('monetary_values', [])
     money_b = entities_b.get('monetary_values', [])
 
@@ -443,6 +507,7 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
         'verdict': verdict,
         'risk_score': risk_score,
         'alignment_matrix': alignment_matrix,
+        'discrepancies': [m for m in alignment_matrix if m['status'] in ('Conflict', 'Mismatch', 'Duplicate')],
         'compared_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 

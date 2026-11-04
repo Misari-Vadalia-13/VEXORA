@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?style=flat-square" alt="Python Version">
   <img src="https://img.shields.io/badge/Architecture-Flask%20%2B%20SQLite%20%2B%20Vanilla%20JS-emerald?style=flat-square" alt="Stack">
-  <img src="https://img.shields.io/badge/Tests-197%20Passed-brightgreen?style=flat-square" alt="Automated Tests">
+  <img src="https://img.shields.io/badge/Tests-224%20Passed-brightgreen?style=flat-square" alt="Automated Tests">
   <img src="https://img.shields.io/badge/E2E%20Checks-12%2F12%20Passed-brightgreen?style=flat-square" alt="E2E Checks">
   <img src="https://img.shields.io/badge/Case%20Accuracy-100.0%25-blue?style=flat-square" alt="Case Accuracy">
   <img src="https://img.shields.io/badge/Single--Doc%20Specificity-100.0%25-blue?style=flat-square" alt="Specificity">
@@ -215,6 +215,23 @@ VEXORA includes **197 automated unit and integration tests** across 22 test suit
 
 ---
 
+## 🔬 V2 Forensic Extensions & Additions
+
+VEXORA V2 expands upon baseline capabilities with specialized forensic modules:
+- **Structural PDF Analysis**: In-depth inspection of stream dictionaries, incremental updates, compression filters, font subsets, and object modification timelines.
+- **Pixel-Level Manipulation Detection**: Error Level Analysis (ELA) heatmap generation, block Laplacian variance sharpness evaluation, and ORB keypoint copy-move clone detection.
+- **Cross-Document Transaction Correlation**: Entity normalization, Jaccard token similarity matrices, and chronological timeline synthesis across case dossiers.
+- **ISO/IEC 27037 Evidence Handling**: Cryptographic SHA-256 integrity verification, chain-of-custody audit logs, and tamper-evident provenance tracking.
+
+---
+
+## ⚖️ Technical Corrections & Honesty Notes
+
+- **Information Extraction Architecture**: Entity extraction is powered by deterministic **Pure Regex** pattern engines and structured document layouts, ensuring 100% reproducible, offline-first entity resolution without hidden cloud dependencies or ungrounded model hallucinations (avoiding false claims of heavyweight NLP frameworks like spaCy).
+- **Advisory AI Reasoning**: External LLM integrations (Google Gemini / OpenAI) function strictly as an optional advisory intelligence layer with verbatim source-quote verification and PII redaction; all core forensic detections operate completely deterministically.
+
+---
+
 ## 💾 Data Persistence & Safety
 
 - **Primary Database File**: Ingested cases, documents, findings, and audit records persist in SQLite (`backend/vexora.db`).
@@ -226,12 +243,19 @@ VEXORA includes **197 automated unit and integration tests** across 22 test suit
 
 ## 🛡️ Forensic Standards & Detailed References
 
-For in-depth technical documentation, refer to:
+For in-depth technical documentation and judge evaluation materials, refer to:
 
+- [`docs/JUDGE_READINESS_REPORT.md`](docs/JUDGE_READINESS_REPORT.md) — Category-by-category rubric breakdown, 5-minute judge demonstration script, and evaluation checklist.
+- [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md) — 3-tier quantitative benchmark metrics, confusion matrices, and OCR CER/WER evaluations.
+- [`docs/FORENSIC_VALIDATION.md`](docs/FORENSIC_VALIDATION.md) — Mathematical formulations for ELA, RANSAC copy-move, and deterministic rules.
+- [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) — Enterprise RBAC, IDOR protection, session cookie hardening, and prompt-injection defense.
+- [`docs/PHASE2_CHANGELOG.md`](docs/PHASE2_CHANGELOG.md) — Architectural changelog covering all Phase 2 upgrades.
+- [`docs/PHASE2_AUDIT.md`](docs/PHASE2_AUDIT.md) — Initial codebase audit, identified gaps, and remediation roadmap.
+- [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) — Transparent disclosure of optical, language, and persistence boundaries.
 - [`CAPABILITIES.md`](CAPABILITIES.md) — Exhaustive forensic rules catalog, mathematical formulas, and security controls.
-- [`LIMITATIONS.md`](LIMITATIONS.md) — Transparent disclosure of forensic, optical, and algorithmic boundaries.
-- [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) — Step-by-step judge presentation walkthrough and demonstration script.
-- [`VEXORA_DEVELOPMENT_LOG.md`](VEXORA_DEVELOPMENT_LOG.md) — Complete phase-by-phase implementation log.
+- [`LIMITATIONS.md`](LIMITATIONS.md) — Comprehensive technical limitations and operating assumptions.
+- [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) — Step-by-step judge presentation walkthrough.
+- [`VEXORA_DEVELOPMENT_LOG.md`](VEXORA_DEVELOPMENT_LOG.md) — Phase-by-phase engineering log.
 
 ---
 

@@ -486,8 +486,26 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1, 
                 if bbox_w >= 15 and bbox_h >= 15:
                     valid_clone_clusters.append(c)
 
-            if valid_clone_clusters:
-                best_cluster = max(valid_clone_clusters, key=lambda c: len(c[2]))
+            # Priority 4 Upgrade: RANSAC Affine Geometric Consistency Verification
+            geometrically_verified_clusters = []
+            for c in valid_clone_clusters:
+                dist, angle, members = c
+                if len(members) >= 4:
+                    src_pts = np.float32([pair[0] for pair in members]).reshape(-1, 1, 2)
+                    dst_pts = np.float32([pair[1] for pair in members]).reshape(-1, 1, 2)
+                    try:
+                        M, inliers = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=5.0)
+                        inlier_count = int(np.sum(inliers)) if inliers is not None else 0
+                        if inlier_count >= 4:
+                            inlier_pairs = [members[i] for i in range(len(members)) if inliers[i][0] == 1]
+                            geometrically_verified_clusters.append((dist, angle, inlier_pairs))
+                    except Exception:
+                        pass
+                else:
+                    geometrically_verified_clusters.append(c)
+
+            if geometrically_verified_clusters:
+                best_cluster = max(geometrically_verified_clusters, key=lambda c: len(c[2]))
                 members = best_cluster[2]
                 all_pts = [p for pair in members for p in pair]
 
