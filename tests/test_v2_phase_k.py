@@ -18,7 +18,7 @@ import os
 import unittest
 from unittest.mock import patch
 from pathlib import Path
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 from backend.config import Config, TestConfig
 from backend.app import create_app

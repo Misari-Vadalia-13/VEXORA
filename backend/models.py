@@ -95,17 +95,20 @@ def validate_user_registration(data):
     if not password or len(password) < 6:
         raise ValidationError("Password must be at least 6 characters long.", field="password")
 
-    # Role escalation security guard: prevent self-assigning administrative privileges
+    # Role escalation security guard: reject administrative role self-assignment
     requested_role = (data.get('role') or 'Forensic Analyst').strip()
     disallowed_admin_roles = {'admin', 'administrator', 'system administrator', 'superuser', 'root'}
     if requested_role.lower() in disallowed_admin_roles:
         raise ValidationError("Administrative roles cannot be self-assigned during registration.", field="role")
 
+    # Zero-trust role assignment: Client-supplied custom roles are ignored; all self-registrations default to standard analyst.
+    assigned_role = 'Forensic Analyst'
+
     return {
         'username': username.strip().lower(),
         'email': email.strip().lower(),
         'password': password,
-        'role': requested_role,
+        'role': assigned_role,
         'badge_number': data.get('badge_number', 'VEX-000').strip()
     }
 
@@ -167,12 +170,22 @@ def check_case_access(case_id, user_id=None, username=None, role=None):
     if not case:
         return False, "Case not found", 404
 
+    try:
+        from flask import current_app, has_app_context
+        auth_required = current_app.config.get('VEXORA_REQUIRE_AUTH', False) if (has_app_context() and current_app) else False
+    except Exception:
+        auth_required = False
+
     admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
     if role and role.strip().lower() in admin_roles:
         return True, case, 200
 
-    if not username and not user_id:
-        return True, case, 200
+    if auth_required:
+        if not username and not user_id:
+            return False, "Authentication required: Missing user identity.", 401
+    else:
+        if not username and not user_id:
+            return True, case, 200
 
     owner_u = (case.get('owner_username') or '').strip().lower()
     owner_i = case.get('owner_id')
@@ -183,7 +196,7 @@ def check_case_access(case_id, user_id=None, username=None, role=None):
     if user_id and owner_i and user_id == owner_i:
         return True, case, 200
 
-    if (not owner_u or owner_u in ('alex.turner', 'system')) and req_u == 'alex.turner':
+    if not auth_required and (not owner_u or owner_u in ('alex.turner', 'system')) and req_u == 'alex.turner':
         return True, case, 200
 
     return False, f"Access denied: You do not have permission for case '{case_id}'.", 403
@@ -194,7 +207,23 @@ def check_document_access(doc_id, user_id=None, username=None, role=None):
     if not doc:
         return False, "Document not found", 404
     if not doc.get('case_id'):
-        return True, doc, 200
+        try:
+            from flask import current_app, has_app_context
+            auth_required = current_app.config.get('VEXORA_REQUIRE_AUTH', False) if (has_app_context() and current_app) else False
+        except Exception:
+            auth_required = False
+        if auth_required and not username and not user_id:
+            return False, "Authentication required: Missing user identity.", 401
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if role and role.strip().lower() in admin_roles:
+            return True, doc, 200
+        doc_uploader = (doc.get('uploaded_by') or '').strip().lower()
+        if username and doc_uploader and username.strip().lower() == doc_uploader:
+            return True, doc, 200
+        if not auth_required:
+            return True, doc, 200
+        return False, f"Access denied: You do not have permission for document '{doc_id}'.", 403
+
     allowed, res, code = check_case_access(doc['case_id'], user_id, username, role)
     if not allowed:
         return False, res, code
@@ -813,7 +842,8 @@ def log_audit(action, entity_type, entity_id, details, user="System"):
             (action, entity_type, entity_id, details, user)
         )
     except Exception as e:
-        print(f"[Warning] Failed to log audit event: {e}")
+        import logging
+        logging.getLogger('vexora.audit').warning(f"Failed to log audit event: {e}")
 
 def get_audit_logs(action=None, entity_type=None, user=None, limit=100):
     """

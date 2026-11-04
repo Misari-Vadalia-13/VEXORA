@@ -204,6 +204,8 @@ def seed_data(db_path=None):
         # Check if documents already exist
         cursor.execute("SELECT COUNT(*) FROM documents")
         if cursor.fetchone()[0] == 0:
+            cursor.execute("SELECT 1 FROM cases WHERE id = 'CAS-2026-0891'")
+            case_exists = cursor.fetchone() is not None
             initial_documents = [
                 (
                     "DOC-2026-0042",
@@ -258,17 +260,20 @@ def seed_data(db_path=None):
                     "2026-10-26 09:44:00"
                 )
             ]
-            cursor.executemany(
-                """
-                INSERT INTO documents (id, case_id, filename, file_type, file_size, file_path, category, classification_confidence, status, uploaded_by, uploaded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                initial_documents
-            )
+            if case_exists:
+                cursor.executemany(
+                    """
+                    INSERT INTO documents (id, case_id, filename, file_type, file_size, file_path, category, classification_confidence, status, uploaded_by, uploaded_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    initial_documents
+                )
 
         # Check if findings already exist
         cursor.execute("SELECT COUNT(*) FROM findings")
         if cursor.fetchone()[0] == 0:
+            cursor.execute("SELECT 1 FROM cases WHERE id = 'CAS-2026-0891'")
+            fnd_case_exists = cursor.fetchone() is not None
             initial_findings = [
                 (
                     "FND-2026-001",
@@ -319,13 +324,14 @@ def seed_data(db_path=None):
                     "2026-10-25 16:10:00"
                 )
             ]
-            cursor.executemany(
-                """
-                INSERT INTO findings (id, case_id, document_id, title, severity, category, description, confidence, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                initial_findings
-            )
+            if fnd_case_exists:
+                cursor.executemany(
+                    """
+                    INSERT INTO findings (id, case_id, document_id, title, severity, category, description, confidence, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    initial_findings
+                )
 
         # Check if audit logs already exist
         cursor.execute("SELECT COUNT(*) FROM audit_logs")

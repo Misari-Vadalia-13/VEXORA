@@ -15,7 +15,7 @@ import os
 import csv
 import unittest
 from pathlib import Path
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 from backend.config import Config, TestConfig
 from backend.app import create_app

@@ -473,6 +473,23 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
                     ),
                     'evidence': f"Issue: {inv_pattern.group(1)} vs Due: {due_pattern.group(1)}"
                 })
+                # Deep Document Understanding: Chronological Inversion (RULE-DOC-002)
+                rule_doc2 = RULES.get('RULE-DOC-002')
+                if rule_doc2:
+                    findings.append({
+                        'rule_id': rule_doc2['id'],
+                        'title': rule_doc2['title'],
+                        'severity': rule_doc2['severity'],
+                        'category': rule_doc2['category'],
+                        'status': 'Potential Anomaly',
+                        'confidence': rule_doc2['confidence'],
+                        'page_number': 1,
+                        'coordinates': None,
+                        'description': (
+                            f"Chronological Inversion: Payment due date ({due_pattern.group(1)}) occurs prior to invoice issuance date ({inv_pattern.group(1)})."
+                        ),
+                        'evidence': f"Due Date ({due_pattern.group(1)}) < Issue Date ({inv_pattern.group(1)})"
+                    })
         except ValueError:
             pass
 
@@ -543,6 +560,37 @@ def analyze_contextual_rules(doc_category, extracted_text, extracted_data, doc_m
                 ),
                 'evidence': f"Contradictory totals: {', '.join(f'${t:,.2f}' for t in sorted_totals)}"
             })
+
+    # -------------------------------------------------------------
+    # Deep Document Understanding: Expired Identification (RULE-DOC-005)
+    # -------------------------------------------------------------
+    doc_dates = structured_doc.get('dates', {})
+    exp_str = doc_dates.get('expiration_date')
+    cat_lower = category.lower() if category else ''
+    if exp_str and ('id' in cat_lower or 'card' in cat_lower or 'passport' in cat_lower or structured_doc.get('document_type') == 'id_card'):
+        try:
+            iso_m = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', exp_str)
+            if iso_m:
+                exp_dt = datetime(int(iso_m.group(1)), int(iso_m.group(2)), int(iso_m.group(3)))
+                if exp_dt < datetime.now():
+                    rule_doc5 = RULES.get('RULE-DOC-005')
+                    if rule_doc5:
+                        findings.append({
+                            'rule_id': rule_doc5['id'],
+                            'title': rule_doc5['title'],
+                            'severity': rule_doc5['severity'],
+                            'category': rule_doc5['category'],
+                            'status': 'Potential Anomaly',
+                            'confidence': rule_doc5['confidence'],
+                            'page_number': 1,
+                            'coordinates': None,
+                            'description': (
+                                f"Identification credential is expired. Document expiration date '{exp_str}' precedes current operational date."
+                            ),
+                            'evidence': f"Expiration: {exp_str} < Current Date"
+                        })
+        except Exception:
+            pass
 
     # Rule 4: Conflicting Monetary Values & Currencies (RULE-CTX-004)
     money_entries = entities.get('monetary_values', [])

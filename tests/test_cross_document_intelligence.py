@@ -368,6 +368,95 @@ class TestCrossDocumentIntelligence(unittest.TestCase):
             self.assertIsNotNone(chrono)
             self.assertIn("Pre-Invoice Settlement Anomaly", chrono['verdict'])
 
+    def test_08_cross_document_pre_invoice_anomaly_symmetric(self):
+        """Verifies pre-invoice settlement anomaly is flagged symmetrically when bank doc is passed first."""
+        with self.app.app_context():
+            case = create_case({
+                'title': 'Pre-Invoice Symmetric Case',
+                'type': 'Financial Audit',
+                'priority': 'High',
+                'status': 'Active',
+                'investigator': 'Lead Investigator',
+                'description': 'Test case'
+            })
+            doc_inv = create_document({
+                'case_id': case['id'],
+                'filename': 'invoice_symm.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+            doc_bank = create_document({
+                'case_id': case['id'],
+                'filename': 'bank_symm.pdf',
+                'file_type': 'pdf',
+                'file_size': 2048,
+                'status': 'Analyzed'
+            })
+
+            data_inv = {
+                'structured_fields': {
+                    'document_type': 'invoice',
+                    'dates': {'issue_date': '2026-04-10'}
+                },
+                'entities': {'dates': [{'value': '2026-04-10', 'page': 1}]}
+            }
+            data_bank = {
+                'structured_fields': {
+                    'document_type': 'bank_statement'
+                },
+                'entities': {'dates': [{'value': '2026-03-01', 'page': 1}]}
+            }
+            save_document_extraction(doc_inv['id'], data_inv)
+            save_document_extraction(doc_bank['id'], data_bank)
+
+            # Bank passed as Doc A, Invoice as Doc B
+            res = compare_two_documents(doc_bank['id'], doc_inv['id'])
+            self.assertTrue(res['success'])
+            chrono = next((m for m in res['discrepancies'] if m['attribute'] == 'Cross-Document Chronology'), None)
+            self.assertIsNotNone(chrono)
+            self.assertIn("Pre-Invoice Settlement Anomaly", chrono['verdict'])
+
+    def test_09_multi_format_date_normalization_match(self):
+        """Verifies cross-document date matching recognizes identical dates across different string formats."""
+        with self.app.app_context():
+            case = create_case({
+                'title': 'Date Format Case',
+                'type': 'KYC Verification',
+                'priority': 'Medium',
+                'status': 'Active',
+                'investigator': 'Lead Investigator',
+                'description': 'Test date normalization'
+            })
+            doc_a = create_document({
+                'case_id': case['id'],
+                'filename': 'passport.pdf',
+                'file_type': 'pdf',
+                'file_size': 1024,
+                'status': 'Analyzed'
+            })
+            doc_b = create_document({
+                'case_id': case['id'],
+                'filename': 'utility_bill.pdf',
+                'file_type': 'pdf',
+                'file_size': 1024,
+                'status': 'Analyzed'
+            })
+
+            # Format 1: ISO YYYY-MM-DD vs Format 2: Month Day, Year
+            data_a = {'entities': {'dates': [{'value': '2026-05-20', 'page': 1}]}}
+            data_b = {'entities': {'dates': [{'value': 'May 20, 2026', 'page': 1}]}}
+
+            save_document_extraction(doc_a['id'], data_a)
+            save_document_extraction(doc_b['id'], data_b)
+
+            res = compare_two_documents(doc_a['id'], doc_b['id'])
+            self.assertTrue(res['success'])
+            match_row = next((m for m in res['alignment_matrix'] if m['attribute'] == 'Transaction / Event Date'), None)
+            self.assertIsNotNone(match_row)
+            self.assertEqual(match_row['status'], 'Match')
+            self.assertIn("Synchronized Date", match_row['verdict'])
+
 
 if __name__ == '__main__':
     unittest.main()

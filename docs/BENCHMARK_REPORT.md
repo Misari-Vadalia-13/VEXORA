@@ -130,3 +130,4 @@ $$\text{CER} = \frac{S_c + D_c + I_c}{N_c}, \quad \text{WER} = \frac{S_w + D_w +
 - **High-Contrast Digital Scans (with Tesseract):** Average CER $< 1.8\%$, average WER $< 3.5\%$.
 - **Preprocessing Impact:** OpenCV deskewing and Otsu binarization improved character recognition on rotated scans by $+28.4\%$ compared to unprocessed baseline images.
 - **Tesseract Fallback Graceful Degradation:** When the Tesseract binary is absent on the host environment, VEXORA preserves 100% system uptime, tags the page as `OCR_UNAVAILABLE`, and indexes structural dimensions without raising unhandled runtime exceptions.
+

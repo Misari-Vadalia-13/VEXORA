@@ -28,35 +28,38 @@ VEXORA provides 4 independent computer vision forensic checks in `backend/forens
   4. Local patch variance is scanned across non-overlapping $16 \times 16$ grid blocks. Blocks with mean error exceeding $3.2 \times \sigma_{\text{baseline}}$ are flagged as localized compression inconsistencies.
 - **Evidence Output:** Annotated heatmap highlighting the exact bounding rectangle of spliced regions.
 
-### 2.2 Patch Uniformity & Whitebox Cloaking — `IMG-002`
-- **Theory:** Fraudsters commonly obscure sensitive text or account numbers by placing a pure white or solid color rectangle over the original text before re-scanning or saving.
+### 2.2 Block-Level Sharpness & Noise Inconsistency — `IMG-002`
+- **Theory:** Digital cut-and-paste tampering or spliced text inserts frequently display sharpness, focal depth, or high-frequency texture disparities compared to the host document. Splicing an insert from a different resolution or compression background alters localized gradient energy across block boundaries.
 - **Algorithm:**
-  1. Grayscale image is partitioned into candidate connected components after morphological edge gradient extraction.
-  2. For each region $R$ with area $A(R) \ge 120\text{ px}^2$:
-     - Local variance $\sigma^2(R) = \frac{1}{|R|} \sum_{(x,y) \in R} (I(x,y) - \mu_R)^2$ is calculated.
-     - If $\sigma^2(R) \approx 0$ (near-zero texture) AND the region's perimeter exhibits sharp, discontinuous step edges against adjacent noisy background text, $R$ is classified as an unnatural synthetic patch.
-- **Evidence Output:** Bounding box around cloaking rectangles.
+  1. Grayscale image is partitioned into non-overlapping grid blocks ($64 \times 64\text{ px}$ tiles).
+  2. For each block $B_k$, the discrete Laplacian operator $L(x, y) = \nabla^2 I(x, y)$ is computed, and its sharpness variance is evaluated:
+     $$\text{Var}(L(B_k)) = \frac{1}{|B_k|} \sum_{(x, y) \in B_k} (L(x, y) - \mu_{L, k})^2$$
+  3. The global median and interquartile range across non-blank blocks establish the page sharpness baseline.
+  4. Non-uniform tiles exhibiting sharpness variance deviations exceeding dynamic threshold margins are flagged as localized sharpness inconsistencies.
+- **Evidence Output:** Bounding box coordinates and annotated overlay highlighting inconsistent sharpness blocks.
 
 ### 2.3 RANSAC Geometric Copy-Move Forgery Detection — `IMG-003`
-- **Theory:** Fraudulent documents frequently duplicate legitimate seals, watermarks, signatures, or serial numbers from one location to another. Naive feature matching triggers false positives on natural text repetition (e.g. repeated words or table grids). VEXORA implements RANSAC affine consensus to enforce spatial rigidity.
+- **Theory:** Fraudulent documents frequently duplicate legitimate seals, watermarks, signatures, or serial numbers from one location to another. Naive feature matching triggers false positives on natural text repetition (e.g. repeated words or table grids). VEXORA implements spatial displacement clustering, text-boundary suppression, and RANSAC affine consensus to enforce spatial rigidity.
 - **Algorithm:**
   1. ORB (Oriented FAST and Rotated BRIEF) detects multi-scale keypoints and descriptors:
      $$K = \{(x_i, y_i, d_i)\}_{i=1}^N$$
   2. K-Nearest Neighbors ($k=2$) matches descriptors with Lowe's ratio test ($d_1 / d_2 < 0.75$).
-  3. Matches between points separated by spatial Euclidean distance $||p_i - p_j|| < 30\text{ px}$ are rejected to eliminate intra-glyph self-similarity.
-  4. Remaining candidate pairs are filtered using RANSAC affine transformation estimation:
+  3. Matches overlapping detected typographic text bounding boxes are suppressed to eliminate typographic repetition.
+  4. Candidate matches separated by Euclidean physical distance $||\Delta p|| \ge 45\text{ px}$ are clustered into displacement vectors (angle tolerance $\pm 15^\circ$, magnitude tolerance $\pm 25\text{ px}$).
+  5. Clusters of candidate pairs are verified using RANSAC affine transformation estimation:
      $$\begin{bmatrix} x' \\ y' \end{bmatrix} = \begin{bmatrix} a_{11} & a_{12} \\ a_{21} & a_{22} \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} t_x \\ t_y \end{bmatrix}$$
-     implemented via `cv2.estimateAffinePartial2D(pts_src, pts_dst, method=cv2.RANSAC)`.
-  5. **Forensic Rule:** An anomaly is triggered **only** if the number of consensus inliers $N_{\text{inliers}} \ge 6$ conforming to a single rigid 2D transform.
-- **Result:** Zero false positives on repetitive typography while reliably catching duplicated stamps and signatures.
+     implemented via `cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=5.0)`.
+  6. **Forensic Rule:** An anomaly is triggered **only** if the number of consensus inliers $N_{\text{inliers}} \ge \text{min\_matches}$ (default 6) conforming to a single rigid 2D transform, rejecting non-rigid or random matches.
+- **Result:** Elimination of false positives on repetitive typography while reliably catching duplicated stamps, seals, and signatures.
 
-### 2.4 Noise Variance & High-Frequency Inconsistency — `IMG-004`
-- **Theory:** Natural digital camera sensors and flatbed scanners introduce Gaussian-like sensor pattern noise (PRNU). Splicing content from an external source imports foreign noise characteristics.
+### 2.4 Signature Region Presence & Overlap Check — `IMG-004`
+- **Theory:** Forensic document examination requires verifying whether required signatures are present in designated signature areas (typically the lower ROI of contracts, checks, or identity documents) and whether handwritten ink strokes appropriately intersect or respect printed baseline guide rules.
 - **Algorithm:**
-  1. Image is processed through a high-pass Laplacian filter:
-     $$L(x,y) = \nabla^2 I(x,y)$$
-  2. Moving window ($32 \times 32$) computes local noise variance $\sigma_n^2$.
-  3. Significant local deviations ($z\text{-score} > 3.5$) indicate composite image tampering.
+  1. Lower region-of-interest (ROI) of the document page (lower 25% by height) is isolated.
+  2. Morphological binarization and connected-component analysis isolate fluid, curvilinear ink strokes characteristic of manual cursive penmanship versus rigid typographic printed text.
+  3. Stroke density, aspect ratio, and spatial intersection with underlying printed baseline lines (`---`, `Signed:`, or dotted rules) are analyzed.
+  4. If an official document type expects a signature but no stroke components are found, or if strokes demonstrate unnatural geometry or baseline misalignment, an investigative finding is registered.
+- **Evidence Output:** Bounding box of detected signature stroke clusters or notice of absent required signature.
 
 ---
 
@@ -135,3 +138,4 @@ A core evaluation criterion in digital forensics is **specificity** — ensuring
 
 ### Scientific Honesty Note
 Across the 20-document test dataset, 3 tampered documents (`tampered_04_duplicate_inv_a.pdf`, `tampered_05_duplicate_inv_b.pdf`, `tampered_06_bank_mismatch.pdf`) are internally genuine vector PDFs when analyzed in isolation. Their fraudulent nature consists of duplicate invoice collision and inter-party banking mismatch. VEXORA transparently reports these as negative on single-document inspection and demonstrates 100% recall and precision when evaluated in their intended case-level cross-comparison context.
+

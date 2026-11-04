@@ -51,3 +51,4 @@ VEXORA is an investigative assistance platform. Its algorithmic findings and AI 
 | **Prompt Injection Attacks** | Malicious instructions in documents | Encapsulation in `<untrusted_document_content>` XML tags and heuristic neutralization. |
 | **Storage Corruption** | Evidence altered on disk | Real-time cryptographic SHA-256 integrity verification (`GET /api/documents/<id>/integrity`). |
 | **Multi-User Data Exposure** | Analyst A sees Analyst B's cases | Cascading IDOR security validation across all case, document, and finding endpoints. |
+

@@ -231,6 +231,28 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
                         break
             except Exception:
                 pass
+    elif type_b == 'invoice' and type_a == 'bank_statement':
+        inv_dt_str = dates_dict_b.get('issue_date')
+        if inv_dt_str and data_a.get('entities', {}).get('dates'):
+            try:
+                from backend.correlator import parse_date_robust
+                d_inv = parse_date_robust(inv_dt_str)
+                for d_entry in data_a['entities']['dates']:
+                    d_bank = parse_date_robust(d_entry['value'])
+                    if d_inv and d_bank and d_bank < d_inv:
+                        alignment_matrix.append({
+                            'attribute': 'Cross-Document Chronology',
+                            'val_a': f"Bank: {d_entry['value']}",
+                            'val_b': f"Invoice: {inv_dt_str}",
+                            'page_a': d_entry.get('page', 1),
+                            'page_b': 1,
+                            'status': 'Conflict',
+                            'verdict': '⚠️ Pre-Invoice Settlement Anomaly',
+                            'explanation': f"Bank record reflects transaction clearing ({d_entry['value']}) prior to invoice issue date ({inv_dt_str})."
+                        })
+                        break
+            except Exception:
+                pass
 
     # 2. General Monetary Values Comparison (Fallback / Supplementary)
     money_a = entities_a.get('monetary_values', [])
@@ -282,7 +304,7 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
         date_vals_a = {d['value']: d.get('page', 1) for d in dates_a}
         date_vals_b = {d['value']: d.get('page', 1) for d in dates_b}
 
-        # Check for intersection
+        # Check for exact intersection first
         shared_dates = set(date_vals_a.keys()) & set(date_vals_b.keys())
         if shared_dates:
             d_val = next(iter(shared_dates))
@@ -297,19 +319,46 @@ def compare_two_documents(doc_a_id, doc_b_id, user="System"):
                 'explanation': f"Chronological timestamp '{d_val}' is mutually affirmed in both records."
             })
         else:
-            # Different dates present
-            first_a = dates_a[0]
-            first_b = dates_b[0]
-            alignment_matrix.append({
-                'attribute': 'Referenced Execution Date',
-                'val_a': first_a['value'],
-                'val_b': first_b['value'],
-                'page_a': first_a.get('page', 1),
-                'page_b': first_b.get('page', 1),
-                'status': 'Mismatch',
-                'verdict': '⚠️ Timeline Discrepancy',
-                'explanation': f"Document A records date '{first_a['value']}' while Document B specifies '{first_b['value']}'. Timeline variance requires verification."
-            })
+            # Check normalized datetime equivalence across formatting styles
+            from backend.correlator import parse_date_robust
+            matched_pair = None
+            for d1 in dates_a:
+                dt1 = parse_date_robust(d1.get('value'))
+                if not dt1:
+                    continue
+                for d2 in dates_b:
+                    dt2 = parse_date_robust(d2.get('value'))
+                    if dt2 and dt1 == dt2:
+                        matched_pair = (d1, d2)
+                        break
+                if matched_pair:
+                    break
+
+            if matched_pair:
+                m_a, m_b = matched_pair
+                alignment_matrix.append({
+                    'attribute': 'Transaction / Event Date',
+                    'val_a': m_a['value'],
+                    'val_b': m_b['value'],
+                    'page_a': m_a.get('page', 1),
+                    'page_b': m_b.get('page', 1),
+                    'status': 'Match',
+                    'verdict': '✓ Synchronized Date',
+                    'explanation': f"Normalized chronological date '{m_a['value']}' matches '{m_b['value']}' across both records."
+                })
+            else:
+                first_a = dates_a[0]
+                first_b = dates_b[0]
+                alignment_matrix.append({
+                    'attribute': 'Referenced Execution Date',
+                    'val_a': first_a['value'],
+                    'val_b': first_b['value'],
+                    'page_a': first_a.get('page', 1),
+                    'page_b': first_b.get('page', 1),
+                    'status': 'Mismatch',
+                    'verdict': '⚠️ Timeline Discrepancy',
+                    'explanation': f"Document A records date '{first_a['value']}' while Document B specifies '{first_b['value']}'. Timeline variance requires verification."
+                })
 
     # 4. Legal Counterparties & Organizations Comparison
     orgs_a = [o['value'] for o in entities_a.get('organizations', [])]

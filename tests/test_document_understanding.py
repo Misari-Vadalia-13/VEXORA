@@ -110,5 +110,65 @@ class TestDocumentUnderstanding(unittest.TestCase):
         self.assertIn("states contradictory grand total figures", doc_004_finding['description'])
 
 
+    def test_05_chronological_inversion_rule_doc_002(self):
+        """Verifies RULE-DOC-002 fires when payment due date precedes invoice issue date."""
+        inverted_text = (
+            "TAX INVOICE\n"
+            "Invoice #: INV-2026-INVERT\n"
+            "Invoice Date: 2026-03-15\n"
+            "Due Date: 2026-02-15\n"  # Due date 1 month BEFORE invoice date!
+            "Subtotal: $1,000.00\n"
+            "Tax: $100.00\n"
+            "Grand Total: $1,100.00\n"
+        )
+        entities = {
+            'identifiers': [{'value': 'INV-2026-INVERT', 'page': 1}],
+            'dates': [{'value': '2026-03-15', 'page': 1}, {'value': '2026-02-15', 'page': 1}],
+            'monetary_values': [{'value': '$1,000.00', 'page': 1}, {'value': '$100.00', 'page': 1}, {'value': '$1,100.00', 'page': 1}]
+        }
+        findings = analyze_contextual_rules("Commercial Invoice", inverted_text, {'entities': entities})
+        rule_ids = [f['rule_id'] for f in findings]
+        self.assertIn('RULE-DOC-002', rule_ids)
+        self.assertIn('RULE-CTX-003', rule_ids)
+
+    def test_06_expired_identification_rule_doc_005(self):
+        """Verifies RULE-DOC-005 fires on an expired identification document."""
+        expired_id_text = (
+            "STATE IDENTIFICATION CARD\n"
+            "ID Number: DL-88991122\n"
+            "Bearer: Jane Doe\n"
+            "Date of Birth: 1988-06-12\n"
+            "Issue Date: 2015-05-10\n"
+            "Expiration Date: 2021-05-10\n"  # Expired in 2021
+        )
+        entities = {
+            'identifiers': [{'value': 'DL-88991122', 'page': 1}],
+            'dates': [{'value': '1988-06-12', 'page': 1}, {'value': '2015-05-10', 'page': 1}, {'value': '2021-05-10', 'page': 1}],
+            'persons': [{'value': 'Jane Doe', 'page': 1}]
+        }
+        findings = analyze_contextual_rules("Identification Card", expired_id_text, {'entities': entities})
+        rule_ids = [f['rule_id'] for f in findings]
+        self.assertIn('RULE-DOC-005', rule_ids)
+
+    def test_07_valid_identification_clean(self):
+        """Verifies a non-expired identification card produces no expiration findings."""
+        valid_id_text = (
+            "NATIONAL PASSPORT\n"
+            "Passport #: P98765432\n"
+            "Bearer: John Smith\n"
+            "Date of Birth: 1992-08-20\n"
+            "Valid Thru: 2032-12-31\n"  # Valid in future
+        )
+        entities = {
+            'identifiers': [{'value': 'P98765432', 'page': 1}],
+            'dates': [{'value': '1992-08-20', 'page': 1}, {'value': '2032-12-31', 'page': 1}],
+            'persons': [{'value': 'John Smith', 'page': 1}]
+        }
+        findings = analyze_contextual_rules("Passport", valid_id_text, {'entities': entities})
+        rule_ids = [f['rule_id'] for f in findings]
+        self.assertNotIn('RULE-DOC-005', rule_ids)
+
+
 if __name__ == '__main__':
     unittest.main()
+

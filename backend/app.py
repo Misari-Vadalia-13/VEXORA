@@ -309,11 +309,29 @@ def create_app(config_class=Config):
     # Documents API Routes
     # ==========================================
     @app.route('/api/documents', methods=['GET'])
+    @login_required
     def api_list_documents():
-        """Lists documents with optional case_id and category filters."""
+        """Lists documents with optional case_id and category filters (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         case_id = request.args.get('case_id')
         category = request.args.get('category')
-        docs = get_all_documents(case_id=case_id, category=category)
+
+        if case_id:
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
+            docs = get_all_documents(case_id=case_id, category=category)
+        else:
+            admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+            is_admin = (not app.config.get('VEXORA_REQUIRE_AUTH', False)) or (role and role.strip().lower() in admin_roles)
+            if is_admin:
+                docs = get_all_documents(category=category)
+            else:
+                user_cases = get_all_cases(username=username, role=role)
+                case_ids = {c['id'] for c in user_cases}
+                all_docs = get_all_documents(category=category)
+                docs = [d for d in all_docs if d.get('case_id') in case_ids or d.get('uploaded_by') == username]
+
         return jsonify({
             'success': True,
             'count': len(docs),
@@ -321,6 +339,7 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/documents/upload', methods=['POST'])
+    @login_required
     def api_upload_documents():
         """
         Ingests multi-format documents (PDF, JPG, PNG).
@@ -395,6 +414,7 @@ def create_app(config_class=Config):
         }), 201
 
     @app.route('/api/documents', methods=['POST'])
+    @login_required
     def api_register_document():
         """Registers metadata for a new document."""
         payload = request.get_json(silent=True)
@@ -711,11 +731,29 @@ def create_app(config_class=Config):
     # Findings & Evidence API Routes
     # ==========================================
     @app.route('/api/findings', methods=['GET'])
+    @login_required
     def api_list_findings():
-        """Lists forensic findings and anomalies."""
+        """Lists forensic findings and anomalies (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         case_id = request.args.get('case_id')
         severity = request.args.get('severity')
-        findings = get_all_findings(case_id=case_id, severity=severity)
+
+        if case_id:
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
+            findings = get_all_findings(case_id=case_id, severity=severity)
+        else:
+            admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+            is_admin = (not app.config.get('VEXORA_REQUIRE_AUTH', False)) or (role and role.strip().lower() in admin_roles)
+            if is_admin:
+                findings = get_all_findings(severity=severity)
+            else:
+                user_cases = get_all_cases(username=username, role=role)
+                case_ids = {c['id'] for c in user_cases}
+                all_findings = get_all_findings(severity=severity)
+                findings = [f for f in all_findings if f.get('case_id') in case_ids]
+
         return jsonify({
             'success': True,
             'count': len(findings),
@@ -723,11 +761,17 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/findings', methods=['POST'])
+    @login_required
     def api_create_finding():
-        """Creates a forensic finding record."""
+        """Creates a forensic finding record (IDOR protected)."""
         payload = request.get_json(silent=True)
         if not payload or not payload.get('title') or not payload.get('case_id'):
             return jsonify({'success': False, 'error': 'Both title and case_id are required.'}), 400
+
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(payload['case_id'], user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
 
         try:
             user = session.get('username', 'alex.turner')
@@ -741,16 +785,23 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/findings/<finding_id>', methods=['GET'])
+    @login_required
     def api_get_finding(finding_id):
-        """Retrieves a single forensic finding record."""
-        finding = get_finding_by_id(finding_id)
-        if not finding:
-            return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
-        return jsonify({'success': True, 'data': finding}), 200
+        """Retrieves a single forensic finding record (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_finding_access(finding_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        return jsonify({'success': True, 'data': res}), 200
 
     @app.route('/api/findings/<finding_id>', methods=['PATCH'])
+    @login_required
     def api_update_finding(finding_id):
-        """Updates status of a forensic finding ('Verified', 'Dismissed', 'Unresolved')."""
+        """Updates status of a forensic finding ('Verified', 'Dismissed', 'Unresolved') (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_finding_access(finding_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
         payload = request.get_json(silent=True) or {}
         try:
             user = session.get('username', 'alex.turner')
@@ -771,11 +822,12 @@ def create_app(config_class=Config):
     # Cross-Document Comparison & Evidence Routes (Phase 7)
     # ==========================================
     @app.route('/api/documents/compare', methods=['POST'])
+    @login_required
     def api_compare_documents():
         """
         Executes pairwise cross-document comparison:
         analyzes monetary alignment, date synchronization, counterparty variations,
-        identifier correlations, and duplicate files.
+        identifier correlations, and duplicate files (IDOR protected).
         """
         payload = request.get_json(silent=True) or {}
         doc_a_id = payload.get('doc_a_id')
@@ -783,6 +835,17 @@ def create_app(config_class=Config):
 
         if not doc_a_id or not doc_b_id:
             return jsonify({'success': False, 'error': 'Both doc_a_id and doc_b_id are required in JSON payload.'}), 400
+
+        if doc_a_id == doc_b_id:
+            return jsonify({'success': False, 'error': 'Cannot compare a document against itself. Please select two distinct documents.'}), 400
+
+        user_id, username, role = _get_auth_context()
+        allowed_a, res_a, code_a = check_document_access(doc_a_id, user_id=user_id, username=username, role=role)
+        if not allowed_a:
+            return jsonify({'success': False, 'error': f"Document A access denied: {res_a}"}), code_a
+        allowed_b, res_b, code_b = check_document_access(doc_b_id, user_id=user_id, username=username, role=role)
+        if not allowed_b:
+            return jsonify({'success': False, 'error': f"Document B access denied: {res_b}"}), code_b
 
         try:
             user = session.get('username', 'alex.turner')
@@ -842,9 +905,15 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Case comparison failed: {str(e)}"}), 500
 
     @app.route('/api/evidence-graph', methods=['GET'])
+    @login_required
     def api_evidence_graph():
-        """Retrieves transparent evidence provenance nodes linking findings to document pages."""
+        """Retrieves transparent evidence provenance nodes linking findings to document pages (IDOR protected)."""
         case_id = request.args.get('case_id')
+        user_id, username, role = _get_auth_context()
+        if case_id:
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
         try:
             nodes = get_evidence_provenance_nodes(case_id=case_id)
             return jsonify({
@@ -970,14 +1039,27 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Report generation failed: {str(e)}"}), 500
 
     @app.route('/api/reports', methods=['GET'])
+    @login_required
     def api_list_reports():
-        """Lists generated investigation reports, optionally filtered by case_id."""
+        """Lists generated investigation reports, optionally filtered by case_id (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         case_id = request.args.get('case_id')
         if case_id:
+            allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
             reports = get_reports_by_case(case_id)
         else:
-            limit = request.args.get('limit', 50, type=int)
-            reports = get_all_reports(limit=limit)
+            admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+            is_admin = (not app.config.get('VEXORA_REQUIRE_AUTH', False)) or (role and role.strip().lower() in admin_roles)
+            if is_admin:
+                limit = request.args.get('limit', 50, type=int)
+                reports = get_all_reports(limit=limit)
+            else:
+                user_cases = get_all_cases(username=username, role=role)
+                case_ids = {c['id'] for c in user_cases}
+                all_reps = get_all_reports(limit=100)
+                reports = [r for r in all_reps if r.get('case_id') in case_ids]
 
         return jsonify({
             'success': True,
@@ -986,11 +1068,17 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/reports/<report_id>', methods=['GET'])
+    @login_required
     def api_get_report_metadata(report_id):
-        """Retrieves metadata for a specific generated report."""
+        """Retrieves metadata for a specific generated report (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         report = get_report_by_id(report_id)
         if not report:
             return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+        if report.get('case_id'):
+            allowed, res, code = check_case_access(report['case_id'], user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
 
         return jsonify({
             'success': True,
@@ -1000,11 +1088,17 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/reports/<report_id>/download', methods=['GET'])
+    @login_required
     def api_download_report(report_id):
-        """Streams and downloads a generated report file."""
+        """Streams and downloads a generated report file (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         report = get_report_by_id(report_id)
         if not report:
             return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+        if report.get('case_id'):
+            allowed, res, code = check_case_access(report['case_id'], user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
 
         file_path = Path(report['file_path'])
         if not file_path.exists():
@@ -1017,11 +1111,17 @@ def create_app(config_class=Config):
         )
 
     @app.route('/api/reports/<report_id>/view', methods=['GET'])
+    @login_required
     def api_view_report(report_id):
-        """Serves a generated report inline for in-browser preview."""
+        """Serves a generated report inline for in-browser preview (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
         report = get_report_by_id(report_id)
         if not report:
             return jsonify({'success': False, 'error': f"Report '{report_id}' not found."}), 404
+        if report.get('case_id'):
+            allowed, res, code = check_case_access(report['case_id'], user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
 
         file_path = Path(report['file_path'])
         if not file_path.exists():
@@ -1039,11 +1139,17 @@ def create_app(config_class=Config):
     # Audit Trail API Routes (Phase 9)
     # ==========================================
     @app.route('/api/audit-logs', methods=['GET'])
+    @login_required
     def api_audit_logs():
         """
         Retrieves chronological audit records with optional filtering
-        by action, entity_type, user, and limit.
+        by action, entity_type, user, and limit (Admin restricted).
         """
+        user_id, username, role = _get_auth_context()
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if app.config.get('VEXORA_REQUIRE_AUTH', False) and (not role or role.strip().lower() not in admin_roles):
+            return jsonify({'success': False, 'error': 'Administrative privileges required to access audit trails.'}), 403
+
         action = request.args.get('action')
         entity_type = request.args.get('entity_type')
         user = request.args.get('user')
@@ -1063,7 +1169,12 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/audit-logs/export', methods=['GET'])
+    @login_required
     def api_export_audit_logs():
+        user_id, username, role = _get_auth_context()
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if app.config.get('VEXORA_REQUIRE_AUTH', False) and (not role or role.strip().lower() not in admin_roles):
+            return jsonify({'success': False, 'error': 'Administrative privileges required to export audit trails.'}), 403
         """
         Exports the entire immutable investigation audit trail in CSV or JSON format
         for courtroom archival and forensic compliance verification.
@@ -1110,7 +1221,12 @@ def create_app(config_class=Config):
     # System Diagnostics & Health Check (Phase 9)
     # ==========================================
     @app.route('/api/system/diagnostics', methods=['GET'])
+    @login_required
     def api_system_diagnostics():
+        user_id, username, role = _get_auth_context()
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if app.config.get('VEXORA_REQUIRE_AUTH', False) and (not role or role.strip().lower() not in admin_roles):
+            return jsonify({'success': False, 'error': 'Administrative privileges required to view diagnostics.'}), 403
         """
         Executes an end-to-end self-diagnostic check across the database,
         storage directories, and forensic extraction engines.
@@ -1251,11 +1367,14 @@ def create_app(config_class=Config):
 
     @app.route('/api/auth/logout', methods=['POST'])
     def api_logout():
-        """Terminates active session and records logout audit event."""
+        """Terminates active session, clears cookies, and records logout audit event."""
         username = session.get('username', 'Anonymous')
         session.clear()
         log_audit("USER_LOGOUT", "auth", "session", f"Investigator '{username}' logged out.", username)
-        return jsonify({'success': True, 'message': 'Logged out successfully.'}), 200
+        resp = jsonify({'success': True, 'message': 'Logged out successfully.'})
+        cookie_name = app.config.get('SESSION_COOKIE_NAME', 'vexora_session')
+        resp.delete_cookie(cookie_name, path='/')
+        return resp, 200
 
     @app.route('/api/auth/current-user', methods=['GET'])
     def api_current_user():
@@ -1279,9 +1398,27 @@ def create_app(config_class=Config):
     @app.route('/api/auth/google', methods=['GET', 'POST'])
     def api_google_demo_login():
         """
-        Demo Google SSO authentication endpoint (Mock/Unverified).
-        Clearly labeled as 'demo login (not verified)' for hackathon testing.
+        Google SSO authentication endpoint.
+        Returns 501 Not Implemented if real Google OAuth is unconfigured, unless
+        VEXORA_ALLOW_DEMO_LOGIN=true is explicitly configured for offline demonstration.
         """
+        has_google_oauth = bool(app.config.get('GOOGLE_CLIENT_ID') or os.environ.get('GOOGLE_CLIENT_ID'))
+        raw_demo_flag = app.config.get('VEXORA_ALLOW_DEMO_LOGIN', None)
+        if raw_demo_flag is not None:
+            if isinstance(raw_demo_flag, str):
+                allow_demo_sso = raw_demo_flag.lower() in ('true', '1')
+            else:
+                allow_demo_sso = bool(raw_demo_flag)
+        else:
+            # Secure by default: require real OAuth when auth is enforced; allow demo SSO only in offline/demo mode
+            allow_demo_sso = not app.config.get('VEXORA_REQUIRE_AUTH', False)
+
+        if not has_google_oauth and not allow_demo_sso:
+            return jsonify({
+                'success': False,
+                'error': 'Google OAuth 2.0 is not configured on this server. Please use standard investigator credentials.'
+            }), 501
+
         user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = 'alex.turner'", one=True)
         if user:
             session['user_id'] = user['id']
@@ -1295,11 +1432,11 @@ def create_app(config_class=Config):
                 'role': 'Senior Forensic Specialist',
                 'badge_number': 'VEX-782'
             }
-        user_data['auth_note'] = 'demo login (not verified)'
-        log_audit("DEMO_OAUTH_LOGIN", "auth", str(user_data.get('id', 'mock')), "Investigator authenticated via demo Google SSO (unverified).", user_data['username'])
+        user_data['auth_note'] = 'local demo login (not verified by Google)'
+        log_audit("DEMO_OAUTH_LOGIN", "auth", str(user_data.get('id', 'mock')), "Investigator authenticated via local demo OAuth mechanism.", user_data['username'])
         return jsonify({
             'success': True,
-            'message': 'Demo Google sign-in successful (not verified).',
+            'message': 'Local demo sign-in successful (not verified by Google).',
             'auth_mode': 'demo_unverified',
             'user': user_data
         }), 200
@@ -1368,10 +1505,12 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/demo/add', methods=['POST'])
+    @login_required
     def api_demo_add():
         """
         Non-destructive alternative: Seeds the showcase demo case CAS-DEMO-2026
         without erasing existing cases, documents, or findings.
+        Requires authenticated session when auth is enabled.
         """
         try:
             from tools.reset_demo import seed_demo_case
@@ -1386,12 +1525,18 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to add demo data: {str(e)}"}), 500
 
     @app.route('/api/demo/reset', methods=['POST'])
+    @login_required
     def api_demo_reset():
         """
         Phase 3: Resets database and seeds realistic demo case with 3 genuine docs + 1 tampered doc.
-        Guarded by VEXORA_ALLOW_DEMO_RESET environment setting.
+        Protected by VEXORA_ALLOW_DEMO_RESET environment setting and requires Admin privileges when auth enabled.
         """
-        allow_reset = app.config.get('VEXORA_ALLOW_DEMO_RESET', getattr(Config, 'VEXORA_ALLOW_DEMO_RESET', True))
+        user_id, username, role = _get_auth_context()
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if app.config.get('VEXORA_REQUIRE_AUTH', False) and (not role or role.strip().lower() not in admin_roles):
+            return jsonify({'success': False, 'error': 'Administrative privileges required to execute demo reset.'}), 403
+
+        allow_reset = app.config.get('VEXORA_ALLOW_DEMO_RESET', getattr(Config, 'VEXORA_ALLOW_DEMO_RESET', False))
 
         if not allow_reset:
             return jsonify({

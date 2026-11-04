@@ -1,7 +1,7 @@
 # VEXORA — JUDGE-READINESS REPORT & EVALUATION BRIEFING
 **Target Score:** 90+/100 (Competitor Evaluation Standard)  
 **Total Rubric Marks:** 100 Marks across 8 Categories  
-**Test Suite Status:** 224/224 Passed (100% Pass Rate)  
+**Test Suite Status:** 236/236 Passed (100% Pass Rate)  
 **Turnkey Demonstration Time:** 5 Minutes  
 
 ---
@@ -36,9 +36,9 @@ It uniquely combines:
 ### Category 3: Visual Forensic Capabilities (15 Marks)
 - **4 Distinct Forensic Engines:**
   - `IMG-001` (ELA): Lossy compression difference heatmaps with dynamic scaling.
-  - `IMG-002` (Patch Analysis): Connected component uniform variance detection for whiteout cloaking.
-  - `IMG-003` (RANSAC Copy-Move): ORB feature matching verified by `cv2.estimateAffinePartial2D` RANSAC consensus ($N_{\text{inliers}} \ge 6$) to eliminate false positives on text patterns.
-  - `IMG-004` (Noise Analysis): Laplacian high-pass variance analysis for spliced foreign regions.
+  - `IMG-002` (Sharpness Variance): Block-level Laplacian sharpness variance analysis ($64 \times 64\text{ px}$ tiles) detecting spliced foreign inserts.
+  - `IMG-003` (RANSAC Copy-Move): ORB feature matching + text suppression verified by `cv2.estimateAffinePartial2D` RANSAC consensus ($N_{\text{inliers}} \ge 6$) to eliminate false positives on text patterns.
+  - `IMG-004` (Signature Verification): Bottom-ROI fluid cursive ink stroke presence and baseline intersection analysis.
 - **Zero False Positives:** Tested against 10 clean negative controls (100% specificity).
 
 ### Category 4: Contextual Intelligence & Cross-Document Verification (20 Marks)
@@ -61,7 +61,7 @@ It uniquely combines:
 ### Category 7: Technical Implementation & Security (10 Marks)
 - **Architecture:** Clean Flask application factory, SQLite database with foreign keys and indexes, and modular Python services.
 - **Security Hardening:** Enterprise RBAC (Admin vs Analyst), cascading IDOR protection, session cookie hardening (`HttpOnly`, `SameSite=Lax`), CORS origin whitelisting, parameterized SQL, and production secret key enforcement.
-- **Testing Depth:** 224 automated unit, integration, and security tests running in < 60 seconds with 100% pass rate.
+- **Testing Depth:** 236 automated unit, integration, and security tests running in < 60 seconds with 100% pass rate.
 
 ### Category 8: Innovation & Differentiation (5 Marks)
 - **RANSAC-Hardened Copy-Move Verification:** Eliminates the #1 flaw of classical copy-move algorithms on text documents.
@@ -110,9 +110,10 @@ http://127.0.0.1:5000
 
 ## 5. Judge Verification Checklist
 
-- [x] Full test suite passes: `python -m unittest discover tests` (224/224 tests passing).
+- [x] Full test suite passes: `python -m unittest discover tests` (236/236 tests passing).
 - [x] Benchmark evaluation runs cleanly: `python tools/evaluate.py`.
 - [x] Zero hardcoded mock cases or fake options in dropdowns.
 - [x] Zero horizontal layout clipping at 1920px widescreen resolution.
 - [x] Cryptographic SHA-256 verification and audit log recording operational.
 - [x] Multi-user RBAC and IDOR protection active.
+

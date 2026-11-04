@@ -71,7 +71,7 @@ def process_single_upload(file_storage, case_id=None, user="Lead Investigator", 
         if b'CORRUPTED' in file_bytes or b'not a pdf' in file_bytes.lower():
             raise ValidationError("Corrupt or unreadable PDF document.", field="file")
         try:
-            import fitz
+            import pymupdf as fitz
             doc_test = fitz.open(stream=file_bytes, filetype="pdf")
             if len(doc_test) == 0:
                 doc_test.close()

@@ -139,3 +139,4 @@ The security posture was validated using dedicated automated unit and integratio
 | `tests/test_uploader.py` | File upload validation, extension whitelisting, size limits | 6/6 | **PASSED** |
 
 **Overall Security Rating:** Enterprise Grade (Judge Ready)
+

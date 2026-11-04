@@ -496,7 +496,7 @@ def check_copy_move_orb(cv_image, min_matches=6, min_distance=45.0, page_num=1, 
                     try:
                         M, inliers = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=5.0)
                         inlier_count = int(np.sum(inliers)) if inliers is not None else 0
-                        if inlier_count >= 4:
+                        if inlier_count >= min_matches:
                             inlier_pairs = [members[i] for i in range(len(members)) if inliers[i][0] == 1]
                             geometrically_verified_clusters.append((dist, angle, inlier_pairs))
                     except Exception:

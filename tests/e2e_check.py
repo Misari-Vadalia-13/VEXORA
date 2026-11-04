@@ -54,6 +54,7 @@ def run_e2e_verification():
         DATABASE = str(temp_db)
         UPLOAD_FOLDER = str(temp_uploads)
         REPORTS_FOLDER = str(temp_reports)
+        VEXORA_ALLOW_DEMO_RESET = True
 
     from backend.app import create_app
     from backend.database import init_db

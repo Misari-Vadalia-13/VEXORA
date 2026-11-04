@@ -223,5 +223,125 @@ class TestAuthAndOwnershipSecurity(unittest.TestCase):
                 os.environ.pop('SECRET_KEY', None)
 
 
+    def test_09_all_sensitive_endpoints_require_auth(self):
+        """Endpoints that previously leaked data without session now return 401."""
+        client = self.app.test_client()
+        sensitive_endpoints = [
+            ('/api/documents', 'GET'),
+            ('/api/findings', 'GET'),
+            ('/api/audit-logs', 'GET'),
+            ('/api/reports', 'GET'),
+            ('/api/system/diagnostics', 'GET'),
+            ('/api/evidence-graph', 'GET'),
+            ('/api/demo/add', 'POST'),
+            ('/api/demo/reset', 'POST'),
+        ]
+        for url, method in sensitive_endpoints:
+            if method == 'GET':
+                res = client.get(url)
+            else:
+                res = client.post(url)
+            self.assertEqual(
+                res.status_code, 401,
+                f"Endpoint {method} {url} was expected to return 401 when unauthenticated, got {res.status_code}"
+            )
+            data = res.get_json()
+            self.assertFalse(data.get('success', True))
+
+    def test_10_missing_user_identity_fails(self):
+        """check_case_access rejects requests with missing user identity when auth is enabled."""
+        from backend.models import check_case_access
+        with self.app.app_context():
+            allowed, res, code = check_case_access("CAS-ALICE-001", user_id=None, username=None, role=None)
+            self.assertFalse(allowed)
+            self.assertEqual(code, 401)
+            self.assertIn("Authentication required", res)
+
+    def test_11_registration_role_tampering_ignored(self):
+        """Public self-registration rejects admin roles (400) and ignores client-supplied custom roles (defaults to Forensic Analyst)."""
+        client = self.app.test_client()
+        # Direct admin escalation attempt is rejected with 400
+        evil_admin = {
+            "username": "attacker_admin",
+            "email": "admin_attempt@evil.com",
+            "password": "StrongPassword@123",
+            "role": "admin",
+            "badge_number": "BADGE-666"
+        }
+        res_admin = client.post('/api/auth/register', json=evil_admin)
+        self.assertEqual(res_admin.status_code, 400)
+
+        # Custom non-standard role attempt defaults safely to 'Forensic Analyst'
+        evil_supervisor = {
+            "username": "attacker_supervisor",
+            "email": "super_attempt@evil.com",
+            "password": "StrongPassword@123",
+            "role": "Chief Inspector",
+            "badge_number": "BADGE-777"
+        }
+        res_sup = client.post('/api/auth/register', json=evil_supervisor)
+        self.assertEqual(res_sup.status_code, 201)
+        data = res_sup.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['user']['role'], 'Forensic Analyst')
+
+    def test_12_audit_logs_and_diagnostics_require_admin_role(self):
+        """Standard analysts cannot view global audit logs or diagnostics; admins can."""
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = 101
+            sess['username'] = 'analyst_alice'
+            sess['role'] = 'Forensic Analyst'
+
+        res_logs = client.get('/api/audit-logs')
+        self.assertEqual(res_logs.status_code, 403)
+
+        res_diag = client.get('/api/system/diagnostics')
+        self.assertEqual(res_diag.status_code, 403)
+
+        with client.session_transaction() as sess:
+            sess['user_id'] = 103
+            sess['username'] = 'admin_carol'
+            sess['role'] = 'System Administrator'
+
+        res_admin_logs = client.get('/api/audit-logs')
+        self.assertEqual(res_admin_logs.status_code, 200)
+
+        res_admin_diag = client.get('/api/system/diagnostics')
+        self.assertEqual(res_admin_diag.status_code, 200)
+
+    def test_13_demo_reset_blocked_for_non_admin_and_disabled_by_default(self):
+        """POST /api/demo/reset is blocked for standard analysts and rejected if flag is disabled."""
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = 101
+            sess['username'] = 'analyst_alice'
+            sess['role'] = 'Forensic Analyst'
+
+        res_analyst = client.post('/api/demo/reset')
+        self.assertEqual(res_analyst.status_code, 403)
+
+    def test_14_unconfigured_google_oauth_returns_501(self):
+        """Unconfigured Google OAuth returns 501 instead of generating fake authenticated sessions."""
+        client = self.app.test_client()
+        res = client.get('/api/auth/google')
+        self.assertEqual(res.status_code, 501)
+        data = res.get_json()
+        self.assertFalse(data['success'])
+        self.assertIn("not configured", data['error'].lower())
+
+    def test_15_auth_disabled_mode_allows_offline_access(self):
+        """When VEXORA_REQUIRE_AUTH=False, single-user offline demo mode operates without blocking."""
+        offline_app = create_app({
+            'TESTING': True,
+            'DATABASE': str(self.db_path),
+            'VEXORA_REQUIRE_AUTH': False,
+            'SECRET_KEY': 'dev-key-offline'
+        })
+        offline_client = offline_app.test_client()
+        res = offline_client.get('/api/cases')
+        self.assertEqual(res.status_code, 200)
+
+
 if __name__ == '__main__':
     unittest.main()

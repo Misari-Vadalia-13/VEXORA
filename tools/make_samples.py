@@ -10,7 +10,7 @@ Programmatically generates a benchmark dataset consisting of:
 import os
 import csv
 from pathlib import Path
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 from PIL import Image, ImageDraw, ImageFont
 
 DATASET_DIR = Path(__file__).resolve().parent.parent / 'demo_dataset'

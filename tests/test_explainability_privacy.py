@@ -73,8 +73,9 @@ class TestExplainabilityAndPrivacy(unittest.TestCase):
         self.assertEqual(parsed_b.get("finding"), "RULE-VIS-001")
         self.assertEqual(parsed_b.get("confidence"), 0.85)
 
+    @patch('backend.models.log_audit')
     @patch('backend.llm.call_llm')
-    def test_03_explain_finding_strict_schema_and_fallbacks(self, mock_llm):
+    def test_03_explain_finding_strict_schema_and_fallbacks(self, mock_llm, mock_audit):
         """Verifies explain_finding returns well-formed schema even when model returns minimal fields."""
         # Model returns partial response without innocent hypotheses
         mock_llm.return_value = {
@@ -103,8 +104,9 @@ class TestExplainabilityAndPrivacy(unittest.TestCase):
         # Verify mandatory disclaimer
         self.assertEqual(result['disclaimer'], AI_DISCLAIMER)
 
+    @patch('backend.models.log_audit')
     @patch('backend.llm.call_llm')
-    def test_04_contextual_crosscheck_drops_hallucinated_findings(self, mock_llm):
+    def test_04_contextual_crosscheck_drops_hallucinated_findings(self, mock_llm, mock_audit):
         """Verifies contextual_crosscheck drops findings whose source quotes cannot be verified."""
         mock_llm.return_value = {
             "inconsistencies": [

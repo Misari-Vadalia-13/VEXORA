@@ -301,4 +301,12 @@ def normalize_structured_document_fields(text, entities=None, category=None):
         if entities.get('persons'):
             structured['parties']['bearer_name'] = entities['persons'][0]['value']
 
+        exp_m = re.search(r'(?:exp(?:iry|iration)?\s*(?:date)?|valid\s*(?:until|thru|through))[:\s]*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})', text_clean, re.I)
+        if exp_m:
+            structured['dates']['expiration_date'] = exp_m.group(1).strip()
+
+        dob_m = re.search(r'(?:d\.?o\.?b\.?|birth\s*date|date\s*of\s*birth)[:\s]*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})', text_clean, re.I)
+        if dob_m:
+            structured['dates']['birth_date'] = dob_m.group(1).strip()
+
     return structured
