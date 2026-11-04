@@ -117,6 +117,27 @@ def redact_text_for_llm(text):
         redacted
     )
 
+    # Mask international bank account numbers (IBANs with 2-letter country prefix)
+    redacted = re.sub(
+        r'\b[A-Z]{2}\d{2}[A-Za-z0-9]{11,30}\b',
+        '[REDACTED_IBAN]',
+        redacted
+    )
+
+    # Mask payment card numbers (16 digits in groups of 4 separated by space or hyphen)
+    redacted = re.sub(
+        r'\b(?:\d{4}[-\s]){3}\d{4}\b',
+        '[REDACTED_CARD]',
+        redacted
+    )
+
+    # Mask national 12-digit identity formats (e.g. Aadhaar xxxx xxxx xxxx)
+    redacted = re.sub(
+        r'\b\d{4}\s\d{4}\s\d{4}\b',
+        '[REDACTED_AADHAAR]',
+        redacted
+    )
+
     # Mask standard telephone number formats
     redacted = re.sub(
         r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b',
@@ -385,7 +406,7 @@ def _call_claude(prompt, api_key, system_instruction, json_mode, timeout):
 
 
 def _parse_json_block(text):
-    """Safely extracts and parses JSON even if wrapped in markdown codeblocks."""
+    """Safely extracts and parses JSON even if wrapped in markdown codeblocks or containing trailing commas."""
     if not text:
         return None
     clean = text.strip()
@@ -395,13 +416,24 @@ def _parse_json_block(text):
     try:
         return json.loads(clean)
     except json.JSONDecodeError:
-        # Search for first JSON object or array
-        match = re.search(r'(\{.*\}|\[.*\])', clean, re.DOTALL)
+        # Attempt recovery by removing trailing commas before closing braces/brackets
+        no_trailing = re.sub(r',\s*([}\]])', r'\1', clean)
+        try:
+            return json.loads(no_trailing)
+        except Exception:
+            pass
+
+        # Search for first JSON object or array block
+        match = re.search(r'(\{[\s\S]*\}|\[[\s\S]*\])', clean)
         if match:
+            candidate = match.group(1)
             try:
-                return json.loads(match.group(1))
+                return json.loads(candidate)
             except Exception:
-                pass
+                try:
+                    return json.loads(re.sub(r',\s*([}\]])', r'\1', candidate))
+                except Exception:
+                    pass
         return None
 
 
@@ -621,12 +653,26 @@ def explain_finding(finding, nearby_text="", document_id=None, user="System"):
     except Exception:
         pass
 
+    explanation = str(res.get("explanation", "")).strip()
+    innocent = res.get("innocent_hypotheses", [])
+    if isinstance(innocent, str):
+        innocent = [innocent]
+    elif not isinstance(innocent, list):
+        innocent = []
+    innocent = [str(h).strip() for h in innocent if str(h).strip()]
+    if not innocent:
+        innocent = ["Legitimate software revision, formatting update, or routine procedural amendment."]
+
+    verification = str(res.get("next_verification_step", "")).strip()
+    if not verification:
+        verification = f"Cross-verify observation [{rule_id}] against original source record or authorized signatory registry."
+
     return {
         "finding_id": finding.get('id'),
         "rule_id": rule_id,
-        "explanation": res.get("explanation", "").strip(),
-        "innocent_hypotheses": res.get("innocent_hypotheses", []),
-        "next_verification_step": res.get("next_verification_step", "").strip(),
+        "explanation": explanation,
+        "innocent_hypotheses": innocent,
+        "next_verification_step": verification,
         "disclaimer": AI_DISCLAIMER
     }
 
