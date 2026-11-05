@@ -2350,3 +2350,25 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.pipeline-step.step-done {
+  border-color: var(--status-verified) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  box-shadow: 0 0 0 1px var(--status-verified) !important;
+}
+
+.pipeline-step.step-done .step-num {
+  color: var(--status-verified) !important;
+}
+
+.pipeline-step.step-running {
+  border-color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.14) !important;
+  box-shadow: 0 0 0 1px #f59e0b !important;
+  animation: pulseStep 1.2s infinite ease-in-out;
+}
+
+@keyframes pulseStep {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}

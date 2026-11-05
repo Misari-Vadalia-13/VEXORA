@@ -149,7 +149,7 @@ def create_app(config_class=Config):
         if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
             return
         # Skip CSRF check for public auth endpoints
-        if request.path in ('/api/auth/login', '/api/auth/register', '/api/auth/google'):
+        if request.path in ('/api/auth/login', '/api/auth/register', '/api/auth/google', '/api/auth/demo-login'):
             return
         # If no user session, let @login_required return 401 instead of 403
         if not session.get('username') and not session.get('user_id'):
@@ -1540,6 +1540,45 @@ def create_app(config_class=Config):
             'message': 'Local demo sign-in successful (not verified by Google).',
             'auth_mode': 'demo_unverified',
             'user': user_data
+        }), 200
+
+    @app.route('/api/auth/demo-login', methods=['GET', 'POST'])
+    def api_demo_login():
+        """
+        1-click authentication for hackathon evaluation (logs in as alex.turner).
+        Sets up authenticated investigator session and returns CSRF token.
+        """
+        user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = 'alex.turner'", one=True)
+        if not user:
+            from werkzeug.security import generate_password_hash
+            execute_db(
+                "INSERT INTO users (username, email, password_hash, role, badge_number) VALUES (?, ?, ?, ?, ?)",
+                ("alex.turner", "turner@vexora.internal", generate_password_hash("Vexora@2026", method="scrypt"), "Senior Forensic Specialist", "VEX-782")
+            )
+            user = query_db("SELECT id, username, email, role, badge_number FROM users WHERE username = 'alex.turner'", one=True)
+
+        session.clear()
+        session.permanent = True
+        session['user_id'] = user['id']
+        session['username'] = user['username']
+        session['role'] = user['role']
+        csrf_tok = secrets.token_hex(32)
+        session['csrf_token'] = csrf_tok
+
+        log_audit("DEMO_INVESTIGATOR_LOGIN", "auth", str(user['id']), "Investigator 'alex.turner' authenticated via 1-click Demo Investigator login.", user['username'])
+
+        return jsonify({
+            'success': True,
+            'message': 'Authenticated as Demo Investigator (alex.turner).',
+            'auth_mode': 'demo_investigator',
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'email': user['email'],
+                'role': user['role'],
+                'badge_number': user['badge_number'],
+                'csrf_token': csrf_tok
+            }
         }), 200
 
     # ==========================================

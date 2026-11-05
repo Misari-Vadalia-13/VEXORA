@@ -1,0 +1,1 @@
+VEXORA Forensic Engine: Unsupported plain text artifact for safe-rejection verification.

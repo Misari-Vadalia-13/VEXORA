@@ -185,6 +185,12 @@
               <span>Reset &amp; Load Demo</span>
             </button>
 
+            <!-- Demo Login Trigger -->
+            <button class="btn-secondary" id="demoLoginBtn" onclick="window.loginAsDemoInvestigator()" style="padding:6px 12px; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" title="1-click authentication for hackathon evaluation">
+              <span>⚡</span>
+              <span>Demo Login</span>
+            </button>
+
             <!-- Primary Action: New Case Trigger -->
             <button class="btn-primary" id="createNewCaseBtn" data-action="open-new-case">
               <span>+</span>
@@ -277,46 +283,49 @@
                 <h2 class="section-title">Forensic Processing Pipeline</h2>
                 <span class="section-subtitle">VEXORA 7-stage evidence extraction and contextual correlation architecture</span>
               </div>
+              <button class="btn-primary" id="btnRunFullDemo" onclick="window.runFullGuidedDemo()" style="display:inline-flex; align-items:center; gap:8px; font-size:0.85rem; padding:6px 14px; box-shadow: 0 2px 8px rgba(37,99,235,0.3); cursor:pointer;">
+                <span>⚡</span> Run Full Demo Pipeline
+              </button>
             </div>
 
-            <div class="pipeline-stepper">
-              <div class="pipeline-step active" onclick="navigateToView('upload')">
+            <div class="pipeline-stepper" id="pipelineStepper">
+              <div class="pipeline-step active" id="pipelineStep1" onclick="navigateToView('upload')">
                 <span class="step-num">Stage 01</span>
                 <span class="step-name">Document Ingest</span>
                 <span class="step-status">PDF / Images</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('library')">
+              <div class="pipeline-step" id="pipelineStep2" onclick="navigateToView('library')">
                 <span class="step-num">Stage 02</span>
                 <span class="step-name">Classification</span>
                 <span class="step-status">Doc Type ID</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('forensics')">
+              <div class="pipeline-step" id="pipelineStep3" onclick="navigateToView('forensics')">
                 <span class="step-num">Stage 03</span>
                 <span class="step-name">Text & OCR</span>
                 <span class="step-status">PyMuPDF / OCR</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('evidence')">
+              <div class="pipeline-step" id="pipelineStep4" onclick="navigateToView('evidence')">
                 <span class="step-num">Stage 04</span>
                 <span class="step-name">Entity Extraction</span>
                 <span class="step-status">spaCy NER</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('forensics')">
+              <div class="pipeline-step" id="pipelineStep5" onclick="navigateToView('forensics')">
                 <span class="step-num">Stage 05</span>
                 <span class="step-name">Forensic Analysis</span>
                 <span class="step-status">Visual & Font</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('comparison')">
+              <div class="pipeline-step" id="pipelineStep6" onclick="navigateToView('comparison')">
                 <span class="step-num">Stage 06</span>
                 <span class="step-name">Cross-Doc Match</span>
                 <span class="step-status">Discrepancy Check</span>
               </div>
 
-              <div class="pipeline-step" onclick="navigateToView('dossier')">
+              <div class="pipeline-step" id="pipelineStep7" onclick="navigateToView('dossier')">
                 <span class="step-num">Stage 07</span>
                 <span class="step-name">Case Dossier</span>
                 <span class="step-status">Export Report</span>
@@ -350,71 +359,10 @@
                       <th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody id="recentCasesTableBody">
                     <tr>
-                      <td class="case-id-cell">VX-2041</td>
-                      <td>
-                        <span class="case-title-cell">Loan Application #8841-B</span>
-                        <span class="case-subtitle">Lead: Misari Vadalia • Inconsistency in salary slips</span>
-                      </td>
-                      <td>4 docs</td>
-                      <td><span class="pill-tag pill-high">High Risk</span></td>
-                      <td><span class="pill-tag pill-status">In Review</span></td>
-                      <td>
-                        <div class="action-btn-group">
-                          <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                          <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td class="case-id-cell">VX-2039</td>
-                      <td>
-                        <span class="case-title-cell">Identity Verification Dossier</span>
-                        <span class="case-subtitle">Lead: Misari Vadalia • Cross-referencing Aadhaar & Passport</span>
-                      </td>
-                      <td>2 docs</td>
-                      <td><span class="pill-tag pill-medium">Medium</span></td>
-                      <td><span class="pill-tag pill-status">Processing</span></td>
-                      <td>
-                        <div class="action-btn-group">
-                          <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
-                          <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td class="case-id-cell">VX-2038</td>
-                      <td>
-                        <span class="case-title-cell">Procurement Invoice Discrepancy</span>
-                        <span class="case-subtitle">Lead: Forensic Desk • Tax ID mismatch detected</span>
-                      </td>
-                      <td>6 docs</td>
-                      <td><span class="pill-tag pill-high">High Risk</span></td>
-                      <td><span class="pill-tag pill-status">Under Analysis</span></td>
-                      <td>
-                        <div class="action-btn-group">
-                          <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                          <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td class="case-id-cell">VX-2035</td>
-                      <td>
-                        <span class="case-title-cell">Employment Declaration Check</span>
-                        <span class="case-subtitle">Lead: Misari Vadalia • Verification complete</span>
-                      </td>
-                      <td>3 docs</td>
-                      <td><span class="pill-tag pill-low">Low</span></td>
-                      <td><span class="pill-tag pill-status">Verified</span></td>
-                      <td>
-                        <div class="action-btn-group">
-                          <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                        </div>
+                      <td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">
+                        Loading active investigation cases from repository...
                       </td>
                     </tr>
                   </tbody>
@@ -498,186 +446,9 @@
 
           <!-- Case Cards Grid -->
           <div class="cases-grid" id="caseManagementGrid">
-            
-            <div class="case-card" data-priority="high">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2041</span>
-                <span class="pill-tag pill-high">High Risk</span>
-              </div>
-              <h3 class="case-card-title">Loan Application #8841-B Audit</h3>
-              <p class="case-card-desc">Forensic investigation into suspicious discrepancies found across submitted salary statements and credit declarations.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">4</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-danger);">3</span>
-                  <span class="case-metric-lbl">Anomalies</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--primary-accent);">In Review</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Misari Vadalia</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                </div>
-              </div>
+            <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
+              Loading cases from SQLite database...
             </div>
-
-            <div class="case-card" data-priority="medium">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2039</span>
-                <span class="pill-tag pill-medium">Medium</span>
-              </div>
-              <h3 class="case-card-title">Identity Verification Dossier</h3>
-              <p class="case-card-desc">Cross-referencing government ID proofs against tax registry files to identify date-of-birth and address inconsistencies.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">2</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-anomaly);">1</span>
-                  <span class="case-metric-lbl">Anomaly</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--secondary-accent);">Processing</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Misari Vadalia</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('comparison')">Compare</button>
-                  <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="case-card" data-priority="high">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2038</span>
-                <span class="pill-tag pill-high">High Risk</span>
-              </div>
-              <h3 class="case-card-title">Procurement Invoice Discrepancy</h3>
-              <p class="case-card-desc">Verification of commercial vendor invoices against purchase orders. Tax identification number conflicts identified on page 1.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">6</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-danger);">4</span>
-                  <span class="case-metric-lbl">Anomalies</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--primary-accent);">Analyzing</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Forensic Desk</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="case-card" data-priority="low">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2035</span>
-                <span class="pill-tag pill-low">Low Risk</span>
-              </div>
-              <h3 class="case-card-title">Employment Declaration Check</h3>
-              <p class="case-card-desc">Routine background verification of executive employment contracts and statutory self-declarations.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">3</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-verified);">0</span>
-                  <span class="case-metric-lbl">Anomalies</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-verified);">Verified</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Misari Vadalia</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="case-card" data-priority="high">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2031</span>
-                <span class="pill-tag pill-high">High Risk</span>
-              </div>
-              <h3 class="case-card-title">Corporate Tax Filing Audit</h3>
-              <p class="case-card-desc">Examination of corporate income declarations, balance sheets, and statutory audit certificates for typographical alterations.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">8</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-danger);">5</span>
-                  <span class="case-metric-lbl">Anomalies</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--primary-accent);">In Review</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Misari Vadalia</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                  <button class="table-action-btn" onclick="navigateToView('dossier')">Dossier</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="case-card" data-priority="medium">
-              <div class="case-card-header">
-                <span class="case-card-id">VX-2028</span>
-                <span class="pill-tag pill-medium">Medium</span>
-              </div>
-              <h3 class="case-card-title">Vendor Bank Account Verification</h3>
-              <p class="case-card-desc">Verification of cancelled cheques and bank mandate letters against corporate registry filings.</p>
-              <div class="case-card-metrics">
-                <div class="case-metric-item">
-                  <span class="case-metric-val">2</span>
-                  <span class="case-metric-lbl">Documents</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--status-anomaly);">2</span>
-                  <span class="case-metric-lbl">Anomalies</span>
-                </div>
-                <div class="case-metric-item">
-                  <span class="case-metric-val" style="color:var(--secondary-accent);">In Review</span>
-                  <span class="case-metric-lbl">Status</span>
-                </div>
-              </div>
-              <div class="case-card-footer">
-                <span class="case-author-note">Lead: Forensic Desk</span>
-                <div class="action-btn-group">
-                  <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect</button>
-                  <button class="table-action-btn" onclick="navigateToView('upload')">Upload</button>
-                </div>
-              </div>
-            </div>
-
           </div>
         </section>
 
@@ -823,103 +594,9 @@
 
           <!-- Document Cards Grid -->
           <div class="doc-library-grid" id="docLibraryGrid">
-            
-            <div class="doc-card" data-category="financial">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">📄</div>
-                <span class="pill-tag pill-high">2 Anomalies</span>
-              </div>
-              <h3 class="doc-card-title" title="Salary_Slip_June2025.pdf">Salary_Slip_June2025.pdf</h3>
-              <div class="doc-card-meta">
-                <span>PDF</span> • <span>2.4 MB</span> • <span>3 Pages</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2041</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
+            <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
+              Loading ingested documents from database...
             </div>
-
-            <div class="doc-card" data-category="identity">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">🖼️</div>
-                <span class="pill-tag pill-low">Verified Match</span>
-              </div>
-              <h3 class="doc-card-title" title="Passport_Front_Scan.png">Passport_Front_Scan.png</h3>
-              <div class="doc-card-meta">
-                <span>PNG</span> • <span>1.1 MB</span> • <span>1 Page</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
-            </div>
-
-            <div class="doc-card" data-category="tax">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">📄</div>
-                <span class="pill-tag pill-medium">1 Mismatch</span>
-              </div>
-              <h3 class="doc-card-title" title="Tax_Return_FY24.pdf">Tax_Return_FY24.pdf</h3>
-              <div class="doc-card-meta">
-                <span>PDF</span> • <span>4.8 MB</span> • <span>6 Pages</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
-            </div>
-
-            <div class="doc-card" data-category="identity">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">🖼️</div>
-                <span class="pill-tag pill-high">DOB Conflict</span>
-              </div>
-              <h3 class="doc-card-title" title="Identity_Card_Misari.png">Identity_Card_Misari.png</h3>
-              <div class="doc-card-meta">
-                <span>PNG</span> • <span>820 KB</span> • <span>1 Page</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2039</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('comparison')">Cross-Compare</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
-            </div>
-
-            <div class="doc-card" data-category="financial">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">📄</div>
-                <span class="pill-tag pill-high">Font Altered</span>
-              </div>
-              <h3 class="doc-card-title" title="Vendor_Invoice_0944.pdf">Vendor_Invoice_0944.pdf</h3>
-              <div class="doc-card-meta">
-                <span>PDF</span> • <span>1.9 MB</span> • <span>2 Pages</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2038</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('forensics')">Inspect Forensics</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
-            </div>
-
-            <div class="doc-card" data-category="legal">
-              <div class="doc-card-top">
-                <div class="doc-badge-icon">📄</div>
-                <span class="pill-tag pill-low">Consistent</span>
-              </div>
-              <h3 class="doc-card-title" title="Employment_Contract_Final.pdf">Employment_Contract_Final.pdf</h3>
-              <div class="doc-card-meta">
-                <span>PDF</span> • <span>3.2 MB</span> • <span>5 Pages</span>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>VX-2035</strong></div>
-              <div class="doc-card-footer">
-                <button class="table-action-btn" onclick="navigateToView('evidence')">View Graph</button>
-                <button class="table-action-btn" onclick="showToast('Downloading original file', 'info')">Download</button>
-              </div>
-            </div>
-
           </div>
         </section>
 
@@ -1258,25 +935,8 @@
             </div>
 
             <div id="evidenceProvenanceContainer" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
-              <div class="case-card">
-                <span class="case-card-id">EV-NODE #001</span>
-                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">Salary Field Modification</h4>
-                <p style="font-size:0.8rem; color:var(--text-secondary);">Source: <code>Salary_Slip_June2025.pdf</code> • Page 2 • BBox [140, 320]</p>
-                <div class="pill-tag pill-high">Linked to Case VX-2041</div>
-              </div>
-
-              <div class="case-card">
-                <span class="case-card-id">EV-NODE #002</span>
-                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">DOB Conflict Provenance</h4>
-                <p style="font-size:0.8rem; color:var(--text-secondary);">Sources: <code>ID_Card_Misari.png</code> (p.1) vs <code>Tax_Return_FY24.pdf</code> (p.1)</p>
-                <div class="pill-tag pill-high">Linked to Case VX-2039</div>
-              </div>
-
-              <div class="case-card">
-                <span class="case-card-id">EV-NODE #003</span>
-                <h4 style="font-size:0.95rem; font-weight:700; color:var(--text-primary);">Vendor Tax ID Conflict</h4>
-                <p style="font-size:0.8rem; color:var(--text-secondary);">Source: <code>Vendor_Invoice_0944.pdf</code> • Page 1 • Line 8</p>
-                <div class="pill-tag pill-medium">Linked to Case VX-2038</div>
+              <div style="grid-column: 1 / -1; padding: 30px; text-align: center; color: var(--text-muted);">
+                Loading verifiable provenance nodes from evidence graph...
               </div>
             </div>
           </div>
@@ -1435,9 +1095,12 @@
                 <input type="text" class="form-control" value="Digital Security & Document Forensics">
               </div>
               <div class="form-group" style="margin-top:12px;">
-                <label class="form-label">Single Sign-On (SSO)</label>
+                <label class="form-label">Single Sign-On & Evaluation Access</label>
+                <button type="button" class="btn-primary" style="width:100%; font-size:0.9rem; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="window.loginAsDemoInvestigator()">
+                  <span>⚡</span> Continue as Demo Investigator (alex.turner)
+                </button>
                 <button type="button" class="btn-secondary" style="width:100%; font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="fetch('/api/auth/google').then(r=>r.json()).then(d=>showToast(d.message + ' [' + d.auth_mode + ']', 'info'))">
-                  <span>🔐</span> Google SSO <span style="font-size:0.75rem; color:var(--text-muted);">(Demo Login - Not Verified)</span>
+                  <span>🔐</span> Google SSO <span style="font-size:0.75rem; color:var(--text-muted);">(Demo / Unverified Google Auth)</span>
                 </button>
               </div>
             </div>
@@ -1588,6 +1251,53 @@
           <button type="submit" class="btn-primary" id="saveCaseModalBtn">Create Case</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       4. MODAL DIALOG: AUTHENTICATION / DEMO INVESTIGATOR
+       ====================================================================== -->
+  <div class="modal-overlay" id="vexoraAuthModal" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <div class="modal-window" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="authModalTitle">Investigator Authentication</h3>
+        <button class="modal-close-btn" onclick="document.getElementById('vexoraAuthModal').classList.remove('active')" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: 8px; padding: 14px; margin-bottom: 20px; text-align: center;">
+          <div style="font-weight: 700; color: var(--primary-accent); font-size: 0.95rem; margin-bottom: 4px;">Zero-Friction Hackathon Evaluation</div>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 12px 0;">Click below to authenticate immediately with pre-configured Senior Forensic Specialist credentials.</p>
+          <button type="button" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.95rem; padding: 10px;" onclick="window.loginAsDemoInvestigator()">
+            <span>⚡</span> Continue as Demo Investigator (alex.turner)
+          </button>
+        </div>
+
+        <div style="display: flex; align-items: center; margin: 18px 0; color: var(--text-muted); font-size: 0.8rem;">
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+          <span style="padding: 0 10px;">OR STANDARD CREDENTIALS</span>
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+        </div>
+
+        <form id="standardLoginForm" onsubmit="window.handleStandardLoginSubmit(event)">
+          <div class="form-group">
+            <label class="form-label" for="loginUsername">Username / Email</label>
+            <input type="text" id="loginUsername" class="form-control" placeholder="alex.turner" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn-secondary" style="width: 100%; margin-top: 10px; font-weight: 600;">
+            Sign In with Password
+          </button>
+        </form>
+
+        <div style="margin-top: 16px; text-align: center;">
+          <button type="button" class="btn-secondary" style="width: 100%; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="fetch('/api/auth/google').then(r=>r.json()).then(d=>showToast(d.message + ' [' + d.auth_mode + ']', 'info'))">
+            <span>🔐</span> Google SSO <span style="font-size: 0.72rem; color: var(--text-muted);">(Demo / Unverified Google Auth)</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
