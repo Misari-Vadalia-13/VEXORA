@@ -250,6 +250,40 @@ def analyze_visual_structure(file_path):
                         'evidence': f"Text: \"{text}\" | Font: {font} ({span['size']}pt)"
                     })
 
+    # Check 1b: Baseline Alignment Disparity on Single Line (RULE-VIS-004)
+    for page_idx in range(len(doc)):
+        page_num = page_idx + 1
+        page = doc[page_idx]
+        p_dict = page.get_text("dict")
+        for b in p_dict.get("blocks", []):
+            if b.get("type") == 0:
+                for line in b.get("lines", []):
+                    spans = line.get("spans", [])
+                    if len(spans) >= 2:
+                        y_bottoms = [s['bbox'][3] for s in spans if len(s.get('text', '').strip()) > 1]
+                        if len(y_bottoms) >= 2:
+                            shift = max(y_bottoms) - min(y_bottoms)
+                            if shift >= 3.5:
+                                line_text = " ".join(s.get('text', '').strip() for s in spans)
+                                if re.search(r'[\$\€\£\₹\d]|total|due|paid|amount|inv', line_text, re.I):
+                                    rule = RULES['RULE-VIS-004']
+                                    findings.append({
+                                        'rule_id': rule['id'],
+                                        'title': rule['title'],
+                                        'severity': rule['severity'],
+                                        'category': rule['category'],
+                                        'status': 'Potential Anomaly',
+                                        'confidence': rule['confidence'],
+                                        'page_number': page_num,
+                                        'coordinates': [round(line['bbox'][0], 2), round(line['bbox'][1], 2), round(line['bbox'][2], 2), round(line['bbox'][3], 2)],
+                                        'description': (
+                                            f"Text line '{line_text}' displays irregular vertical baseline disparity "
+                                            f"(shift of {round(shift, 1)}pt between spans). "
+                                            "Indicates typographical manipulation or spliced characters."
+                                        ),
+                                        'evidence': f"Baseline shift: {round(shift, 1)}pt in '{line_text[:40]}'"
+                                    })
+
     # Check 2: Overlapping Text Spans (RULE-VIS-002)
     # Group spans by page
     pages_map = {}

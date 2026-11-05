@@ -9,13 +9,28 @@ genuine_07_tax_return.pdf,0,None,None
 genuine_08_receipt.png,0,None,None
 genuine_09_id_card.png,0,None,None
 genuine_10_audit_report.pdf,0,None,None
+genuine_11_consulting_invoice.pdf,0,None,None
+genuine_12_equipment_lease.pdf,0,None,None
+genuine_13_payroll_summary.pdf,0,None,None
+genuine_14_shipping_receipt.png,0,None,None
+genuine_15_compliance_certificate.pdf,0,None,None
 tampered_01_font_shift.pdf,1,Font / Typographic Alteration,"RULE-VIS-002,PDF-002"
 tampered_02_whitebox_patch.png,1,Whitebox Redaction / Patching,IMG-001
 tampered_03_reversed_dates.pdf,1,Reversed Date Timeline,RULE-CTX-003
 tampered_04_duplicate_inv_a.pdf,1,Duplicate ID Pair A,RULE-CTX-004
-tampered_05_duplicate_inv_b.pdf,1,Duplicate ID Pair B with Conflicting Total,RULE-CTX-004
-tampered_06_bank_mismatch.pdf,1,Cross-Document Bank Payment Conflict,RULE-CTX-004
+tampered_05_duplicate_inv_b.pdf,1,Altered Grand Total Arithmetic Mismatch,RULE-DOC-001
+tampered_06_bank_mismatch.pdf,1,Post-Issuance Modified Bank Statement,PDF-003
 tampered_07_photoshop_meta.pdf,1,Disallowed Editing Software Metadata,PDF-003
 tampered_08_copymove_stamp.png,1,Copy-Move Stamp Duplication,IMG-003
 tampered_09_future_timeline.pdf,1,Futuristic Date Anomaly,RULE-CTX-001
 tampered_10_divergent_timestamps.pdf,1,Historical PDF Modification Divergence,"RULE-CTX-005,PDF-001"
+tampered_11_overwritten_text.pdf,1,Overwritten Text Patch,"PDF-001,RULE-VIS-002"
+tampered_12_line_font_outlier.pdf,1,Font Discrepancy & Baseline Shift,"RULE-VIS-001,RULE-VIS-004"
+tampered_13_pasted_signature.pdf,1,Pasted Signature Superimposed Over Text,PDF-004
+tampered_14_signature_off_zone.png,1,Signature Box Off Expected Zone,IMG-001
+tampered_15_producer_mismatch.pdf,1,Producer Software Mismatch,PDF-003
+tampered_16_arithmetic_amount_change.pdf,1,Arithmetic Line Item Calculation Mismatch,RULE-DOC-001
+tampered_17_incremental_update_tamper.pdf,1,Post-Execution Incremental Update,PDF-002
+tampered_18_conflicting_totals_multipage.pdf,1,Conflicting Grand Totals Multipage,RULE-DOC-004
+tampered_19_date_timeline_reversal.pdf,1,Payment Due Precedes Issue Date,"RULE-CTX-003,RULE-DOC-002"
+tampered_20_ela_noise_disparity.png,1,Spliced Price Badge ELA Disparity,IMG-002

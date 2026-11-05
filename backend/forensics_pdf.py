@@ -254,7 +254,7 @@ def check_metadata_inconsistencies(doc):
             })
 
     # Check for suspicious editing software
-    suspicious_tools = ['canva', 'ilovepdf', 'photoshop', 'pdfescape', 'sejda', 'nitro', 'gimp']
+    suspicious_tools = ['canva', 'ilovepdf', 'photoshop', 'pdfescape', 'sejda', 'nitro', 'gimp', 'inkscape', 'illustrator', 'foxit', 'smallpdf', 'pdf2go', 'pdf editor', 'master pdf']
     app_text = f"{producer} {creator}".lower()
     for tool in suspicious_tools:
         if tool in app_text:

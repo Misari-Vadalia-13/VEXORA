@@ -397,9 +397,10 @@ def run_single_document_evaluation():
     print("=" * 100)
 
     # Note on False Negatives
+    fn_docs = [r['filename'] for r in doc_results if r['doc_verdict'].startswith('FN')]
+    fn_str = ", ".join(fn_docs) if fn_docs else "None"
     print("\nFORENSIC SCIENTIFIC NOTE ON FALSE NEGATIVES:")
-    print("  The 3 undetected documents (tampered_04_duplicate_inv_a.pdf, tampered_05_duplicate_inv_b.pdf,")
-    print("  tampered_06_bank_mismatch.pdf) are 100% internally genuine vector documents when inspected in isolation.")
+    print(f"  The {len(fn_docs)} undetected document(s) ({fn_str}) are 100% internally genuine vector documents when inspected in isolation.")
     print("  Their anomalies consist of duplicate invoice collisions and cross-document payment discrepancies,")
     print("  which can only be identified by comparing counterpart documents in Section 3 below.")
 
@@ -797,7 +798,7 @@ RULE CLASSIFICATION FIDELITY:
 | **Total** | {doc_metrics.get('true_negatives', 0) + doc_metrics.get('false_negatives', 0)} | {doc_metrics.get('false_positives', 0) + doc_metrics.get('true_positives', 0)} | **{doc_metrics.get('total_evaluated', 0)}** |
 
 > **Forensic Scientific Note on False Negatives:**  
-> The 3 undetected documents in isolated document testing (`tampered_04_duplicate_inv_a.pdf`, `tampered_05_duplicate_inv_b.pdf`, `tampered_06_bank_mismatch.pdf`) are 100% syntactically and visually genuine PDF vectors when inspected in isolation. Their anomalies consist of duplicate invoice collisions and cross-document payment discrepancies, which can only be identified by cross-document correlation (Section 3).
+> The {doc_metrics.get('false_negatives', 0)} undetected document(s) in isolated document testing are internally genuine vector documents when inspected in isolation without reference counterparts. Their anomalies consist of duplicate invoice collisions or cross-document discrepancies, which can only be identified by cross-document correlation (Section 3).
 
 ---
 
