@@ -38,7 +38,11 @@ VEXORA is an investigative assistance platform. Its algorithmic findings and AI 
 
 ### 2.6 Persistence & Scaling Limits
 - **Single-Node SQLite Architecture:** VEXORA utilizes a local SQLite database (`backend/vexora.db`) for zero-dependency portability and turnkey hackathon evaluation. While SQLite supports thousands of queries per second, concurrent multi-user write operations queue behind SQLite's file-level lock. For large-scale enterprise deployments, migration to PostgreSQL or Google Cloud Spanner is recommended.
-- **Audit Hash-Chaining Concurrency:** Hash-chaining relies on sequential block generation (`prev_hash`). In concurrent write bursts, synchronization locks serialize append operations to guarantee tamper-proof linear chain integrity.
+- **Audit Hash-Chaining Concurrency & Storage Immutability:** Hash-chaining relies on sequential block generation (`prev_hash`). In concurrent write bursts, synchronization locks serialize append operations to preserve linear chain integrity. The hash chain provides application-level tamper-evidence (detecting unauthorized row modifications or deletions), but does not constitute hardware-enforced Write-Once-Read-Many (WORM) immutable storage.
+
+### 2.8 Synthetic Benchmark Dataset Scope & Real-World Validation
+- **Synthetic Dataset Specification:** The current benchmark suite consists of **20 synthetic documents** and **3 synthetic multi-document cases** (`demo_dataset/`) created with controlled, known tampering anomalies (font swaps, metadata alterations, copy-move artifacts, calculation discrepancies).
+- **No In-the-Wild Generalization Claim:** While synthetic benchmarks are standard in computer vision and forensic software evaluation to measure algorithmic sensitivity under controlled conditions, performance metrics on this synthetic suite (85.0% isolated document detection, 100.0% case-level detection) do not represent certified real-world accuracy across arbitrary in-the-wild document archives with unforeseen compression artifacts or non-standard layouts.
 
 ### 2.7 Optional AI Subsystem Operational Limits
 - **API Key & Quota Dependencies:** AI-assisted explanation requires external provider credentials (`VEXORA_LLM_API_KEY`). If unconfigured or exhausted (HTTP 429), VEXORA falls back 100% to deterministic summaries without degradation of core forensic capabilities.

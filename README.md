@@ -63,7 +63,7 @@ flowchart TD
 
 ## 📊 Rigorous Benchmark Evaluation Results
 
-VEXORA includes an automated, programmatic benchmark evaluation engine (`tools/evaluate.py`) that scores system performance across a 20-file verified dataset (`demo_dataset/`) with ground-truth labels and 3 multi-document case scenarios.
+VEXORA includes an automated, programmatic benchmark evaluation engine (`tools/evaluate.py`) that evaluates system performance across a controlled benchmark dataset containing **20 synthetic test documents** and **3 synthetic multi-document cases** (`demo_dataset/`) with ground-truth forensic annotations. These metrics reflect algorithmic performance on controlled synthetic test patterns and do not claim proven real-world accuracy across arbitrary in-the-wild document distributions.
 
 Results are automatically exported to machine-readable formats (`reports/benchmark_results.json` and `reports/benchmark_results.csv`):
 
@@ -221,7 +221,7 @@ VEXORA V2 expands upon baseline capabilities with specialized forensic modules:
 - **Structural PDF Analysis**: In-depth inspection of stream dictionaries, incremental updates, compression filters, font subsets, and object modification timelines.
 - **Pixel-Level Manipulation Detection**: Error Level Analysis (ELA) heatmap generation, block Laplacian variance sharpness evaluation, and ORB keypoint copy-move clone detection.
 - **Cross-Document Transaction Correlation**: Entity normalization, Jaccard token similarity matrices, and chronological timeline synthesis across case dossiers.
-- **ISO/IEC 27037 Evidence Handling**: Cryptographic SHA-256 integrity verification, chain-of-custody audit logs, and tamper-evident provenance tracking.
+- **ISO/IEC 27037 Evidence Handling Principles**: Cryptographic SHA-256 integrity verification, chain-of-custody audit logs, and tamper-evident provenance tracking aligned with ISO/IEC 27037 digital evidence guidelines (not an accredited third-party certification).
 
 ---
 

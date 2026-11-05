@@ -39,10 +39,12 @@ LABELS_PATH = DATASET_DIR / 'labels.csv'
 CASES_PATH = DATASET_DIR / 'cases.csv'
 
 
-def compute_binary_metrics(tp, tn, fp, fn):
+def compute_binary_metrics(tp, tn, fp, fn, processing_errors=0):
     """
     Computes standard classification metrics with rigorous zero-division handling.
     Returns dictionary with accuracy, precision, recall, specificity, F1-score, and 2x2 confusion matrix.
+    Guarantees: total_evaluated = tp + tn + fp + fn (strictly successfully evaluated documents).
+    Processing failures are strictly quarantined and do not alter confusion-matrix totals.
     """
     total = tp + tn + fp + fn
     accuracy = (tp + tn) / total if total > 0 else 0.0
@@ -57,6 +59,7 @@ def compute_binary_metrics(tp, tn, fp, fn):
         'true_negatives': tn,
         'false_positives': fp,
         'false_negatives': fn,
+        'processing_errors': processing_errors,
         'accuracy_pct': round(accuracy * 100, 2),
         'precision_pct': round(precision * 100, 2),
         'recall_pct': round(recall * 100, 2),
@@ -85,6 +88,161 @@ def render_confusion_matrix_ascii(cm, label_negative="Genuine/Clean", label_posi
         "└────────────────┴────────────────────────────┴────────────────────────────┘"
     ]
     return "\n".join(lines)
+
+
+def evaluate_document_record(rec, dataset_dir=None):
+    """
+    Evaluates a single document record from labels.csv.
+    Returns a dictionary containing evaluation results, forensic verdicts, and processing status.
+    Guarantees strict error isolation: processing failures are quarantined as PROCESSING_ERROR
+    and excluded from TP/TN/FP/FN classifications.
+    """
+    if dataset_dir is None:
+        dataset_dir = DATASET_DIR
+    else:
+        dataset_dir = Path(dataset_dir)
+
+    fname = rec['filename']
+    fpath = dataset_dir / fname
+    is_tampered = int(rec.get('is_tampered', 0))
+    expected_rules = [r.strip() for r in str(rec.get('expected_rules', '')).split(',') if r.strip() and r.strip() != 'None']
+
+    # Check for missing file
+    if not fpath.exists():
+        doc_error = f"Missing benchmark file on disk: {fname}"
+        return {
+            'filename': fname,
+            'is_tampered': is_tampered,
+            'status': 'PROCESSING_ERROR',
+            'classification': None,
+            'detected_anomaly': False,
+            'expected_rules': expected_rules,
+            'fired_rules': [],
+            'matched_rules': [],
+            'doc_verdict': 'PROCESSING_ERROR',
+            'rule_match_verdict': 'ERROR',
+            'processing_error': doc_error,
+            'extraction_status': 'FAILED',
+            'page_count': 0,
+            'digital_pages_count': 0,
+            'scanned_pages_count': 0,
+            'has_structured_fields': False
+        }
+
+    ext = fpath.suffix.lower().lstrip('.')
+    all_findings = []
+    doc_error = None
+    extraction = {}
+    cat = 'Uncategorized'
+
+    try:
+        # 1. Content Extraction
+        extraction = extract_document_content(str(fpath))
+        full_text = extraction.get('full_text', '')
+
+        # 2. Document Classification
+        cat, conf = classify_document(fname, file_type=ext)
+        if cat in ('General Document', 'Uncategorized') and full_text:
+            cat_c, _ = classify_by_content(full_text, file_type=ext)
+            if cat_c != 'General Document':
+                cat = cat_c
+
+        # 3. Visual & Contextual Forensics
+        vis_findings = analyze_visual_structure(str(fpath))
+        all_findings.extend(vis_findings)
+
+        ctx_findings = analyze_contextual_rules(cat, full_text, extraction, extraction.get('metadata'))
+        all_findings.extend(ctx_findings)
+
+        # 4. Extended PDF Forensics
+        if ext == 'pdf':
+            pdf_findings = run_extended_pdf_forensics(str(fpath))
+            all_findings.extend(pdf_findings)
+
+        # 5. Image Pixel Forensics
+        if ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp', 'pdf'):
+            img_findings = run_image_forensics(str(fpath), doc_category=cat)
+            all_findings.extend(img_findings)
+
+    except Exception as e:
+        doc_error = str(e)
+        all_findings = []
+
+    if doc_error:
+        return {
+            'filename': fname,
+            'is_tampered': is_tampered,
+            'status': 'PROCESSING_ERROR',
+            'classification': None,
+            'detected_anomaly': False,
+            'expected_rules': expected_rules,
+            'fired_rules': [],
+            'matched_rules': [],
+            'doc_verdict': 'PROCESSING_ERROR',
+            'rule_match_verdict': 'ERROR',
+            'processing_error': doc_error,
+            'extraction_status': extraction.get('extraction_status', 'FAILED'),
+            'page_count': extraction.get('page_count', 0),
+            'digital_pages_count': extraction.get('digital_pages_count', 0),
+            'scanned_pages_count': extraction.get('scanned_pages_count', 0),
+            'has_structured_fields': bool(extraction.get('structured_fields'))
+        }
+
+    # Filter strictly valid forensic rules (exclude errors or empty rule IDs)
+    fired_rules = sorted(list({
+        f['rule_id'] for f in all_findings
+        if f.get('rule_id') and not f['rule_id'].startswith('ERROR')
+    }))
+
+    has_anomalies = len(fired_rules) > 0
+    classification = None
+    doc_verdict = ""
+
+    # Binary document-level verdict
+    if is_tampered == 1:
+        if has_anomalies:
+            classification = "TP"
+            doc_verdict = "TP (HIT)"
+        else:
+            classification = "FN"
+            doc_verdict = "FN (MISS)"
+    else:
+        if has_anomalies:
+            classification = "FP"
+            doc_verdict = "FP (ALARM)"
+        else:
+            classification = "TN"
+            doc_verdict = "TN (CLEAN)"
+
+    # Rule-level classification fidelity match
+    matched_rules = sorted(list(set(fired_rules).intersection(set(expected_rules))))
+    rule_match_verdict = "N/A (Clean)"
+    if is_tampered == 1:
+        if matched_rules:
+            rule_match_verdict = f"HIT ({','.join(matched_rules)})"
+        elif has_anomalies:
+            rule_match_verdict = "PARTIAL_DIFF"
+        else:
+            rule_match_verdict = "MISS"
+
+    return {
+        'filename': fname,
+        'is_tampered': is_tampered,
+        'status': 'EVALUATED',
+        'classification': classification,
+        'detected_anomaly': has_anomalies,
+        'expected_rules': expected_rules,
+        'fired_rules': fired_rules,
+        'matched_rules': matched_rules,
+        'doc_verdict': doc_verdict,
+        'rule_match_verdict': rule_match_verdict,
+        'processing_error': None,
+        'extraction_status': extraction.get('extraction_status', 'SUCCESS'),
+        'page_count': extraction.get('page_count', 1),
+        'digital_pages_count': extraction.get('digital_pages_count', 0),
+        'scanned_pages_count': extraction.get('scanned_pages_count', 0),
+        'has_structured_fields': bool(extraction.get('structured_fields'))
+    }
 
 
 def run_single_document_evaluation():
@@ -139,108 +297,52 @@ def run_single_document_evaluation():
     print("-" * 104)
 
     for rec in records:
-        fname = rec['filename']
-        fpath = DATASET_DIR / fname
-        is_tampered = int(rec['is_tampered'])
-        expected_rules = [r.strip() for r in rec.get('expected_rules', '').split(',') if r.strip() and r.strip() != 'None']
+        res = evaluate_document_record(rec)
+        fname = res['filename']
+        is_tampered = res['is_tampered']
+        doc_error = res['processing_error']
+        doc_verdict = res['doc_verdict']
+        rule_match_verdict = res['rule_match_verdict']
+        fired_rules = res['fired_rules']
+        matched_rules = res['matched_rules']
+        expected_rules = res['expected_rules']
+        classification = res['classification']
 
-        if is_tampered == 1 and expected_rules:
-            total_expected_rule_docs += 1
-
-        if not fpath.exists():
-            print(f"[WARN] Missing test file on disk: {fname}")
+        if res['status'] == 'PROCESSING_ERROR':
             processing_errors += 1
-            continue
+            # HARD REQUIREMENT: Excluded from TP, TN, FP, and FN!
+            # Do NOT increment tp, tn, fp, or fn.
+            fired_str = f"ERROR: {doc_error[:16]}" if doc_error else "PROCESSING_ERROR"
+        else:
+            # Successfully evaluated document
+            if is_tampered == 1 and expected_rules:
+                total_expected_rule_docs += 1
 
-        ext = fpath.suffix.lower().lstrip('.')
-        all_findings = []
-        doc_error = None
+            for rid in fired_rules:
+                rule_counts[rid] = rule_counts.get(rid, 0) + 1
 
-        try:
-            # 1. Content Extraction
-            extraction = extract_document_content(str(fpath))
-            full_text = extraction.get('full_text', '')
-            e_status = extraction.get('extraction_status', 'SUCCESS')
+            if classification == 'TP':
+                tp += 1
+            elif classification == 'FN':
+                fn += 1
+            elif classification == 'FP':
+                fp += 1
+            elif classification == 'TN':
+                tn += 1
+
+            if is_tampered == 1 and matched_rules:
+                exact_rule_hits += 1
+
+            e_status = res['extraction_status']
             ocr_status_counts[e_status] = ocr_status_counts.get(e_status, 0) + 1
-            total_pages += extraction.get('page_count', 1)
-            digital_pages += extraction.get('digital_pages_count', 0)
-            scanned_pages += extraction.get('scanned_pages_count', 0)
-            if extraction.get('structured_fields'):
+            total_pages += res['page_count']
+            digital_pages += res['digital_pages_count']
+            scanned_pages += res['scanned_pages_count']
+            if res['has_structured_fields']:
                 structured_field_counts += 1
 
-            # 2. Document Classification
-            cat, conf = classify_document(fname, file_type=ext)
-            if cat in ('General Document', 'Uncategorized') and full_text:
-                cat_c, _ = classify_by_content(full_text, file_type=ext)
-                if cat_c != 'General Document':
-                    cat = cat_c
+            fired_str = ", ".join(fired_rules) if fired_rules else "None (Clean)"
 
-            # 3. Visual & Contextual Forensics
-            vis_findings = analyze_visual_structure(str(fpath))
-            all_findings.extend(vis_findings)
-
-            ctx_findings = analyze_contextual_rules(cat, full_text, extraction, extraction.get('metadata'))
-            all_findings.extend(ctx_findings)
-
-            # 4. Extended PDF Forensics
-            if ext == 'pdf':
-                pdf_findings = run_extended_pdf_forensics(str(fpath))
-                all_findings.extend(pdf_findings)
-
-            # 5. Image Pixel Forensics
-            if ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp', 'pdf'):
-                img_findings = run_image_forensics(str(fpath), doc_category=cat)
-                all_findings.extend(img_findings)
-
-        except Exception as e:
-            doc_error = str(e)
-            processing_errors += 1
-            # HARD REQUIREMENT: Processing errors are recorded separately and NEVER counted as anomaly findings
-            all_findings = []
-
-        # Filter strictly valid forensic rules (exclude errors or empty rule IDs)
-        fired_rules = sorted(list({
-            f['rule_id'] for f in all_findings
-            if f.get('rule_id') and not f['rule_id'].startswith('ERROR')
-        }))
-
-        for rid in fired_rules:
-            rule_counts[rid] = rule_counts.get(rid, 0) + 1
-
-        has_anomalies = len(fired_rules) > 0
-        doc_verdict = ""
-
-        # Binary document-level verdict
-        if is_tampered == 1:
-            if has_anomalies:
-                tp += 1
-                doc_verdict = "TP (HIT)"
-            else:
-                fn += 1
-                doc_verdict = "FN (MISS)"
-        else:
-            if has_anomalies:
-                fp += 1
-                doc_verdict = "FP (ALARM)"
-            else:
-                tn += 1
-                doc_verdict = "TN (CLEAN)"
-
-        # Rule-level classification fidelity match
-        matched_rules = sorted(list(set(fired_rules).intersection(set(expected_rules))))
-        rule_match_verdict = "N/A (Clean)"
-        if is_tampered == 1:
-            if matched_rules:
-                exact_rule_hits += 1
-                rule_match_verdict = f"HIT ({','.join(matched_rules)})"
-            elif has_anomalies:
-                rule_match_verdict = "PARTIAL_DIFF"
-            else:
-                rule_match_verdict = "MISS"
-
-        fired_str = ", ".join(fired_rules) if fired_rules else "None (Clean)"
-        if doc_error:
-            fired_str = f"ERROR: {doc_error[:16]}"
         if len(fired_str) > 22:
             fired_str = fired_str[:19] + "..."
 
@@ -251,7 +353,8 @@ def run_single_document_evaluation():
         doc_results.append({
             'filename': fname,
             'is_tampered': is_tampered,
-            'detected_anomaly': has_anomalies,
+            'status': res['status'],
+            'detected_anomaly': res['detected_anomaly'],
             'expected_rules': expected_rules,
             'fired_rules': fired_rules,
             'matched_rules': matched_rules,
@@ -260,7 +363,7 @@ def run_single_document_evaluation():
             'processing_error': doc_error
         })
 
-    metrics = compute_binary_metrics(tp, tn, fp, fn)
+    metrics = compute_binary_metrics(tp, tn, fp, fn, processing_errors=processing_errors)
 
     print("\n" + "=" * 100)
     print(" SECTION 1: DOCUMENT-LEVEL FORENSIC DETECTION METRICS")
@@ -548,6 +651,7 @@ def export_benchmark_reports(single_doc_data, case_data, output_dir=None):
         writer.writerow([
             'filename',
             'is_tampered',
+            'status',
             'detected_anomaly',
             'expected_rules',
             'fired_rules',
@@ -560,6 +664,7 @@ def export_benchmark_reports(single_doc_data, case_data, output_dir=None):
             writer.writerow([
                 r.get('filename', ''),
                 r.get('is_tampered', 0),
+                r.get('status', 'EVALUATED' if not r.get('processing_error') and r.get('doc_verdict') != 'PROCESSING_ERROR' else 'PROCESSING_ERROR'),
                 r.get('detected_anomaly', False),
                 ";".join(r.get('expected_rules', [])),
                 ";".join(r.get('fired_rules', [])),
@@ -636,6 +741,7 @@ Dataset         : {DATASET_DIR}
 ----------------------------------------------------------------------------------------------------
 DOCUMENT-LEVEL FORENSIC PERFORMANCE:
   • Evaluated Documents     : {doc_metrics.get('total_evaluated', 0)}
+  • Processing Errors       : {doc_metrics.get('processing_errors', 0)} (Quarantined)
   • True Positives (TP)     : {doc_metrics.get('true_positives', 0)}
   • True Negatives (TN)     : {doc_metrics.get('true_negatives', 0)}
   • False Positives (FP)    : {doc_metrics.get('false_positives', 0)}
@@ -737,9 +843,9 @@ RULE CLASSIFICATION FIDELITY:
 
 ## 6. Strict Error Isolation & Custody Guarantees
 
-- **Processing Errors Quarantined:** 0 (100% pipeline yield)
+- **Processing Errors Quarantined:** {doc_metrics.get('processing_errors', 0)} ({'100% pipeline yield' if doc_metrics.get('processing_errors', 0) == 0 else f"{doc_metrics.get('processing_errors', 0)} quarantined"})
 - **Zero-Hallucination Grounding:** Rule engine fires only on deterministic forensic signals.
-- **Evidence Immutability:** SHA-256 cryptographically anchored at ingest time.
+- **Evidence Integrity Verification:** SHA-256 cryptographically verified at ingest and live audit check.
 """
 
     with open(md_path, 'w', encoding='utf-8') as f_md:

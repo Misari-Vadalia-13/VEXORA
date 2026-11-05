@@ -24,7 +24,7 @@ The system now enforces a **fail-closed, secure-by-default architecture** (`VEXO
 ### 1.2 Session Protection & Fixation Defense
 - **Session Fixation Prevention:** Upon successful credential authentication in `POST /api/auth/login`, `session.clear()` is executed immediately before new user session tokens are populated.
 - **Session Expiry:** Configured with `PERMANENT_SESSION_LIFETIME = timedelta(seconds=28800)` (8 hours). Inactivity or session expiration forces re-authentication.
-- **Explicit Invalidation:** `POST /api/auth/logout` terminates the session server-side (`session.clear()`), issues an explicit cookie deletion header (`delete_cookie('vexora_session')`), and records an immutable `USER_LOGOUT` audit log.
+- **Explicit Invalidation:** `POST /api/auth/logout` terminates the session server-side (`session.clear()`), issues an explicit cookie deletion header (`delete_cookie('vexora_session')`), and records a tamper-evident hash-chained `USER_LOGOUT` audit log.
 - **Cookie Security:** Cookies are configured with `httponly=True`, `samesite='Lax'`, and `secure=True` in production.
 
 ### 1.3 Cryptographic Password Storage

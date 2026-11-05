@@ -3,7 +3,7 @@
 **Date:** November 2026  
 **Evaluation Standard:** Zero-Tolerance Digital Forensics & Multi-Document Contextual Correlation  
 **Benchmark Suite:** `tools/evaluate.py`  
-**Dataset Directory:** `demo_dataset/` (20 verified documents, 3 multi-document cases)
+**Dataset Scope:** `demo_dataset/` (20 synthetic documents, 3 synthetic multi-document cases created with controlled forensic tampering patterns for algorithmic verification; not a claim of uncurated real-world generalization)
 
 ---
 

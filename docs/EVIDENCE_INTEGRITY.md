@@ -1,6 +1,6 @@
 # VEXORA — Digital Evidence Integrity & Cryptographic Chain of Custody
 
-**Standard Compliance:** ISO/IEC 27037:2012 (Digital Evidence Handling & Chain of Custody)  
+**Standard Alignment:** Aligned with ISO/IEC 27037:2012 principles (Digital Evidence Handling & Chain of Custody; not an accredited third-party certification)  
 **Security Tier:** Append-Only Cryptographic Audit Trail & Strict Layer Separation  
 **Implementation Modules:** `backend/database.py`, `backend/models.py`, `backend/extractor.py`
 
@@ -11,7 +11,7 @@
 In judicial, regulatory, and corporate investigations, forensic observations are worthless if the evidence chain of custody can be disputed. VEXORA adheres to the core tenets of ISO/IEC 27037:
 
 1. **Relevance & Acquisition:** The original evidence artifact is ingested without alteration.
-2. **Identification & Sealing:** At ingest time, an immutable cryptographic SHA-256 digest is generated and recorded.
+2. **Identification & Sealing:** At ingest time, a cryptographic SHA-256 digest is generated and recorded for tamper detection.
 3. **Integrity Verification:** Periodic verification recomputes file hashes to detect physical disk tampering.
 4. **Traceability:** Every investigator action, OCR extraction, analytical scan, and report generation is cryptographically chained.
 
@@ -43,6 +43,11 @@ The verification engine (`verify_audit_trail_integrity()`) performs a complete l
    - Deletes an intermediate log entry $\rightarrow$ **Preceding hash mismatch detected**.
 
 Tested and verified in `tests/test_integrity_custody.py` (`test_audit_hash_chain_tamper_detection`).
+
+### 2.3 Storage Architecture & Immutability Disclosure
+
+> **Forensic Integrity Note on Storage Immutability:**  
+> The append-only hash chain provides application-level *tamper-evidence*—any retroactive modification, insertion, or deletion breaks cryptographic linkage and is detected during integrity verification (`verify_audit_trail_integrity()`). However, because SQLite executes within the local host filesystem, this constitutes application-layer tamper-evidence rather than hardware-enforced Write-Once-Read-Many (WORM) or independently immutable cloud object locking.
 
 ---
 
