@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS findings (
     coordinates TEXT,
     rule_id TEXT,
     evidence TEXT,
+    evidence_class TEXT DEFAULT NULL,
+    reviewer_decision TEXT DEFAULT NULL,
+    reviewer_note TEXT DEFAULT NULL,
+    reviewed_by TEXT DEFAULT NULL,
+    reviewed_at TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL

@@ -777,6 +777,13 @@ def create_app(config_class=Config):
         doc = res
 
         findings = get_findings_by_document(doc_id)
+        try:
+            from backend.explainability import format_explainable_finding, get_status_badge
+            for f in findings:
+                f['status_badge'] = get_status_badge(f)
+                f['explainability'] = format_explainable_finding(f)
+        except Exception:
+            pass
         return jsonify({
             'success': True,
             'document_id': doc_id,
@@ -811,6 +818,13 @@ def create_app(config_class=Config):
                 all_findings = get_all_findings(severity=severity)
                 findings = [f for f in all_findings if f.get('case_id') in case_ids]
 
+        try:
+            from backend.explainability import format_explainable_finding, get_status_badge
+            for f in findings:
+                f['status_badge'] = get_status_badge(f)
+                f['explainability'] = format_explainable_finding(f)
+        except Exception:
+            pass
         return jsonify({
             'success': True,
             'count': len(findings),
@@ -868,6 +882,30 @@ def create_app(config_class=Config):
             return jsonify({
                 'success': True,
                 'message': f"Finding '{finding_id}' status updated to {updated['status']}.",
+                'data': updated
+            }), 200
+        except ValidationError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/findings/<finding_id>/review', methods=['POST', 'PATCH'])
+    @login_required
+    def api_review_finding(finding_id):
+        """Records human investigator review decision (Accept / Dismiss as false positive / Needs more info) along with an optional reviewer note (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_finding_access(finding_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        payload = request.get_json(silent=True) or {}
+        try:
+            user = session.get('username') or username or 'alex.turner'
+            updated = update_finding(finding_id, payload, user=user)
+            if not updated:
+                return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
+            return jsonify({
+                'success': True,
+                'message': f"Finding '{finding_id}' review decision recorded as '{updated.get('reviewer_decision') or updated['status']}'.",
                 'data': updated
             }), 200
         except ValidationError as ve:
@@ -1530,6 +1568,29 @@ def create_app(config_class=Config):
             app.logger.error(f"Error serving evidence image for finding {finding_id}: {str(e)}")
             return jsonify({'success': False, 'error': f"Failed to render evidence image: {str(e)}"}), 500
 
+    @app.route('/api/documents/<doc_id>/crop', methods=['GET'])
+    @login_required
+    def api_get_document_crop(doc_id):
+        """Extracts a cropped image snippet of a specific region or matched text on a document page, with a highlight outline around the target, suitable for side-by-side comparison (IDOR protected)."""
+        try:
+            user_id, username, role = _get_auth_context()
+            allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+            if not allowed:
+                return jsonify({'success': False, 'error': res}), code
+            from backend.evidence import get_document_crop
+            page_num = request.args.get('page', 1, type=int)
+            query = request.args.get('query')
+            coords = request.args.get('coords')
+            zoom = request.args.get('zoom', 2.0, type=float)
+            png_bytes, error_dict = get_document_crop(doc_id, page_number=page_num, text_query=query, coordinates=coords, zoom=zoom)
+            if error_dict:
+                status_code = 404 if error_dict.get('code') in ('DOCUMENT_NOT_FOUND', 'FILE_NOT_FOUND') else 400
+                return jsonify(error_dict), status_code
+            return Response(png_bytes, mimetype='image/png')
+        except Exception as e:
+            app.logger.error(f"Error serving crop for document {doc_id}: {str(e)}")
+            return jsonify({'success': False, 'error': f"Failed to render crop: {str(e)}"}), 500
+
     @app.route('/api/documents/<doc_id>/pages/<int:page_num>/overlay', methods=['GET'])
     @login_required
     def api_get_document_page_overlay(doc_id, page_num):
@@ -1734,14 +1795,26 @@ def create_app(config_class=Config):
             from backend.llm import explain_finding
             user = username or 'Lead Investigator'
             result = explain_finding(finding, nearby_text=nearby_text, document_id=doc_id, user=user)
+            from backend.explainability import format_explainable_finding, get_status_badge
+            fallback = format_explainable_finding(finding)
+            status_badge = get_status_badge(finding)
             if result is None:
                 return jsonify({
                     'success': False,
                     'message': 'AI explanation unavailable or disabled. Verify VEXORA_LLM_API_KEY and ENABLE_LLM.',
                     'finding_id': finding_id,
-                    'disclaimer': 'AI-assessed, requires human review'
+                    'disclaimer': 'AI-assessed, requires human review',
+                    'fallback': fallback,
+                    'status_badge': status_badge,
+                    'structured_card': fallback
                 }), 200
 
+            result['status_badge'] = status_badge
+            result['structured_card'] = {
+                **fallback,
+                'why_it_matters': result.get('explanation', fallback['why_it_matters']),
+                'verification_step': result.get('next_verification_step', fallback['verification_step'])
+            }
             return jsonify({'success': True, **result}), 200
         except Exception as e:
             app.logger.error(f"AI explain error for {finding_id}: {str(e)}")

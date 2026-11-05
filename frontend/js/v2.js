@@ -20,7 +20,8 @@
           <div class="v2-modal-header">
             <div class="v2-modal-title-group">
               <span id="v2ModalRulePill" class="pill-tag pill-high">RULE</span>
-              <h3 id="v2ModalTitle" class="v2-modal-title">Visual Evidence Overlay</h3>
+              <span id="v2ModalStatusBadge" class="pill-tag pill-medium" style="margin-left:6px; font-size:0.75rem;">Status</span>
+              <h3 id="v2ModalTitle" class="v2-modal-title" style="margin-left:8px;">Visual Evidence Overlay</h3>
             </div>
             <button id="v2ModalCloseBtn" class="v2-modal-close-btn" type="button" aria-label="Close modal">&times;</button>
           </div>
@@ -58,10 +59,34 @@
               </p>
             </div>
 
-            <div class="v2-finding-details-box">
-              <p id="v2ModalDescription" class="v2-finding-desc"></p>
-              <div id="v2ModalEvidenceContainer" style="display:none;">
-                <span class="v2-finding-evidence-text" id="v2ModalEvidence"></span>
+            <!-- 3-Part Evidence Card -->
+            <div id="v2Modal3PartCard" class="v2-finding-details-box" style="margin-bottom:12px;">
+              <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+                <div style="font-weight:700; color:var(--accent-cyan, #06b6d4); font-size:0.75rem; margin-bottom:2px;">🔍 WHAT WE OBSERVED</div>
+                <div id="v2WhatObserved" style="font-size:0.82rem; color:var(--text-primary);">—</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+                <div style="font-weight:700; color:var(--status-anomaly, #f59e0b); font-size:0.75rem; margin-bottom:2px;">⚠️ WHY IT MATTERS</div>
+                <div id="v2WhyItMatters" style="font-size:0.82rem; color:var(--text-secondary);">—</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+                <div style="font-weight:700; color:#38bdf8; font-size:0.75rem; margin-bottom:2px;">📊 HOW SURE WE ARE</div>
+                <div id="v2HowSure" style="font-size:0.82rem; color:var(--text-muted);">—</div>
+              </div>
+              <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-radius:4px; padding:8px 10px;">
+                <div style="font-weight:700; color:#34d399; font-size:0.75rem; margin-bottom:2px;">🛠️ SUGGESTED HUMAN VERIFICATION STEP</div>
+                <div id="v2VerificationStep" style="font-size:0.82rem; color:var(--text-secondary);">—</div>
+              </div>
+            </div>
+
+            <!-- Reviewer Decision Bar inside Modal -->
+            <div id="v2ModalReviewSection" style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.1); border-radius:6px;">
+              <div id="v2ModalReviewState" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">Reviewer Status: Pending Verification</div>
+              <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <input type="text" id="v2ModalReviewNote" placeholder="Reviewer rationale / audit note..." style="flex:1; min-width:160px; font-size:0.75rem; padding:5px 8px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:var(--text-primary);" />
+                <button type="button" id="v2BtnModalAccept" class="btn btn-sm" style="padding:4px 10px; font-size:0.75rem; background:rgba(34,197,94,0.15); border:1px solid #22c55e; color:#22c55e;">✓ Accept</button>
+                <button type="button" id="v2BtnModalDismiss" class="btn btn-sm" style="padding:4px 10px; font-size:0.75rem; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444;">✕ Dismiss as false positive</button>
+                <button type="button" id="v2BtnModalNeedInfo" class="btn btn-sm" style="padding:4px 10px; font-size:0.75rem; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#f59e0b;">? Needs more info</button>
               </div>
             </div>
 
@@ -192,8 +217,72 @@
       rulePill.className = 'pill-tag ' + (sevLower === 'critical' || sevLower === 'high' ? 'pill-high' : sevLower === 'medium' ? 'pill-medium' : 'pill-low');
     }
 
+    const exp = finding.explainability || {};
+    const statusBadge = finding.status_badge || exp.status_badge || (finding.severity === 'Critical' || finding.severity === 'High' ? 'Potential manipulation' : 'Detected inconsistency');
+    const statusBadgeEl = document.getElementById('v2ModalStatusBadge');
+    if (statusBadgeEl) {
+      statusBadgeEl.textContent = statusBadge;
+      const bLower = statusBadge.toLowerCase();
+      statusBadgeEl.className = 'pill-tag ' + (bLower.includes('manipulation') ? 'pill-high' : bLower.includes('inconsistency') ? 'pill-medium' : 'pill-low');
+    }
+
+    const whatObs = document.getElementById('v2WhatObserved');
+    const whyMat = document.getElementById('v2WhyItMatters');
+    const howSur = document.getElementById('v2HowSure');
+    const verStep = document.getElementById('v2VerificationStep');
+
+    if (whatObs) whatObs.textContent = exp.what_observed || finding.evidence || finding.description || 'Observed document element.';
+    if (whyMat) whyMat.textContent = exp.why_it_matters || finding.description || 'Warrants manual review to verify authenticity.';
+    if (howSur) howSur.textContent = exp.how_sure || `${((finding.confidence !== undefined && finding.confidence !== null) ? (finding.confidence <= 1 ? finding.confidence * 100 : finding.confidence) : 85).toFixed(1)}% confidence based on deterministic heuristics.`;
+    if (verStep) verStep.textContent = exp.verification_step || 'Inspect original document in a vector viewer or cross-verify against issuing entity.';
+
+    const revStateEl = document.getElementById('v2ModalReviewState');
+    const revNoteInput = document.getElementById('v2ModalReviewNote');
+    if (revStateEl) {
+      if (finding.reviewer_decision) {
+        revStateEl.innerHTML = `🛡️ <strong>Reviewed by:</strong> ${finding.reviewed_by || 'Investigator'} • <strong>Decision:</strong> ${finding.reviewer_decision} ${finding.reviewer_note ? ` • <em>"${finding.reviewer_note}"</em>` : ''}`;
+      } else {
+        revStateEl.textContent = 'Reviewer Status: Pending Verification';
+      }
+    }
+    if (revNoteInput) revNoteInput.value = finding.reviewer_note || '';
+
+    const btnAccept = document.getElementById('v2BtnModalAccept');
+    const btnDismiss = document.getElementById('v2BtnModalDismiss');
+    const btnNeedInfo = document.getElementById('v2BtnModalNeedInfo');
+
+    function handleModalReview(decision) {
+      const note = revNoteInput ? revNoteInput.value : '';
+      const apiBase = (typeof getApiBase === "function") ? getApiBase() : ((typeof window.getApiBase === "function") ? window.getApiBase() : "/api");
+      fetch(`${apiBase}/findings/${encodeURIComponent(finding.id)}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: decision, note: note })
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          finding.reviewer_decision = d.data.reviewer_decision || decision;
+          finding.reviewer_note = note;
+          finding.reviewed_by = d.data.reviewed_by || 'Investigator';
+          if (revStateEl) {
+            revStateEl.innerHTML = `🛡️ <strong>Reviewed by:</strong> ${finding.reviewed_by} • <strong>Decision:</strong> ${finding.reviewer_decision} ${note ? ` • <em>"${note}"</em>` : ''}`;
+          }
+          if (typeof showToast === 'function') showToast(`Review recorded: ${decision}`, 'success');
+          if (typeof window.refreshAll === 'function') window.refreshAll();
+        }
+      })
+      .catch(() => {
+        if (typeof showToast === 'function') showToast('Failed to record reviewer decision', 'danger');
+      });
+    }
+
+    if (btnAccept) btnAccept.onclick = () => handleModalReview('Accept');
+    if (btnDismiss) btnDismiss.onclick = () => handleModalReview('Dismiss as false positive');
+    if (btnNeedInfo) btnNeedInfo.onclick = () => handleModalReview('Needs more info');
+
     const classEl = document.getElementById('v2ModalClass');
-    if (classEl) classEl.textContent = finding.evidence_class || 'Observation';
+    if (classEl) classEl.textContent = statusBadge;
     if (titleEl) titleEl.textContent = title;
     if (docNameEl) docNameEl.textContent = finding.document_filename || finding.document_id || 'Document';
     if (sevEl) sevEl.textContent = severity;

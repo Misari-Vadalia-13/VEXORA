@@ -360,3 +360,131 @@ def get_document_page_overlay(doc_id, page_number=1, zoom=2.0):
             'error': f"Failed to render page overlay: {str(e)}",
             'code': 'RENDER_ERROR'
         }
+
+
+def get_document_crop(doc_id, page_number=1, text_query=None, coordinates=None, zoom=2.0):
+    """
+    Extracts a cropped image snippet of a specific region or matched text on a document page,
+    with a highlight outline around the target, suitable for side-by-side comparison.
+    """
+    doc = get_document_by_id(doc_id)
+    if not doc:
+        return None, {
+            'success': False,
+            'error': f"Document '{doc_id}' not found.",
+            'code': 'DOCUMENT_NOT_FOUND'
+        }
+
+    file_path = resolve_document_file_path(doc)
+    if not file_path or not os.path.exists(file_path):
+        return None, {
+            'success': False,
+            'error': f"File for document '{doc.get('filename')}' not found.",
+            'code': 'FILE_NOT_FOUND'
+        }
+
+    ext = Path(file_path).suffix.lower()
+    try:
+        if ext == '.pdf':
+            pdf = fitz.open(file_path)
+            idx = max(0, min(len(pdf) - 1, int(page_number) - 1))
+            page = pdf[idx]
+            page_rect = page.rect
+
+            target_rect = None
+            if coordinates:
+                parsed = parse_coordinates(coordinates)
+                if parsed and len(parsed) >= 4:
+                    target_rect = fitz.Rect(parsed[0], parsed[1], parsed[2], parsed[3])
+
+            if not target_rect and text_query:
+                query_str = str(text_query).strip()
+                rects = page.search_for(query_str)
+                if not rects:
+                    clean = re.sub(r'[\$,€£¥]', '', query_str).strip()
+                    if clean:
+                        rects = page.search_for(clean)
+                if not rects and ' ' in query_str:
+                    first_tok = query_str.split()[0]
+                    if len(first_tok) > 2:
+                        rects = page.search_for(first_tok)
+                if rects:
+                    target_rect = rects[0]
+
+            if not target_rect:
+                target_rect = fitz.Rect(50, 50, min(page_rect.width - 50, 350), min(page_rect.height - 50, 150))
+
+            pad_x = 40.0
+            pad_y = 20.0
+            crop_rect = fitz.Rect(
+                max(0.0, target_rect.x0 - pad_x),
+                max(0.0, target_rect.y0 - pad_y),
+                min(page_rect.width, target_rect.x1 + pad_x),
+                min(page_rect.height, target_rect.y1 + pad_y)
+            )
+
+            if crop_rect.width < 120.0:
+                mid_x = (crop_rect.x0 + crop_rect.x1) / 2.0
+                crop_rect.x0 = max(0.0, mid_x - 60.0)
+                crop_rect.x1 = min(page_rect.width, mid_x + 60.0)
+            if crop_rect.height < 40.0:
+                mid_y = (crop_rect.y0 + crop_rect.y1) / 2.0
+                crop_rect.y0 = max(0.0, mid_y - 20.0)
+                crop_rect.y1 = min(page_rect.height, mid_y + 20.0)
+
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(clip=crop_rect, matrix=mat)
+            img_data = pix.tobytes("png")
+            base_img = Image.open(io.BytesIO(img_data)).convert("RGBA")
+
+            overlay = Image.new("RGBA", base_img.size, (255, 255, 255, 0))
+            draw = ImageDraw.Draw(overlay)
+            rx0 = max(0.0, (target_rect.x0 - crop_rect.x0) * zoom)
+            ry0 = max(0.0, (target_rect.y0 - crop_rect.y0) * zoom)
+            rx1 = min(float(base_img.width), (target_rect.x1 - crop_rect.x0) * zoom)
+            ry1 = min(float(base_img.height), (target_rect.y1 - crop_rect.y0) * zoom)
+
+            draw.rectangle([rx0, ry0, rx1, ry1], fill=(239, 68, 68, 40), outline=(239, 68, 68, 230), width=2)
+            final_img = Image.alpha_composite(base_img, overlay).convert("RGB")
+            out_buf = io.BytesIO()
+            final_img.save(out_buf, format="PNG")
+            pdf.close()
+            return out_buf.getvalue(), None
+
+        else:
+            with Image.open(file_path) as raw_img:
+                w, h = raw_img.size
+                target_box = None
+                if coordinates:
+                    parsed = parse_coordinates(coordinates)
+                    if parsed and len(parsed) >= 4:
+                        target_box = [parsed[0], parsed[1], parsed[2], parsed[3]]
+                if not target_box:
+                    target_box = [w * 0.1, h * 0.1, w * 0.6, h * 0.3]
+
+                crop_box = [
+                    max(0, target_box[0] - 40),
+                    max(0, target_box[1] - 20),
+                    min(w, target_box[2] + 40),
+                    min(h, target_box[3] + 20)
+                ]
+                cropped = raw_img.crop(crop_box).convert("RGBA")
+                overlay = Image.new("RGBA", cropped.size, (255, 255, 255, 0))
+                draw = ImageDraw.Draw(overlay)
+                rx0 = target_box[0] - crop_box[0]
+                ry0 = target_box[1] - crop_box[1]
+                rx1 = target_box[2] - crop_box[0]
+                ry1 = target_box[3] - crop_box[1]
+                draw.rectangle([rx0, ry0, rx1, ry1], fill=(239, 68, 68, 40), outline=(239, 68, 68, 230), width=2)
+                final_img = Image.alpha_composite(cropped, overlay).convert("RGB")
+                out_buf = io.BytesIO()
+                final_img.save(out_buf, format="PNG")
+                return out_buf.getvalue(), None
+
+    except Exception as e:
+        logger.error(f"[VEXORA Crop Error] {e}", exc_info=True)
+        return None, {
+            'success': False,
+            'error': f"Failed to generate crop: {str(e)}",
+            'code': 'CROP_ERROR'
+        }

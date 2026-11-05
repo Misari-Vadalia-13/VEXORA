@@ -726,20 +726,68 @@ def create_finding(data, user="System"):
     return get_finding_by_id(finding_id)
 
 def update_finding(finding_id, update_data, user="System"):
-    """Updates status or notes for an existing finding."""
+    """Updates status, reviewer decision, and notes for an existing finding."""
     existing = query_db("SELECT * FROM findings WHERE id = ?", (finding_id,), one=True)
     if not existing:
         return None
 
-    new_status = update_data.get('status', existing['status'])
+    decision = update_data.get('decision') or update_data.get('reviewer_decision')
+    note = update_data.get('note') if 'note' in update_data else update_data.get('reviewer_note')
+    reviewer = update_data.get('reviewer') or update_data.get('reviewed_by') or user
+
+    new_status = update_data.get('status')
+    reviewer_decision = existing.get('reviewer_decision')
+
+    if decision:
+        dec_lower = str(decision).lower().strip()
+        if 'accept' in dec_lower:
+            new_status = 'Verified'
+            reviewer_decision = 'Accepted'
+        elif 'dismiss' in dec_lower or 'false positive' in dec_lower:
+            new_status = 'Dismissed'
+            reviewer_decision = 'Dismissed as false positive'
+        elif 'need' in dec_lower or 'info' in dec_lower:
+            new_status = 'Unresolved'
+            reviewer_decision = 'Needs more info'
+        else:
+            reviewer_decision = str(decision)
+            if not new_status:
+                new_status = existing['status']
+    
+    if not new_status:
+        new_status = existing['status']
+
     if new_status not in VALID_FINDING_STATUSES:
         raise ValidationError(f"Invalid status '{new_status}'. Must be one of: {', '.join(sorted(VALID_FINDING_STATUSES))}.")
 
-    execute_db(
-        "UPDATE findings SET status = ? WHERE id = ?",
-        (new_status, finding_id)
-    )
-    log_audit("FINDING_UPDATED", "finding", finding_id, f"Finding status updated to: {new_status}", user)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    reviewed_at = now if decision else existing.get('reviewed_at')
+    final_note = note if note is not None else existing.get('reviewer_note')
+    final_reviewer = reviewer if decision else existing.get('reviewed_by')
+
+    try:
+        execute_db(
+            """
+            UPDATE findings
+            SET status = ?, reviewer_decision = ?, reviewer_note = ?, reviewed_by = ?, reviewed_at = ?
+            WHERE id = ?
+            """,
+            (new_status, reviewer_decision, final_note, final_reviewer, reviewed_at, finding_id)
+        )
+    except Exception:
+        execute_db(
+            "UPDATE findings SET status = ? WHERE id = ?",
+            (new_status, finding_id)
+        )
+
+    if decision:
+        audit_msg = f"Reviewer [{final_reviewer}] marked decision '{reviewer_decision}' (status: {new_status})."
+        if final_note:
+            audit_msg += f" Note: {final_note}"
+        log_audit("FINDING_REVIEWED", "finding", finding_id, audit_msg, user)
+    else:
+        log_audit("FINDING_UPDATED", "finding", finding_id, f"Finding status updated to: {new_status}", user)
+
     return get_finding_by_id(finding_id)
 
 def save_document_findings(doc_id, findings_list, user="System"):

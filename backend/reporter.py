@@ -59,7 +59,7 @@ def _ensure_case_analysis(case_id, user="Lead Investigator"):
     from backend.analyzer import analyze_document
     for d in docs:
         status = (d.get('status') or '').strip()
-        if status not in ("Analyzed", "Clean"):
+        if status not in ("Analyzed", "Clean", "Flagged"):
             try:
                 analyze_document(d['id'], user=user)
             except Exception as e:
@@ -246,8 +246,10 @@ def build_extracted_information(docs, ai_insights=None):
 def build_evidence_traceability(findings):
     """
     Phase K2: Selects top 5 findings by severity and structures them with rule ID,
-    class label (Observation, Inconsistency, Potential Manipulation), page, box, and quoted source text.
+    class label (Observed, Detected inconsistency, Potential manipulation), page, box, quoted source text,
+    and human reviewer decisions.
     """
+    from backend.explainability import get_status_badge
     sev_rank = {'Critical': 5, 'High': 4, 'Medium': 3, 'Low': 2, 'Info': 1}
     sorted_findings = sorted(findings, key=lambda f: sev_rank.get(f.get('severity', 'Medium'), 0), reverse=True)
     top5 = sorted_findings[:5]
@@ -255,19 +257,21 @@ def build_evidence_traceability(findings):
     items = []
     for f in top5:
         sev = f.get('severity', 'Medium')
-        class_label = f.get('evidence_class')
-        if not class_label:
-            title_lower = f.get('title', '').lower()
-            if sev in ('Critical', 'High') or 'manipulation' in title_lower or 'tamper' in title_lower or 'clone' in title_lower:
-                class_label = 'Potential Manipulation'
-            elif 'conflict' in title_lower or 'mismatch' in title_lower or 'discrepancy' in title_lower:
-                class_label = 'Inconsistency'
-            else:
-                class_label = 'Observation'
+        class_label = get_status_badge(f)
 
         box_val = f.get('coordinates')
         box_str = str(box_val) if box_val else "N/A (Document-level metadata rule)"
         quoted = f.get('evidence') or f.get('description') or f.get('title', '')
+
+        rev_dec = f.get('reviewer_decision')
+        rev_by = f.get('reviewed_by') or 'Investigator'
+        rev_note = f.get('reviewer_note')
+        if rev_dec:
+            rev_summary = f"Reviewed by: {rev_by} | Status: {rev_dec}"
+            if rev_note:
+                rev_summary += f" | Note: {rev_note}"
+        else:
+            rev_summary = "Pending Investigator Review"
 
         items.append({
             'id': f['id'],
@@ -277,7 +281,8 @@ def build_evidence_traceability(findings):
             'class_label': class_label,
             'page_number': f.get('page_number', 1),
             'box': box_str,
-            'quoted_text': quoted
+            'quoted_text': quoted,
+            'reviewer_summary': rev_summary
         })
 
     return items
@@ -591,7 +596,11 @@ def generate_case_dossier_data(case_id):
             'page_number': f.get('page_number', 1),
             'coordinates': f.get('coordinates') or '',
             'confidence': f.get('confidence'),
-            'status': f.get('status', 'Unresolved')
+            'status': f.get('status', 'Unresolved'),
+            'reviewer_decision': f.get('reviewer_decision'),
+            'reviewer_note': f.get('reviewer_note'),
+            'reviewed_by': f.get('reviewed_by'),
+            'reviewed_at': f.get('reviewed_at')
         })
 
     # 3. Cross-Document Comparisons
@@ -1505,15 +1514,21 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
                 if not img_html:
                     img_html = '<div style="background:#f1f5f9; color:#64748b; padding:8px 12px; border-radius:4px; font-size:12px; margin-top:8px;">ℹ️ Visual Evidence: Document-level or metadata rule (visual coordinates not applicable).</div>'
 
+                lbl_lower = ev['class_label'].lower()
+                badge_bg = '#fee2e2' if 'manipulation' in lbl_lower else '#fef3c7' if 'inconsistency' in lbl_lower else '#e0f2fe'
+                badge_col = '#b91c1c' if 'manipulation' in lbl_lower else '#b45309' if 'inconsistency' in lbl_lower else '#0369a1'
+                rev_html = f"<div style='font-size:11px; color:#1e40af; font-weight:600; margin-top:6px; background:#eff6ff; border:1px solid #bfdbfe; padding:4px 8px; border-radius:4px; display:inline-block;'>🛡️ {html.escape(ev.get('reviewer_summary', 'Pending Investigator Review'))}</div>"
+
                 k2_html += f"""
                 <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:4px solid {sev_col}; border-radius:4px; padding:12px; margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <strong style="color:#0f172a; font-size:13px;">[{html.escape(ev['rule_id'])}] {html.escape(ev['title'])}</strong>
-                        <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:#fee2e2; color:#b91c1c; font-weight:700;">Class: {html.escape(ev['class_label'])}</span>
+                        <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:{badge_bg}; color:{badge_col}; font-weight:700;">Class: {html.escape(ev['class_label'].title())}</span>
                     </div>
                     <div style="font-size:11px; color:#64748b; font-family:monospace; margin-top:4px;">
                         Page {html.escape(str(ev['page_number']))} • Box: {html.escape(str(ev['box']))} • Severity: {sev.upper()}
                     </div>
+                    {rev_html}
                     <blockquote style="background:#f8fafc; border-left:3px solid #0284c7; margin:6px 0; padding:6px 12px; font-size:12px; color:#334155; font-style:italic;">
                         Source Quote: "{html.escape(ev['quoted_text'])}"
                     </blockquote>

@@ -83,6 +83,14 @@ def init_db(db_path=None):
             cursor.execute("ALTER TABLE findings ADD COLUMN evidence TEXT")
         if 'evidence_class' not in f_cols and len(f_cols) > 0:
             cursor.execute("ALTER TABLE findings ADD COLUMN evidence_class TEXT DEFAULT NULL")
+        if 'reviewer_decision' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN reviewer_decision TEXT DEFAULT NULL")
+        if 'reviewer_note' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN reviewer_note TEXT DEFAULT NULL")
+        if 'reviewed_by' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN reviewed_by TEXT DEFAULT NULL")
+        if 'reviewed_at' not in f_cols and len(f_cols) > 0:
+            cursor.execute("ALTER TABLE findings ADD COLUMN reviewed_at TEXT DEFAULT NULL")
 
         # Phase C: Add ai_insights table
         cursor.execute("""

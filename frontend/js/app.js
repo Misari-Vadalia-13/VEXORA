@@ -1761,6 +1761,109 @@ window.loadCurrentDocCustody = async function() {
 /**
  * Phase 6: Render findings dynamically into #forensicFindingsFeed
  */
+
+/**
+ * Phase 2: Explainability & 3-Part Evidence Card Component
+ */
+window.render3PartFindingCardHtml = function(f) {
+  const exp = f.explainability || {};
+  const statusBadge = f.status_badge || exp.status_badge || (f.severity === 'Critical' || f.severity === 'High' ? 'Potential manipulation' : f.severity === 'Medium' ? 'Detected inconsistency' : 'Observed');
+  const badgeLower = statusBadge.toLowerCase();
+  const badgePill = badgeLower.includes('manipulation') ? 'pill-high' : badgeLower.includes('inconsistency') ? 'pill-medium' : 'pill-low';
+
+  const whatObserved = exp.what_observed || f.evidence || f.description || 'Observed document primitive.';
+  const whyItMatters = exp.why_it_matters || f.description || 'Warrants manual review to verify authenticity.';
+  const confVal = (f.confidence !== undefined && f.confidence !== null) ? (f.confidence <= 1.0 ? f.confidence * 100 : f.confidence) : 85.0;
+  const howSure = exp.how_sure || `${confVal.toFixed(1)}% confidence based on deterministic forensic heuristics.`;
+  const verStep = exp.verification_step || 'Inspect original document in a vector viewer or cross-verify against issuing entity.';
+
+  const revDecision = f.reviewer_decision;
+  const revBy = f.reviewed_by || 'Investigator';
+  const revNote = f.reviewer_note;
+
+  let reviewerStatusHtml = '';
+  if (revDecision) {
+    const decPill = revDecision === 'Accepted' ? 'pill-low' : (revDecision === 'Dismissed as false positive' ? 'pill-high' : 'pill-medium');
+    reviewerStatusHtml = `
+      <div style="margin-top:8px; padding:6px 10px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:4px; font-size:0.75rem;">
+        <span class="pill-tag ${decPill}" style="margin-right:6px;">${escapeHtml(revDecision)}</span>
+        <span>Reviewed by: <strong>${escapeHtml(revBy)}</strong></span>
+        ${revNote ? `<span style="color:var(--text-muted); margin-left:8px;">Note: "${escapeHtml(revNote)}"</span>` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="finding-card-head">
+      <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
+      <div>
+        <span class="pill-tag ${badgePill}" style="margin-right:6px; font-size:0.7rem; font-weight:700;">Status: ${escapeHtml(statusBadge)}</span>
+        <span style="font-size:0.75rem; color:var(--text-muted); margin-right:6px;">(${escapeHtml(f.severity || 'Medium')})</span>
+      </div>
+    </div>
+    
+    <!-- 3-Part Structured Forensic Card -->
+    <div class="finding-3part-container" style="margin-top:8px; font-size:0.8rem; line-height:1.45;">
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+        <div style="font-weight:700; color:var(--accent-cyan, #06b6d4); font-size:0.75rem; margin-bottom:2px;">🔍 WHAT WE OBSERVED</div>
+        <div style="color:var(--text-primary);">${escapeHtml(whatObserved)}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+        <div style="font-weight:700; color:var(--status-anomaly, #f59e0b); font-size:0.75rem; margin-bottom:2px;">⚠️ WHY IT MATTERS</div>
+        <div style="color:var(--text-secondary);">${escapeHtml(whyItMatters)}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:8px 10px; margin-bottom:6px;">
+        <div style="font-weight:700; color:#38bdf8; font-size:0.75rem; margin-bottom:2px;">📊 HOW SURE WE ARE</div>
+        <div style="color:var(--text-muted);">${escapeHtml(howSure)}</div>
+      </div>
+      <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-radius:4px; padding:8px 10px;">
+        <div style="font-weight:700; color:#34d399; font-size:0.75rem; margin-bottom:2px;">🛠️ SUGGESTED HUMAN VERIFICATION STEP</div>
+        <div style="color:var(--text-secondary);">${escapeHtml(verStep)}</div>
+      </div>
+    </div>
+    
+    ${reviewerStatusHtml}
+
+    <!-- Reviewer Decision Action Bar -->
+    <div class="reviewer-decision-bar" style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.1); display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+      <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">Decision:</span>
+      <input type="text" id="revNote_${escapeHtml(f.id)}" placeholder="Add optional reviewer note..." style="flex:1; min-width:140px; font-size:0.75rem; padding:4px 8px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.15); border-radius:3px; color:var(--text-primary);" onclick="event.stopPropagation();" />
+      <button type="button" class="btn btn-sm" style="padding:3px 8px; font-size:0.7rem; background:rgba(34,197,94,0.15); border:1px solid #22c55e; color:#22c55e;" onclick="event.stopPropagation(); window.submitFindingReview('${escapeHtml(f.id)}', 'Accept');">✓ Accept</button>
+      <button type="button" class="btn btn-sm" style="padding:3px 8px; font-size:0.7rem; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444;" onclick="event.stopPropagation(); window.submitFindingReview('${escapeHtml(f.id)}', 'Dismiss as false positive');">✕ Dismiss</button>
+      <button type="button" class="btn btn-sm" style="padding:3px 8px; font-size:0.7rem; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#f59e0b;" onclick="event.stopPropagation(); window.submitFindingReview('${escapeHtml(f.id)}', 'Needs more info');">? Need Info</button>
+    </div>
+  `;
+};
+
+window.submitFindingReview = async function(findingId, decision) {
+  const noteInput = document.getElementById(`revNote_${findingId}`);
+  const note = noteInput ? noteInput.value : '';
+  const apiBase = getApiBase();
+  try {
+    const res = await fetch(`${apiBase}/findings/${encodeURIComponent(findingId)}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: decision, note: note })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`Review recorded: ${decision}`, 'success');
+      const selDoc = document.getElementById('forensicDocSelector');
+      if (selDoc && selDoc.value && typeof window.loadDocumentFindings === 'function') {
+        window.loadDocumentFindings(selDoc.value);
+      }
+      const dossierSelect = document.getElementById('dossierCaseSelector');
+      if (dossierSelect && dossierSelect.value && typeof window.previewCaseDossier === 'function') {
+        window.previewCaseDossier();
+      }
+    } else {
+      showToast(`Failed to record review: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (e) {
+    showToast('Error connecting to server to record review decision.', 'danger');
+  }
+};
+
 function renderForensicFindings(findings) {
   const feed = document.getElementById('forensicFindingsFeed');
   if (!feed) return;
@@ -1804,18 +1907,7 @@ function renderForensicFindings(findings) {
         window.v2OpenEvidenceModal(f);
       }
     };
-    card.innerHTML = `
-      <div class="finding-card-head">
-        <span class="finding-title">[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</span>
-        <div>
-          <span class="pill-tag ${evClassPill}" style="margin-right:6px; font-size:0.7rem;">${escapeHtml(evClass)}</span>
-          ${f.confidence !== undefined && f.confidence !== null ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-right:6px;">Rule Weight: <strong>${escapeHtml(String(f.confidence))}</strong></span>` : ''}
-          <span class="finding-loc">${escapeHtml(locText)}</span>
-        </div>
-      </div>
-      <p class="finding-reason">${escapeHtml(f.description)}</p>
-      ${f.evidence ? `<div class="finding-recommendation">🔍 Evidence: <strong>${escapeHtml(f.evidence)}</strong></div>` : ''}
-    `;
+    card.innerHTML = window.render3PartFindingCardHtml(f);
     feed.appendChild(card);
 
     // V2 Phase A Hook: Attach Visual Evidence Overlay trigger
@@ -1983,6 +2075,28 @@ function renderComparisonMatrix(result) {
     const explanation = m.explanation || m.message || '';
 
     if (bgStyle) row.style = bgStyle;
+
+    let cropSnippet = '';
+    if ((isConflict || isMismatch) && valA && valB && valA !== '—' && valB !== '—' && (docA.id || m.doc_a_id) && (docB.id || m.doc_b_id)) {
+      const idA = docA.id || m.doc_a_id;
+      const idB = docB.id || m.doc_b_id;
+      const apiBase = getApiBase();
+      const cropA = `${apiBase}/documents/${encodeURIComponent(idA)}/crop?page=${m.page_a || 1}&query=${encodeURIComponent(valA)}`;
+      const cropB = `${apiBase}/documents/${encodeURIComponent(idB)}/crop?page=${m.page_b || 1}&query=${encodeURIComponent(valB)}`;
+      cropSnippet = `
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <div style="flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:4px;">
+            <small style="color:var(--accent-cyan); display:block; margin-bottom:2px;">${escapeHtml(docA.filename || 'Doc A')}</small>
+            <img src="${cropA}" style="max-width:100%; max-height:80px; object-fit:contain; border-radius:2px;" onerror="this.parentElement.style.display='none'" />
+          </div>
+          <div style="flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:4px;">
+            <small style="color:var(--status-danger); display:block; margin-bottom:2px;">${escapeHtml(docB.filename || 'Doc B')}</small>
+            <img src="${cropB}" style="max-width:100%; max-height:80px; object-fit:contain; border-radius:2px;" onerror="this.parentElement.style.display='none'" />
+          </div>
+        </div>
+      `;
+    }
+
     row.innerHTML = `
       <td style="font-weight:700; color:${isConflict ? 'var(--status-danger)' : isMismatch ? 'var(--status-anomaly)' : 'inherit'};">
         ${escapeHtml(attr)}
@@ -1997,6 +2111,7 @@ function renderComparisonMatrix(result) {
       <td>
         <strong>${escapeHtml(explanation)}</strong>
         ${m.variance ? `<br><small style="color:var(--text-muted);">Variance: ${escapeHtml(String(m.variance))}</small>` : ''}
+        ${cropSnippet}
       </td>
     `;
     matrixBody.appendChild(row);
@@ -2145,19 +2260,7 @@ window.loadCaseDossierPreview = async function(caseId) {
           const evClass = f.evidence_class || 'Observation';
           const evClassPill = evClass === 'Potential Manipulation' ? 'pill-high' : evClass === 'Inconsistency' ? 'pill-medium' : 'pill-low';
 
-          card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>[${escapeHtml(f.rule_id || 'RULE')}] ${escapeHtml(f.title)}</strong>
-              <div>
-                <span class="pill-tag ${evClassPill}" style="margin-right:6px; font-size:0.7rem;">${escapeHtml(evClass)}</span>
-                <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">(${escapeHtml(f.severity)})</span>
-              </div>
-            </div>
-            <p style="font-size:0.8rem; margin:3px 0 0 0; color:var(--text-secondary);">
-              Page ${f.page_number || 1}${coordText}: ${escapeHtml(f.description)}
-            </p>
-            ${f.evidence ? `<small style="color:var(--text-muted);">Evidence: ${escapeHtml(f.evidence)}</small>` : ''}
-          `;
+          card.innerHTML = window.render3PartFindingCardHtml(f);
           findingsEl.appendChild(card);
 
           // V2 Phase A Hook: Attach Visual Evidence Overlay trigger
@@ -2182,10 +2285,34 @@ window.loadCaseDossierPreview = async function(caseId) {
       } else {
         discrepancies.forEach((disc) => {
           const card = document.createElement('div');
-          card.style = 'background:var(--status-danger-dim); border:1px solid var(--status-danger-border); border-radius:4px; padding:10px 14px;';
+          card.style = 'background:var(--status-danger-dim); border:1px solid var(--status-danger-border); border-radius:6px; padding:12px 14px; margin-bottom:10px;';
+          
+          let cropHtml = '';
+          if (disc.doc_a_id && disc.doc_b_id && disc.val_a && disc.val_b) {
+            const apiBase = getApiBase();
+            const cropA = `${apiBase}/documents/${encodeURIComponent(disc.doc_a_id)}/crop?page=${disc.page_a || 1}&query=${encodeURIComponent(disc.val_a)}`;
+            const cropB = `${apiBase}/documents/${encodeURIComponent(disc.doc_b_id)}/crop?page=${disc.page_b || 1}&query=${encodeURIComponent(disc.val_b)}`;
+            cropHtml = `
+              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:8px;">
+                  <div style="font-size:0.75rem; color:var(--accent-cyan); font-weight:700; margin-bottom:4px;">${escapeHtml(disc.doc_a_filename || 'Document A')}: ${escapeHtml(String(disc.val_a))}</div>
+                  <img src="${cropA}" style="width:100%; max-height:120px; object-fit:contain; border-radius:3px;" onerror="this.parentElement.style.display='none'" alt="Doc A Evidence Crop" />
+                </div>
+                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:8px;">
+                  <div style="font-size:0.75rem; color:var(--status-danger); font-weight:700; margin-bottom:4px;">${escapeHtml(disc.doc_b_filename || 'Document B')}: ${escapeHtml(String(disc.val_b))}</div>
+                  <img src="${cropB}" style="width:100%; max-height:120px; object-fit:contain; border-radius:3px;" onerror="this.parentElement.style.display='none'" alt="Doc B Evidence Crop" />
+                </div>
+              </div>
+            `;
+          }
+
           card.innerHTML = `
-            <strong style="color:var(--status-danger);">⚠️ ${escapeHtml(disc.field || 'Discrepancy')}</strong>
-            <p style="font-size:0.85rem; color:var(--text-primary); margin:4px 0 0 0;">${escapeHtml(disc.message || '')}</p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:var(--status-danger);">⚠️ ${escapeHtml(disc.field || 'Cross-Document Discrepancy')}</strong>
+              <span class="pill-tag pill-high">Cross-Doc Mismatch</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-primary); margin:6px 0 0 0;">${escapeHtml(disc.message || '')}</p>
+            ${cropHtml}
           `;
           discEl.appendChild(card);
         });
