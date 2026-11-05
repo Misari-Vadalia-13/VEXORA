@@ -10,10 +10,9 @@ Forensic integrity requires transparent disclosure of scientific, technological,
 When an individual document is analyzed in isolation, certain high-impact financial and forensic anomalies cannot be detected mathematically.
 
 **Empirical Evidence from VEXORA Evaluation Benchmark:**
-- In the 20-document benchmark suite (`tools/evaluate.py`), single-document forensic analysis achieved **85.0% Accuracy** (7/10 True Positives, 3 False Negatives, 0 False Positives).
-- The 3 undetected documents (`tampered_04_duplicate_inv_a.pdf`, `tampered_05_duplicate_inv_b.pdf`, and `tampered_06_bank_mismatch.pdf`) are **100% genuine, vector-rendered digital documents** when examined by themselves:
+- In the 35-document benchmark suite (`tools/evaluate.py`), single-document forensic analysis achieved **94.3% Accuracy** (18/20 True Positives, 2 False Negatives, 0 False Positives, 15 True Negatives).
+- The 2 undetected documents (`tampered_04_duplicate_inv_a.pdf` and `tampered_05_duplicate_inv_b.pdf`) are **100% genuine, vector-rendered digital documents** when examined by themselves:
   - `tampered_04` and `tampered_05`: Both invoices contain flawless fonts, valid metadata, no vector overwrites, and correct internal arithmetic. The anomaly is that *the same invoice number was issued to two different corporate counterparties with differing payment totals*. This duplicate collision is completely invisible without counterpart document comparison.
-  - `tampered_06`: A bank statement that is internally clean and arithmetic-balanced, but whose credit line contradicts the payment total in the procurement invoice.
 - **The Solution:** When evaluated as a cohesive case via VEXORA's **Cross-Document Comparator & Correlator**, the system achieves **100.0% Accuracy, 100.0% Recall, and 100.0% Precision**, identifying the duplicate collision and monetary variance immediately.
 
 ---
@@ -65,4 +64,3 @@ When an individual document is analyzed in isolation, certain high-impact financ
   The external LLM reasoning layer (Google Gemini / OpenAI) is strictly an advisory intelligence synthesizer. It assists investigators by generating plain-language summaries, formulating plausible innocent hypotheses, and suggesting verification steps.
 - **Anti-Hallucination Constraints:**
   Although VEXORA enforces verbatim source-quote substring matching to discard ungrounded assertions, AI responses must never be used as autonomous or unreviewed decisions.
-

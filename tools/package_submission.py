@@ -42,6 +42,8 @@ EXCLUDED_PATH_PREFIXES = [
     "backend\\backups",
     "reports/archive",
     "reports\\archive",
+    "docs/archive",
+    "docs\\archive",
     "dist",
     "scratch"
 ]
@@ -53,7 +55,10 @@ EXCLUDED_EXTENSIONS = {
     ".log",
     ".tmp",
     ".bak",
-    ".swp"
+    ".swp",
+    ".db",
+    ".sqlite",
+    ".sqlite3"
 }
 
 EXCLUDED_FILES = {
@@ -104,6 +109,11 @@ def package_submission():
                 rel_file_str = str(rel_file)
 
                 if is_path_excluded(rel_file_str):
+                    continue
+
+                # Exclude runtime contents in uploads and reports (preserve .gitkeep)
+                norm_dir = rel_root_str.replace('\\', '/')
+                if (norm_dir in ('uploads', 'reports') or norm_dir.startswith(('uploads/', 'reports/'))) and file != '.gitkeep':
                     continue
 
                 zipf.write(abs_file, arcname=rel_file_str)

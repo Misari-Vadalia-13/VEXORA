@@ -92,12 +92,25 @@ Image forensics are strictly gated to raster uploads (`.png`, `.jpg`, `.jpeg`, `
    The `GET /api/documents/<id>/integrity` endpoint re-hashes the stored file from disk in real-time, comparing it against the ingest hash to detect file tampering or storage bit-rot.
 3. **Chain of Custody Timeline:**
    The `GET /api/documents/<id>/custody` endpoint provides an ordered audit trail of every forensic action (Uploaded, Extracted, Analyzed, Compared, Integrity Checked, Reported) with UTC timestamps, user identity, and event details.
-4. **Spatial Bounding Box Traceability:**
-   Findings preserve physical document coordinates `[x0, y0, x1, y1]` allowing the dynamic visual inspector and dossier reports to render exact highlight overlays. Non-spatial findings explicitly display a clear *"Contextual / Non-Visual Forensic Finding"* advisory.
+4. **Spatial Bounding Box Traceability & Evidence Crops:**
+   Findings preserve physical document coordinates `[x0, y0, x1, y1]` allowing the dynamic visual inspector and dossier reports to render exact highlight overlays. The `/api/documents/<id>/crop` endpoint extracts tight high-resolution crops around detected anomalies for forensic inspection. Non-spatial findings explicitly display a clear *"Contextual / Non-Visual Forensic Finding"* advisory.
+5. **Human Reviewer Decision Tracking:**
+   Examiners can record formal review decisions (`Confirmed Tampering`, `Benign / False Alarm`, `Inconclusive`) alongside investigator notes and timestamps via `/api/findings/<id>/review`, ensuring human-in-the-loop oversight.
 
 ---
 
-## 4. Explainable AI & Privacy Safeguards
+## 4. Explainable Case Risk Scoring (0–100 Triage Priority)
+
+VEXORA implements a deterministic, fully explainable case risk scoring formula (`backend/risk_scoring.py`):
+$$\text{Score} = \min(100, (\text{Critical} \times 30) + (\text{High} \times 20) + (\text{Medium} \times 10) + (\text{Low} \times 5) + (\text{Discrepancies} \times 25))$$
+
+- **Priority Bands:** Critical Priority (>= 75), High Priority (50-74), Medium Priority (25-49), Low / Routine Priority (< 25).
+- **Explainability Breakdown:** Returns exact component contributions and rule details via `GET /api/cases/<id>/risk-score`.
+- **Mandatory Disclaimer:** *"Triage priority, not a fraud verdict. Requires qualified human examiner review."*
+
+---
+
+## 5. Explainable AI & Privacy Safeguards
 
 1. **Anti-Hallucination Quote Grounding:**
    When the optional LLM reasoning layer generates structured extractions, every extracted field must provide a verbatim `source_quote`. VEXORA verifies that the quote exists as an exact substring in the extracted document text; ungrounded assertions are automatically discarded.
@@ -113,7 +126,7 @@ Image forensics are strictly gated to raster uploads (`.png`, `.jpg`, `.jpeg`, `
 
 ---
 
-## 5. Security & Defense-in-Depth Architecture
+## 6. Security & Defense-in-Depth Architecture
 
 - **Path Traversal Protection:** All file paths are strictly resolved against `UPLOAD_FOLDER` and checked for containment (`resolved_dest.startswith(resolved_target)`). Filenames with null bytes (`\0`) or directory traversal sequences (`..`) are rejected with HTTP 400.
 - **Role Elevation Prevention:** User registration blocks self-assigned administrative roles (`admin`, `superuser`, `administrator`).
