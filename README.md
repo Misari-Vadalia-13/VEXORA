@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?style=flat-square" alt="Python Version">
   <img src="https://img.shields.io/badge/Architecture-Flask%20%2B%20SQLite%20%2B%20Vanilla%20JS-emerald?style=flat-square" alt="Stack">
-  <img src="https://img.shields.io/badge/Tests-236%20Passed-brightgreen?style=flat-square" alt="Automated Tests">
+  <img src="https://img.shields.io/badge/Tests-250%20Passed-brightgreen?style=flat-square" alt="Automated Tests">
   <img src="https://img.shields.io/badge/E2E%20Checks-12%2F12%20Passed-brightgreen?style=flat-square" alt="E2E Checks">
   <img src="https://img.shields.io/badge/Case%20Accuracy-100.0%25-blue?style=flat-square" alt="Case Accuracy">
   <img src="https://img.shields.io/badge/Single--Doc%20Specificity-100.0%25-blue?style=flat-square" alt="Specificity">
@@ -186,7 +186,7 @@ python3 -m backend.app
 
 ## 🧪 Comprehensive Automated Test Suite
 
-VEXORA includes **197 automated unit and integration tests** across 22 test suites, plus **12/12 end-to-end verification checks** and evaluation benchmark tests:
+VEXORA includes **250 automated unit tests** across 27 test modules, plus **12/12 end-to-end integration checks** (**262 total automated verifications**, 100% passing):
 
 ```powershell
 # Run the complete unit test suite:

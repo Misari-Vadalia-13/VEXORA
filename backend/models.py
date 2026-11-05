@@ -17,7 +17,8 @@ and strict input validation for Cases, Documents, Findings, and Audit Logs.
 
 import re
 import json
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 from backend.database import query_db, execute_db
 
 # Allowed enum values
@@ -235,6 +236,15 @@ def check_finding_access(finding_id, user_id=None, username=None, role=None):
     if not f:
         return False, "Finding not found", 404
     if not f.get('case_id'):
+        if f.get('document_id'):
+            return check_document_access(f['document_id'], user_id=user_id, username=username, role=role)
+        try:
+            from flask import current_app, has_app_context
+            auth_required = current_app.config.get('VEXORA_REQUIRE_AUTH', False) if (has_app_context() and current_app) else False
+        except Exception:
+            auth_required = False
+        if auth_required and not username and not user_id:
+            return False, "Authentication required: Missing user identity.", 401
         return True, f, 200
     allowed, res, code = check_case_access(f['case_id'], user_id, username, role)
     if not allowed:
@@ -831,19 +841,81 @@ def get_system_stats():
 # 6. Audit Trail Logging
 # ==========================================
 
-def log_audit(action, entity_type, entity_id, details, user="System"):
-    """Inserts an immutable audit record into audit_logs table."""
+def compute_audit_hash(prev_hash, timestamp, action, entity_type, entity_id, details, user):
+    """Computes SHA-256 cryptographic hash for append-only audit chain integrity."""
+    payload = f"{prev_hash}|{timestamp}|{action}|{entity_type}|{entity_id or ''}|{details or ''}|{user or ''}"
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+def log_audit(action, entity_type, entity_id, details, user="System", timestamp=None):
+    """
+    Inserts an append-only, cryptographically hash-chained audit record into audit_logs table.
+    Each event mathematically seals the previous event hash with SHA-256 (ISO/IEC 27037).
+    """
     try:
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        # Fetch preceding event hash to maintain hash chain
+        last_entry = query_db("SELECT id, event_hash FROM audit_logs ORDER BY id DESC LIMIT 1", one=True)
+        if last_entry and last_entry.get('event_hash'):
+            prev_hash = last_entry['event_hash']
+        else:
+            prev_hash = "GENESIS_" + "0" * 56
+
+        event_hash = compute_audit_hash(prev_hash, ts, action, entity_type, str(entity_id) if entity_id else "", details, user)
+
         execute_db(
             """
-            INSERT INTO audit_logs (action, entity_type, entity_id, details, user)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO audit_logs (action, entity_type, entity_id, details, user, timestamp, prev_hash, event_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (action, entity_type, entity_id, details, user)
+            (action, entity_type, str(entity_id) if entity_id else "", details, user, ts, prev_hash, event_hash)
         )
     except Exception as e:
         import logging
         logging.getLogger('vexora.audit').warning(f"Failed to log audit event: {e}")
+
+def verify_audit_trail_integrity(db_path=None):
+    """
+    Cryptographic verification of audit trail chain of custody.
+    Walks the audit_logs table sequentially from genesis, verifying that every block's
+    prev_hash and event_hash match recalculation. Detects insertions, modifications, or deletions.
+    Returns: (is_valid: bool, verified_count: int, error_details: str|None)
+    """
+    logs = query_db("SELECT id, action, entity_type, entity_id, details, user, timestamp, prev_hash, event_hash FROM audit_logs ORDER BY id ASC")
+    if not logs:
+        return True, 0, None
+
+    expected_prev = "GENESIS_" + "0" * 56
+    verified_count = 0
+
+    for log in logs:
+        stored_prev = log.get('prev_hash')
+        stored_hash = log.get('event_hash')
+
+        # Tolerate legacy unchained rows from prior versions
+        if not stored_hash:
+            continue
+
+        if stored_prev != expected_prev:
+            return False, verified_count, f"Audit chain broken at log ID {log['id']}: expected prev_hash '{expected_prev}', got '{stored_prev}'"
+
+        recomputed = compute_audit_hash(
+            stored_prev,
+            log['timestamp'],
+            log['action'],
+            log['entity_type'],
+            str(log['entity_id']) if log['entity_id'] else "",
+            log['details'],
+            log['user']
+        )
+
+        if recomputed != stored_hash:
+            return False, verified_count, f"Hash mismatch at log ID {log['id']}: recomputed '{recomputed}', stored '{stored_hash}'"
+
+        expected_prev = stored_hash
+        verified_count += 1
+
+    return True, verified_count, None
 
 def get_audit_logs(action=None, entity_type=None, user=None, limit=100):
     """

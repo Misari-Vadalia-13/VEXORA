@@ -120,7 +120,7 @@ This script is designed for a concise, high-impact, live evaluation by hackathon
 > - *Every line of code is protected against path traversal and role escalation.*
 > - *Our optional AI layer enforces strict verbatim quote validation and automatic PII masking (IBAN, card, ID numbers).*
 > - *Our automated benchmark achieves 85% single-document accuracy, 100% case-level correlation accuracy, and 100% specificity with zero false alarms across genuine files.*
-> - *Our test suite features 197 passing unit tests and 12/12 passing end-to-end checks.*
+> - *Our test suite features 250 passing unit tests and 12/12 passing end-to-end checks.*
 > *Thank you, judges. We welcome your questions."*
 
 ---
@@ -140,4 +140,4 @@ This script is designed for a concise, high-impact, live evaluation by hackathon
 | **Interactive SVG Relationship Graph** | Relationship Graph Panel | `backend/correlator.py` |
 | **6-Section Vector Dossier (PDF/HTML)** | Case Dossiers View | `backend/reporter.py` |
 | **Empirical Evaluation Benchmark** | `reports/benchmark_results.json` | 85.0% Doc Acc / 100% Case Acc / 100% Specificity |
-| **Automated Test Coverage** | Terminal: `python -m unittest` | **197 Unit Tests** / **12/12 E2E Checks** |
+| **Automated Test Coverage** | Terminal: `python -m unittest` | **250 Unit Tests** / **12/12 E2E Checks** |

@@ -356,6 +356,7 @@ def extract_pdf_document(source):
 
                 pages.append({
                     'page_number': page_num,
+                    'rotation': int(getattr(page, 'rotation', 0)),
                     'width': page_width,
                     'height': page_height,
                     'text': digital_text,
@@ -377,6 +378,7 @@ def extract_pdf_document(source):
                 if not has_images and not has_drawings and not digital_text:
                     pages.append({
                         'page_number': page_num,
+                        'rotation': int(getattr(page, 'rotation', 0)),
                         'width': page_width,
                         'height': page_height,
                         'text': '',
@@ -445,6 +447,7 @@ def extract_pdf_document(source):
                 words = final_page_text.split()
                 pages.append({
                     'page_number': page_num,
+                    'rotation': int(getattr(page, 'rotation', 0)),
                     'width': page_width,
                     'height': page_height,
                     'text': final_page_text,

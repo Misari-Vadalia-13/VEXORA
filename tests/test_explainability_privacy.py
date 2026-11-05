@@ -144,6 +144,142 @@ class TestExplainabilityAndPrivacy(unittest.TestCase):
         self.assertIn(AI_DISCLAIMER, f['description'])
         self.assertIn("Grand Total: $45,000.00", f['evidence'])
 
+    def test_05_verify_source_quote_edge_cases(self):
+        """Tests strict source quote verification against edge cases."""
+        doc_text = "Standard Procurement Order PO-2026-991. Total Amount Due: $1,450,200.00. Vendor: Acme Global Ltd."
+
+        # Exact match
+        self.assertTrue(verify_source_quote("Total Amount Due: $1,450,200.00", doc_text))
+
+        # Normalized whitespace & case
+        self.assertTrue(verify_source_quote("  total   amount   due:   $1,450,200.00  ", doc_text))
+
+        # Punctuation variations
+        self.assertTrue(verify_source_quote("Total Amount Due 145020000", doc_text))
+
+        # Hallucinated quote
+        self.assertFalse(verify_source_quote("Kickback to Secret Account $500,000", doc_text))
+
+        # Empty / None inputs
+        self.assertFalse(verify_source_quote("", doc_text))
+        self.assertFalse(verify_source_quote(None, doc_text))
+        self.assertFalse(verify_source_quote("Total Amount", ""))
+
+    def test_06_call_llm_missing_api_key_and_disabled_flag(self):
+        """call_llm returns None gracefully when feature is disabled or key is absent."""
+        from backend.config import Config
+        from backend.llm import call_llm
+
+        orig_enabled = getattr(Config, 'ENABLE_LLM', False)
+        orig_key = getattr(Config, 'VEXORA_LLM_API_KEY', '')
+
+        try:
+            # 1. Disabled via config
+            Config.ENABLE_LLM = False
+            Config.VEXORA_LLM_API_KEY = "dummy-key"
+            self.assertIsNone(call_llm("test prompt"))
+
+            # 2. Enabled but missing key
+            Config.ENABLE_LLM = True
+            Config.VEXORA_LLM_API_KEY = ""
+            with patch.dict('os.environ', {'VEXORA_LLM_API_KEY': '', 'GEMINI_API_KEY': '', 'OPENAI_API_KEY': ''}):
+                self.assertIsNone(call_llm("test prompt"))
+        finally:
+            Config.ENABLE_LLM = orig_enabled
+            Config.VEXORA_LLM_API_KEY = orig_key
+
+    @patch('backend.llm.requests.post')
+    def test_07_call_llm_http_401_invalid_key_handling(self, mock_post):
+        """call_llm handles 401 Unauthorized without crashing and sets sanitized error."""
+        from backend.config import Config
+        from backend.llm import call_llm, get_last_llm_error
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.text = '{"error": {"message": "API key not valid. Please pass a valid API key."}}'
+        mock_post.return_value = mock_resp
+
+        orig_enabled = getattr(Config, 'ENABLE_LLM', False)
+        orig_key = getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        try:
+            Config.ENABLE_LLM = True
+            Config.VEXORA_LLM_API_KEY = "invalid-test-key"
+            result = call_llm("Analyze this document")
+            self.assertIsNone(result)
+            err = get_last_llm_error() or ""
+            self.assertIn("401", err)
+        finally:
+            Config.ENABLE_LLM = orig_enabled
+            Config.VEXORA_LLM_API_KEY = orig_key
+
+    @patch('backend.llm.requests.post')
+    def test_08_call_llm_http_429_rate_limit_handling(self, mock_post):
+        """call_llm handles HTTP 429 Rate Limit cleanly without throwing exceptions."""
+        from backend.config import Config
+        from backend.llm import call_llm, get_last_llm_error
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.text = '{"error": {"message": "Resource has been exhausted (e.g. check quota)."}}'
+        mock_post.return_value = mock_resp
+
+        orig_enabled = getattr(Config, 'ENABLE_LLM', False)
+        orig_key = getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        try:
+            Config.ENABLE_LLM = True
+            Config.VEXORA_LLM_API_KEY = "valid-test-key"
+            result = call_llm("Analyze this document")
+            self.assertIsNone(result)
+            err = get_last_llm_error() or ""
+            self.assertIn("429", err)
+        finally:
+            Config.ENABLE_LLM = orig_enabled
+            Config.VEXORA_LLM_API_KEY = orig_key
+
+    @patch('backend.llm.requests.post')
+    def test_09_call_llm_timeout_handling(self, mock_post):
+        """call_llm catches requests.exceptions.Timeout and returns None gracefully."""
+        import requests
+        from backend.config import Config
+        from backend.llm import call_llm
+
+        mock_post.side_effect = requests.exceptions.Timeout("Request timed out after 30s")
+
+        orig_enabled = getattr(Config, 'ENABLE_LLM', False)
+        orig_key = getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        try:
+            Config.ENABLE_LLM = True
+            Config.VEXORA_LLM_API_KEY = "valid-test-key"
+            result = call_llm("Analyze this document")
+            self.assertIsNone(result)
+        finally:
+            Config.ENABLE_LLM = orig_enabled
+            Config.VEXORA_LLM_API_KEY = orig_key
+
+    def test_10_ai_status_telemetry_reporting(self):
+        """get_ai_status accurately reports provider configuration without leaking keys."""
+        from backend.config import Config
+        from backend.llm import get_ai_status
+
+        orig_enabled = getattr(Config, 'ENABLE_LLM', False)
+        orig_key = getattr(Config, 'VEXORA_LLM_API_KEY', '')
+        try:
+            Config.ENABLE_LLM = True
+            Config.VEXORA_LLM_API_KEY = "secret-super-key-99999"
+            status = get_ai_status()
+
+            self.assertIn('enabled', status)
+            self.assertTrue(status['enabled'])
+            self.assertIn('provider', status)
+            self.assertIn('model', status)
+            self.assertTrue(status['has_api_key'])
+            # Verify key itself is NEVER leaked in telemetry
+            status_str = json.dumps(status)
+            self.assertNotIn("secret-super-key-99999", status_str)
+        finally:
+            Config.ENABLE_LLM = orig_enabled
+            Config.VEXORA_LLM_API_KEY = orig_key
+
 
 if __name__ == '__main__':
     unittest.main()

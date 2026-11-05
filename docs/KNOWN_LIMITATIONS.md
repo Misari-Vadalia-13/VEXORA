@@ -38,6 +38,11 @@ VEXORA is an investigative assistance platform. Its algorithmic findings and AI 
 
 ### 2.6 Persistence & Scaling Limits
 - **Single-Node SQLite Architecture:** VEXORA utilizes a local SQLite database (`backend/vexora.db`) for zero-dependency portability and turnkey hackathon evaluation. While SQLite supports thousands of queries per second, concurrent multi-user write operations queue behind SQLite's file-level lock. For large-scale enterprise deployments, migration to PostgreSQL or Google Cloud Spanner is recommended.
+- **Audit Hash-Chaining Concurrency:** Hash-chaining relies on sequential block generation (`prev_hash`). In concurrent write bursts, synchronization locks serialize append operations to guarantee tamper-proof linear chain integrity.
+
+### 2.7 Optional AI Subsystem Operational Limits
+- **API Key & Quota Dependencies:** AI-assisted explanation requires external provider credentials (`VEXORA_LLM_API_KEY`). If unconfigured or exhausted (HTTP 429), VEXORA falls back 100% to deterministic summaries without degradation of core forensic capabilities.
+- **Strict Zero-Authority Mandate:** Large Language Models are explicitly prevented from asserting findings or determining fraud. All AI outputs carry mandatory investigator disclaimers and require quote verification against source document text.
 
 ---
 
@@ -50,5 +55,5 @@ VEXORA is an investigative assistance platform. Its algorithmic findings and AI 
 | **Rotated Scans** | OCR text scrambled | Automated OpenCV deskewing via `minAreaRect` baseline alignment. |
 | **Prompt Injection Attacks** | Malicious instructions in documents | Encapsulation in `<untrusted_document_content>` XML tags and heuristic neutralization. |
 | **Storage Corruption** | Evidence altered on disk | Real-time cryptographic SHA-256 integrity verification (`GET /api/documents/<id>/integrity`). |
+| **Audit Log Tampering** | Evidence altered in database | Linear SHA-256 hash chaining (`verify_audit_trail_integrity()`) detecting row edits/deletions. |
 | **Multi-User Data Exposure** | Analyst A sees Analyst B's cases | Cascading IDOR security validation across all case, document, and finding endpoints. |
-

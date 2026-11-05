@@ -227,7 +227,14 @@ class TestAuthAndOwnershipSecurity(unittest.TestCase):
         """Endpoints that previously leaked data without session now return 401."""
         client = self.app.test_client()
         sensitive_endpoints = [
+            ('/api/stats', 'GET'),
+            ('/api/cases', 'POST'),
             ('/api/documents', 'GET'),
+            ('/api/evidence/test.png', 'GET'),
+            ('/api/documents/DOC-ALICE-001/extract', 'POST'),
+            ('/api/documents/DOC-ALICE-001/extracted', 'GET'),
+            ('/api/documents/DOC-ALICE-001/analyze', 'POST'),
+            ('/api/documents/DOC-ALICE-001/findings', 'GET'),
             ('/api/findings', 'GET'),
             ('/api/audit-logs', 'GET'),
             ('/api/reports', 'GET'),
@@ -235,6 +242,11 @@ class TestAuthAndOwnershipSecurity(unittest.TestCase):
             ('/api/evidence-graph', 'GET'),
             ('/api/demo/add', 'POST'),
             ('/api/demo/reset', 'POST'),
+            ('/api/system/ai-test', 'POST'),
+            ('/api/documents/DOC-ALICE-001/ai-insights', 'GET'),
+            ('/api/documents/DOC-ALICE-001/ai-extract', 'POST'),
+            ('/api/findings/FIND-ALICE-001/explain', 'POST'),
+            ('/api/cases/CAS-ALICE-001/ai-crosscheck', 'POST'),
         ]
         for url, method in sensitive_endpoints:
             if method == 'GET':
@@ -341,6 +353,99 @@ class TestAuthAndOwnershipSecurity(unittest.TestCase):
         offline_client = offline_app.test_client()
         res = offline_client.get('/api/cases')
         self.assertEqual(res.status_code, 200)
+
+    def test_16_csrf_protection_enforcement(self):
+        """When CSRF protection is active, state-changing requests require valid CSRF token."""
+        csrf_app = create_app({
+            'TESTING': True,
+            'DATABASE': str(self.db_path),
+            'VEXORA_REQUIRE_AUTH': True,
+            'VEXORA_ENFORCE_CSRF': True,
+            'SECRET_KEY': 'csrf-test-key-2026'
+        })
+        client = csrf_app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = 101
+            sess['username'] = 'analyst_alice'
+            sess['role'] = 'Forensic Analyst'
+            sess['csrf_token'] = 'valid-csrf-token-12345'
+
+        # POST without CSRF token must fail with 403
+        res_no_csrf = client.post('/api/cases', json={'title': 'Unauthorized Case', 'priority': 'High'})
+        self.assertEqual(res_no_csrf.status_code, 403)
+        self.assertIn('CSRF', res_no_csrf.get_json()['error'])
+
+        # POST with wrong CSRF token must fail with 403
+        res_bad_csrf = client.post(
+            '/api/cases',
+            headers={'X-CSRF-Token': 'wrong-token'},
+            json={'title': 'Unauthorized Case', 'priority': 'High'}
+        )
+        self.assertEqual(res_bad_csrf.status_code, 403)
+
+        # POST with valid CSRF token passes the CSRF barrier (may pass or return validation result)
+        res_valid_csrf = client.post(
+            '/api/cases',
+            headers={'X-CSRF-Token': 'valid-csrf-token-12345'},
+            json={'title': 'Alice Authorized Case', 'case_type': 'Financial Fraud', 'description': 'Testing valid CSRF token submission', 'priority': 'Medium'}
+        )
+        self.assertEqual(res_valid_csrf.status_code, 201)
+
+    def test_17_disguised_file_upload_blocked(self):
+        """Uploaded files with executable headers disguised as images are rejected."""
+        import io
+        from backend.uploader import process_single_upload
+        fake_storage = type('MockFileStorage', (), {
+            'filename': 'malicious.png',
+            'read': lambda self, *args: bytes([77, 90, 144, 0, 3, 0, 0, 0]) if not args or args[0] != 8 else bytes([77, 90, 144, 0, 3, 0, 0, 0]),
+            'seek': lambda self, pos: None,
+            'tell': lambda self: 8,
+            'save': lambda self, dest: None
+        })()
+        from backend.models import ValidationError
+        with self.assertRaises((ValueError, ValidationError)) as ctx:
+            process_single_upload(fake_storage, self.upload_dir)
+        self.assertIn("signature", str(ctx.exception).lower())
+
+    def test_18_idor_on_extracted_and_ai_endpoints(self):
+        """Analyst Bob cannot extract, inspect extraction, or run AI reasoning on Alice's document/case."""
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = 102
+            sess['username'] = 'analyst_bob'
+            sess['role'] = 'Forensic Analyst'
+
+        # Bob cannot fetch Alice's extracted document
+        res_ext = client.get('/api/documents/DOC-ALICE-001/extracted')
+        self.assertEqual(res_ext.status_code, 403)
+
+        # Bob cannot trigger extraction on Alice's document
+        res_trig_ext = client.post('/api/documents/DOC-ALICE-001/extract')
+        self.assertEqual(res_trig_ext.status_code, 403)
+
+        # Bob cannot trigger analysis on Alice's document
+        res_ana = client.post('/api/documents/DOC-ALICE-001/analyze')
+        self.assertEqual(res_ana.status_code, 403)
+
+        # Bob cannot fetch findings for Alice's document
+        res_find = client.get('/api/documents/DOC-ALICE-001/findings')
+        self.assertEqual(res_find.status_code, 403)
+
+        # Bob cannot crosscheck Alice's case
+        res_cross = client.post('/api/cases/CAS-ALICE-001/ai-crosscheck')
+        self.assertEqual(res_cross.status_code, 403)
+
+    def test_19_evidence_path_traversal_blocked(self):
+        """Path traversal attempts on /api/evidence/<path> return 404/safe error."""
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = 101
+            sess['username'] = 'analyst_alice'
+            sess['role'] = 'Forensic Analyst'
+
+        # Attacker attempts to traverse out of evidence folder
+        res = client.get('/api/evidence/../../etc/passwd')
+        self.assertIn(res.status_code, (404, 400))
 
 
 if __name__ == '__main__':

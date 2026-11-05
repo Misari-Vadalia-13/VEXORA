@@ -18,6 +18,7 @@ import csv
 import io
 import json
 import hashlib
+import secrets
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, send_from_directory, send_file, session, Response
@@ -76,6 +77,12 @@ def create_app(config_class=Config):
     if isinstance(config_class, dict):
         app.config.from_object(Config)
         app.config.update(config_class)
+        if app.config.get('TESTING') and 'VEXORA_REQUIRE_AUTH' not in config_class:
+            raw_auth = os.environ.get('VEXORA_REQUIRE_AUTH')
+            if raw_auth is not None:
+                app.config['VEXORA_REQUIRE_AUTH'] = raw_auth.lower() in ('true', '1', 'yes')
+            else:
+                app.config['VEXORA_REQUIRE_AUTH'] = False
     else:
         app.config.from_object(config_class)
 
@@ -131,6 +138,37 @@ def create_app(config_class=Config):
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
+
+    # ==========================================
+    # CSRF Protection Hook & Token Endpoint
+    # ==========================================
+    @app.before_request
+    def validate_csrf():
+        if not app.config.get('VEXORA_ENFORCE_CSRF', False):
+            return
+        if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+            return
+        # Skip CSRF check for public auth endpoints
+        if request.path in ('/api/auth/login', '/api/auth/register', '/api/auth/google'):
+            return
+        # If no user session, let @login_required return 401 instead of 403
+        if not session.get('username') and not session.get('user_id'):
+            return
+        expected_token = session.get('csrf_token')
+        if not expected_token:
+            return jsonify({'success': False, 'error': 'CSRF token missing from session.'}), 403
+        client_token = request.headers.get('X-CSRF-Token') or request.headers.get('X-CSRFToken')
+        if not client_token and request.is_json:
+            client_token = (request.get_json(silent=True) or {}).get('csrf_token')
+        if not client_token or not secrets.compare_digest(str(client_token), str(expected_token)):
+            return jsonify({'success': False, 'error': 'CSRF token missing or invalid.'}), 403
+
+    @app.route('/api/auth/csrf-token', methods=['GET'])
+    def api_get_csrf_token():
+        """Provides active session CSRF token for client-side state-changing requests."""
+        if 'csrf_token' not in session:
+            session['csrf_token'] = secrets.token_hex(32)
+        return jsonify({'success': True, 'csrf_token': session['csrf_token']}), 200
 
     # ==========================================
     # Frontend Static & HTML Routes
@@ -202,6 +240,7 @@ def create_app(config_class=Config):
         }), 200 if db_alive else 503
 
     @app.route('/api/stats', methods=['GET'])
+    @login_required
     def api_stats():
         """Returns live system statistics for dashboard telemetry."""
         try:
@@ -229,6 +268,7 @@ def create_app(config_class=Config):
         }), 200
 
     @app.route('/api/cases', methods=['POST'])
+    @login_required
     def api_create_case():
         """Creates a new investigation case with strict input validation."""
         payload = request.get_json(silent=True)
@@ -465,14 +505,16 @@ def create_app(config_class=Config):
         return send_from_directory(upload_folder, disk_filename, as_attachment=False, download_name=doc['filename'])
 
     @app.route('/api/evidence/<path:filename>', methods=['GET'])
+    @login_required
     def api_get_evidence_file(filename):
-        """Streams generated forensic visualization files (e.g. ELA difference maps)."""
+        """Streams generated forensic visualization files (e.g. ELA difference maps) with traversal protection."""
         upload_folder = Path(app.config.get('UPLOAD_FOLDER', Config.UPLOAD_FOLDER))
         evidence_dir = upload_folder / 'evidence'
         if not evidence_dir.exists():
             evidence_dir.mkdir(parents=True, exist_ok=True)
-        target = evidence_dir / filename
-        if not target.exists():
+        # Defense-in-depth against directory traversal
+        target = (evidence_dir / filename).resolve()
+        if not str(target).startswith(str(evidence_dir.resolve())) or not target.exists():
             return jsonify({'success': False, 'error': f"Evidence file '{filename}' not found."}), 404
         return send_from_directory(evidence_dir, filename)
 
@@ -651,14 +693,17 @@ def create_app(config_class=Config):
         return jsonify({'success': True, 'message': f"Document '{doc_id}' deleted successfully."}), 200
 
     @app.route('/api/documents/<doc_id>/extract', methods=['POST'])
+    @login_required
     def api_extract_document(doc_id):
         """
-        Executes text, layout block, metadata, and entity extraction on the document.
+        Executes text, layout block, metadata, and entity extraction on the document (IDOR protected).
         Uses PyMuPDF for PDFs and Pillow/Tesseract for images.
         """
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
 
         upload_folder = Path(app.config.get('UPLOAD_FOLDER'))
         disk_filename = Path(doc['file_path']).name
@@ -668,7 +713,7 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Physical file '{disk_filename}' not found on disk."}), 404
 
         try:
-            user = session.get('username', 'alex.turner')
+            user = username or 'alex.turner'
             extracted_data = extract_document_content(target_file)
             save_document_extraction(doc_id, extracted_data, user=user)
 
@@ -684,26 +729,35 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Extraction error: {str(e)}"}), 500
 
     @app.route('/api/documents/<doc_id>/extracted', methods=['GET'])
+    @login_required
     def api_get_extracted_document(doc_id):
-        """Retrieves previously extracted forensic layout and entities for a document."""
+        """Retrieves previously extracted forensic layout and entities for a document (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+
         data = get_document_extraction(doc_id)
         if not data:
             return jsonify({'success': False, 'error': f"No extraction data found for document '{doc_id}'. Please trigger extraction first."}), 404
         return jsonify({'success': True, 'document_id': doc_id, 'data': data}), 200
 
     @app.route('/api/documents/<doc_id>/analyze', methods=['POST'])
+    @login_required
     def api_analyze_document(doc_id):
         """
-        Executes Phase 6 forensic & contextual intelligence analysis:
+        Executes Phase 6 forensic & contextual intelligence analysis (IDOR protected):
         visual typography, font consistency, text overlaps, boundary checks,
         missing fields, conflicting identifiers, chronological and monetary consistency.
         """
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
 
         try:
-            user = session.get('username', 'alex.turner')
+            user = username or 'alex.turner'
             result = analyze_document(doc_id, user=user)
             if not result.get('success'):
                 return jsonify(result), 400
@@ -713,11 +767,14 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Forensic analysis failed: {str(e)}"}), 500
 
     @app.route('/api/documents/<doc_id>/findings', methods=['GET'])
+    @login_required
     def api_get_document_findings(doc_id):
-        """Retrieves all forensic findings and anomalies for a specific document."""
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        """Retrieves all forensic findings and anomalies for a specific document (IDOR protected)."""
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
 
         findings = get_findings_by_document(doc_id)
         return jsonify({
@@ -1308,9 +1365,14 @@ def create_app(config_class=Config):
         if not user or not check_password_hash(user['password_hash'], password):
             return jsonify({'success': False, 'error': 'Invalid username or password.'}), 401
 
+        # Session Fixation Defense & Expiration Configuration
+        session.clear()
+        session.permanent = True
         session['user_id'] = user['id']
         session['username'] = user['username']
         session['role'] = user['role']
+        csrf_tok = secrets.token_hex(32)
+        session['csrf_token'] = csrf_tok
 
         log_audit("USER_LOGIN", "auth", str(user['id']), f"Investigator '{user['username']}' authenticated successfully.", user['username'])
 
@@ -1322,7 +1384,8 @@ def create_app(config_class=Config):
                 'username': user['username'],
                 'email': user['email'],
                 'role': user['role'],
-                'badge_number': user['badge_number']
+                'badge_number': user['badge_number'],
+                'csrf_token': csrf_tok
             }
         }), 200
 
@@ -1553,12 +1616,18 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to reset demo data: {str(e)}"}), 500
 
     @app.route('/api/system/ai-test', methods=['POST'])
+    @login_required
     def api_system_ai_test():
         """
         Phase I: Tests live connectivity to configured LLM provider with a minimal prompt.
-        Returns ok/failed status, provider, model, latency_ms, and sanitized error if any.
+        Restricted to administrative investigators.
         Never leaks API keys or secrets.
         """
+        user_id, username, role = _get_auth_context()
+        admin_roles = {'admin', 'system administrator', 'lead investigator', 'supervisor', 'senior forensic specialist'}
+        if app.config.get('VEXORA_REQUIRE_AUTH', False) and (not role or role.strip().lower() not in admin_roles):
+            return jsonify({'success': False, 'error': 'Administrative privileges required to run system AI tests.'}), 403
+
         try:
             from backend.llm import test_ai_connection
             result = test_ai_connection()
@@ -1576,13 +1645,16 @@ def create_app(config_class=Config):
             }), 200
 
     @app.route('/api/documents/<doc_id>/ai-insights', methods=['GET'])
+    @login_required
     def api_get_document_ai_insights(doc_id):
         """
-        Phase I: Retrieves stored AI insights (e.g. structured field extractions) for a document.
+        Phase I: Retrieves stored AI insights (e.g. structured field extractions) for a document (IDOR protected).
         """
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
 
         try:
             from backend.models import get_ai_insights_by_document
@@ -1598,14 +1670,17 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"Failed to retrieve AI insights: {str(e)}"}), 500
 
     @app.route('/api/documents/<doc_id>/ai-extract', methods=['POST'])
+    @login_required
     def api_document_ai_extract(doc_id):
         """
-        Executes LLM-based structured field extraction with anti-hallucination quote verification.
+        Executes LLM-based structured field extraction with anti-hallucination quote verification (IDOR protected).
         Saves verified fields in ai_insights table. Drops any ungrounded fields.
         """
-        doc = get_document_by_id(doc_id)
-        if not doc:
-            return jsonify({'success': False, 'error': f"Document '{doc_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_document_access(doc_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        doc = res
 
         try:
             from backend.llm import extract_fields_llm
@@ -1621,7 +1696,7 @@ def create_app(config_class=Config):
             if not text:
                 return jsonify({'success': False, 'error': 'No extractable text found in document.'}), 400
 
-            user = session.get('username', 'Lead Investigator')
+            user = username or 'Lead Investigator'
             result = extract_fields_llm(text, doc_type=doc.get('category', 'Document'), document_id=doc_id, user=user)
             if result is None:
                 return jsonify({
@@ -1636,14 +1711,17 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"AI extraction failed: {str(e)}"}), 500
 
     @app.route('/api/findings/<finding_id>/explain', methods=['POST'])
+    @login_required
     def api_explain_finding(finding_id):
         """
-        Generates a 2-4 sentence plain-language explanation of why this finding warrants review,
+        Generates a 2-4 sentence plain-language explanation of why this finding warrants review (IDOR protected),
         identifying plausible innocent alternative hypotheses and next verification steps.
         """
-        finding = get_finding_by_id(finding_id)
-        if not finding:
-            return jsonify({'success': False, 'error': f"Finding '{finding_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_finding_access(finding_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        finding = res
 
         try:
             nearby_text = ""
@@ -1654,7 +1732,7 @@ def create_app(config_class=Config):
                     nearby_text = doc.get('extracted_text') or ""
 
             from backend.llm import explain_finding
-            user = session.get('username', 'Lead Investigator')
+            user = username or 'Lead Investigator'
             result = explain_finding(finding, nearby_text=nearby_text, document_id=doc_id, user=user)
             if result is None:
                 return jsonify({
@@ -1670,14 +1748,17 @@ def create_app(config_class=Config):
             return jsonify({'success': False, 'error': f"AI explanation failed: {str(e)}"}), 500
 
     @app.route('/api/cases/<case_id>/ai-crosscheck', methods=['POST'])
+    @login_required
     def api_case_ai_crosscheck(case_id):
         """
         Executes multi-document contextual cross-examination to identify logical,
-        chronological, and arithmetic inconsistencies across case records.
+        chronological, and arithmetic inconsistencies across case records (IDOR protected).
         """
-        case = get_case_by_id(case_id)
-        if not case:
-            return jsonify({'success': False, 'error': f"Case '{case_id}' not found."}), 404
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        case = res
 
         try:
             docs = get_all_documents(case_id=case_id)

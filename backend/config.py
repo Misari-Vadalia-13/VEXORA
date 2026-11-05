@@ -79,8 +79,11 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() in ('true', '1', 'yes')
+    PERMANENT_SESSION_LIFETIME = 28800  # 8 hours session duration
     VEXORA_ALLOW_DEMO_RESET = os.environ.get('VEXORA_ALLOW_DEMO_RESET', 'false').lower() in ('true', '1', 'yes')
-    VEXORA_REQUIRE_AUTH = os.environ.get('VEXORA_REQUIRE_AUTH', 'false').lower() in ('true', '1', 'yes')
+    # Secure by default: authentication required unless explicitly opted out for offline demo
+    VEXORA_REQUIRE_AUTH = os.environ.get('VEXORA_REQUIRE_AUTH', 'true').lower() in ('true', '1', 'yes')
+    VEXORA_ENFORCE_CSRF = os.environ.get('VEXORA_ENFORCE_CSRF', 'false').lower() in ('true', '1', 'yes') or (os.environ.get('FLASK_ENV') == 'production')
 
     # Feature Flags (V2 Additive Extensions)
     ENABLE_EVIDENCE_OVERLAY = os.environ.get('ENABLE_EVIDENCE_OVERLAY', 'false').lower() in ('true', '1', 'yes')
@@ -99,3 +102,5 @@ class TestConfig(Config):
     """Configuration used specifically for automated test suites."""
     TESTING = True
     DATABASE = str(TEST_DATABASE_PATH)  # Isolated SQLite file for repeatable tests
+    VEXORA_REQUIRE_AUTH = False  # Allows unauthenticated test scenarios; security tests explicitly override this
+    VEXORA_ENFORCE_CSRF = False

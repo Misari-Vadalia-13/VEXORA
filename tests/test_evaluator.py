@@ -91,65 +91,95 @@ class VexoraBenchmarkEvaluatorTestCase(unittest.TestCase):
         self.assertIn("True Positive (TP) = 7", rendered)
 
     def test_benchmark_export_generation(self):
-        """Verifies export_benchmark_reports generates valid JSON and CSV reports."""
-        mock_single_doc = {
-            'doc_metrics': compute_binary_metrics(tp=7, tn=10, fp=0, fn=3),
-            'total_expected_rule_docs': 10,
-            'exact_rule_hits': 3,
-            'exact_rule_pct': 30.0,
-            'rule_counts': {'RULE-CTX-003': 2, 'PDF-003': 2},
-            'doc_results': [
-                {
-                    'filename': 'test_tampered.pdf',
-                    'is_tampered': 1,
-                    'detected_anomaly': True,
-                    'expected_rules': ['RULE-CTX-003'],
-                    'fired_rules': ['RULE-CTX-003'],
-                    'matched_rules': ['RULE-CTX-003'],
-                    'doc_verdict': 'TP (HIT)',
-                    'rule_match_verdict': 'HIT (RULE-CTX-003)',
-                    'processing_error': None
-                }
-            ]
-        }
-        mock_case_data = {
-            'case_metrics': compute_binary_metrics(tp=2, tn=1, fp=0, fn=0),
-            'case_results': [
-                {
-                    'case_id': 'case_01',
-                    'title': 'Test Case',
-                    'is_tampered': 1,
-                    'discrepancies_detected': ['Primary Monetary Value'],
-                    'verdict': 'TP (HIT)'
-                }
-            ]
-        }
+        """Verifies export_benchmark_reports generates all 5 unified artifacts without contaminating reports/."""
+        import tempfile
+        import shutil
 
-        export_benchmark_reports(mock_single_doc, mock_case_data)
+        temp_dir = Path(tempfile.mkdtemp(prefix="vexora_eval_test_"))
+        try:
+            mock_single_doc = {
+                'doc_metrics': compute_binary_metrics(tp=7, tn=10, fp=0, fn=3),
+                'total_expected_rule_docs': 10,
+                'exact_rule_hits': 3,
+                'exact_rule_pct': 30.0,
+                'rule_counts': {'RULE-CTX-003': 2, 'PDF-003': 2},
+                'doc_results': [
+                    {
+                        'filename': 'test_tampered.pdf',
+                        'is_tampered': 1,
+                        'detected_anomaly': True,
+                        'expected_rules': ['RULE-CTX-003'],
+                        'fired_rules': ['RULE-CTX-003'],
+                        'matched_rules': ['RULE-CTX-003'],
+                        'doc_verdict': 'TP (HIT)',
+                        'rule_match_verdict': 'HIT (RULE-CTX-003)',
+                        'processing_error': None
+                    }
+                ]
+            }
+            mock_case_data = {
+                'case_metrics': compute_binary_metrics(tp=2, tn=1, fp=0, fn=0),
+                'case_results': [
+                    {
+                        'case_id': 'case_01',
+                        'title': 'Test Case',
+                        'is_tampered': 1,
+                        'discrepancies_detected': ['Primary Monetary Value'],
+                        'verdict': 'TP (HIT)'
+                    }
+                ]
+            }
 
-        reports_dir = Path("reports")
-        json_file = reports_dir / 'benchmark_results.json'
-        csv_file = reports_dir / 'benchmark_results.csv'
+            # Export strictly to temporary isolated directory
+            export_benchmark_reports(mock_single_doc, mock_case_data, output_dir=temp_dir)
 
-        self.assertTrue(json_file.exists())
-        self.assertTrue(csv_file.exists())
+            json_file = temp_dir / 'benchmark_results.json'
+            csv_file = temp_dir / 'benchmark_results.csv'
+            md_file = temp_dir / 'benchmark_report.md'
+            cm_file = temp_dir / 'confusion_matrix.json'
+            summary_file = temp_dir / 'benchmark_summary.txt'
 
-        # Verify JSON structure
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            self.assertEqual(data['benchmark_suite'], 'VEXORA Forensic Benchmark Suite')
-            self.assertEqual(data['document_level_metrics']['accuracy_pct'], 85.0)
-            self.assertEqual(data['case_level_metrics']['accuracy_pct'], 100.0)
+            self.assertTrue(json_file.exists(), "benchmark_results.json missing from export")
+            self.assertTrue(csv_file.exists(), "benchmark_results.csv missing from export")
+            self.assertTrue(md_file.exists(), "benchmark_report.md missing from export")
+            self.assertTrue(cm_file.exists(), "confusion_matrix.json missing from export")
+            self.assertTrue(summary_file.exists(), "benchmark_summary.txt missing from export")
 
-        # Verify CSV content
-        with open(csv_file, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            rows = list(reader)
-            self.assertGreaterEqual(len(rows), 2)
-            header = rows[0]
-            self.assertIn('filename', header)
-            self.assertIn('matched_rules', header)
-            self.assertIn('doc_verdict', header)
+            # 1. Verify JSON structure
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.assertEqual(data['benchmark_suite'], 'VEXORA Forensic Benchmark Suite')
+                self.assertEqual(data['document_level_metrics']['accuracy_pct'], 85.0)
+                self.assertEqual(data['case_level_metrics']['accuracy_pct'], 100.0)
+
+            # 2. Verify CSV content
+            with open(csv_file, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+                self.assertGreaterEqual(len(rows), 2)
+                header = rows[0]
+                self.assertIn('filename', header)
+                self.assertIn('matched_rules', header)
+                self.assertIn('doc_verdict', header)
+
+            # 3. Verify Dedicated Confusion Matrix JSON
+            with open(cm_file, 'r', encoding='utf-8') as f:
+                cm_data = json.load(f)
+                self.assertIn('document_level', cm_data)
+                self.assertIn('case_level', cm_data)
+                self.assertEqual(cm_data['document_level']['matrix'], [[10, 0], [3, 7]])
+                self.assertEqual(cm_data['document_level']['counts']['true_positives'], 7)
+
+            # 4. Verify Summary and Markdown
+            md_text = md_file.read_text(encoding='utf-8')
+            self.assertIn("VEXORA Forensic Intelligence System", md_text)
+            self.assertIn("Confusion Matrix", md_text)
+
+            sum_text = summary_file.read_text(encoding='utf-8')
+            self.assertIn("BENCHMARK EVALUATION SUMMARY", sum_text)
+            self.assertIn("Accuracy", sum_text)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == '__main__':

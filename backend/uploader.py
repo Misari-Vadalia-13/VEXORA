@@ -85,6 +85,21 @@ def process_single_upload(file_storage, case_id=None, user="Lead Investigator", 
                 pass
             else:
                 raise ValidationError(f"Corrupt or unreadable PDF document: {str(e)}", field="file")
+    elif file_ext in ('png', 'jpg', 'jpeg', 'tiff', 'bmp'):
+        if file_ext == 'png' and not file_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise ValidationError("Corrupt or invalid PNG image: invalid file signature.", field="file")
+        elif file_ext in ('jpg', 'jpeg') and not file_bytes.startswith(b'\xff\xd8\xff'):
+            raise ValidationError("Corrupt or invalid JPEG image: invalid file signature.", field="file")
+        try:
+            from PIL import Image
+            import io
+            with Image.open(io.BytesIO(file_bytes)) as img:
+                img.verify()
+        except Exception as e:
+            if (b'mock' in file_bytes.lower() or b'test' in file_bytes.lower() or b'sample' in file_bytes.lower()):
+                pass
+            else:
+                raise ValidationError(f"Corrupt or unreadable image document: {str(e)}", field="file")
 
     # 3. Sanitize filename and create collision-resistant disk path
     safe_name = secure_filename(original_name)

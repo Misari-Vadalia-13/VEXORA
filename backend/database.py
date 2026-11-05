@@ -118,6 +118,15 @@ def init_db(db_path=None):
         if 'confidence' not in e_cols and len(e_cols) > 0:
             cursor.execute("ALTER TABLE entities ADD COLUMN confidence TEXT DEFAULT NULL")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_entities_document ON entities(document_id)")
+
+        # Cryptographic Audit Chain Migration
+        cursor.execute("PRAGMA table_info(audit_logs)")
+        a_cols = [row['name'] for row in cursor.fetchall()]
+        if 'prev_hash' not in a_cols and len(a_cols) > 0:
+            cursor.execute("ALTER TABLE audit_logs ADD COLUMN prev_hash TEXT")
+        if 'event_hash' not in a_cols and len(a_cols) > 0:
+            cursor.execute("ALTER TABLE audit_logs ADD COLUMN event_hash TEXT")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_event_hash ON audit_logs(event_hash)")
         conn.commit()
     finally:
         conn.close()

@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     entity_id TEXT,
     details TEXT,
     user TEXT DEFAULT 'System',
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    prev_hash TEXT,
+    event_hash TEXT
 );
 
 -- 6. Cross-Document Comparisons Table
