@@ -304,6 +304,26 @@ def create_app(config_class=Config):
         case = get_case_by_id(case_id)
         return jsonify({'success': True, 'data': case}), 200
 
+    @app.route('/api/cases/<case_id>/risk-score', methods=['GET'])
+    @login_required
+    def api_get_case_risk_score(case_id):
+        """
+        Calculates explainable, deterministic case risk score (0-100) with full mathematical
+        weight breakdown, contributing items, and mandatory disclaimer (IDOR protected).
+        """
+        user_id, username, role = _get_auth_context()
+        allowed, res, code = check_case_access(case_id, user_id=user_id, username=username, role=role)
+        if not allowed:
+            return jsonify({'success': False, 'error': res}), code
+        try:
+            from backend.risk_scoring import calculate_case_risk_score
+            risk_data = calculate_case_risk_score(case_id)
+            return jsonify({'success': True, 'data': risk_data}), 200
+        except ValueError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 404
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/cases/<case_id>', methods=['PUT'])
     @login_required
     def api_update_case(case_id):

@@ -621,9 +621,10 @@ def generate_case_dossier_data(case_id):
     crit_count = severity_counts.get('Critical', 0)
     high_count = severity_counts.get('High', 0)
     med_count = severity_counts.get('Medium', 0)
+    low_count = severity_counts.get('Low', 0)
     disc_count = len(cross_comparison.get('discrepancies', [])) if cross_comparison.get('success') else 0
 
-    raw_risk = (crit_count * 30) + (high_count * 20) + (med_count * 10) + (disc_count * 15)
+    raw_risk = (crit_count * 30) + (high_count * 20) + (med_count * 10) + (low_count * 5) + (disc_count * 25)
     risk_score = min(raw_risk, 100)
 
     if risk_score >= 70 or crit_count > 0:
@@ -1859,6 +1860,24 @@ def generate_dossier_html(case_id, output_path=None, user="Lead Investigator"):
             <div class="metric-card">
                 <div style="font-size:11px; color:#64748b; font-weight:700;">DISCREPANCIES</div>
                 <div class="metric-val" style="color:#ef4444;">{summary['discrepancies_count']}</div>
+            </div>
+        </div>
+
+        <!-- Explainable Risk Score Breakdown Card -->
+        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:12px 16px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <strong style="font-size:12px; color:#0f172a; text-transform:uppercase; letter-spacing:0.5px;">⚖️ Explainable Risk Scoring Breakdown</strong>
+                <span style="font-size:11px; background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-weight:700;">Triage priority, not a fraud verdict</span>
+            </div>
+            <div style="font-size:11px; color:#475569; font-family:monospace; margin-bottom:8px;">
+                Formula: min(100, (Critical × 30) + (High × 20) + (Medium × 10) + (Low × 5) + (Discrepancies × 25))
+            </div>
+            <div style="font-size:11.5px; color:#334155; line-height:1.6;">
+                • Critical Severity (×30): <strong>{summary['critical_findings']}</strong> hit(s) = {summary['critical_findings'] * 30} pts<br>
+                • High Severity (×20): <strong>{summary['high_findings']}</strong> hit(s) = {summary['high_findings'] * 20} pts<br>
+                • Medium Severity (×10): <strong>{summary['medium_findings']}</strong> hit(s) = {summary['medium_findings'] * 10} pts<br>
+                • Cross-Document Discrepancies (×25): <strong>{summary['discrepancies_count']}</strong> conflict(s) = {summary['discrepancies_count'] * 25} pts<br>
+                • Total Raw Score: <strong>{(summary['critical_findings'] * 30) + (summary['high_findings'] * 20) + (summary['medium_findings'] * 10) + (summary['discrepancies_count'] * 25)} pts</strong> → Normalized Capped Score: <strong>{summary['risk_score']} / 100</strong> ({summary['risk_level']})
             </div>
         </div>
         <p style="color:#334155; line-height:1.6;">{summary['narrative']}</p>

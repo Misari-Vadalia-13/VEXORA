@@ -1374,9 +1374,9 @@ window.refreshAll = async function refreshAll() {
                 <span class="case-metric-val" style="color:var(--status-verified);">${escapeHtml(c.type || 'General')}</span>
                 <span class="case-metric-lbl">Type</span>
               </div>
-              <div class="case-metric-item">
-                <span class="case-metric-val" style="color:var(--primary-accent);">${escapeHtml(status)}</span>
-                <span class="case-metric-lbl">Status</span>
+              <div class="case-metric-item" onclick="window.openCaseRiskBreakdown('${escapeHtml(c.id)}')" style="cursor:pointer;" title="Click to view explainable mathematical weight breakdown">
+                <span class="case-metric-val" style="color:var(--primary-accent); text-decoration:underline; font-size:0.9rem;">⚖️ Breakdown</span>
+                <span class="case-metric-lbl">Risk Score</span>
               </div>
             </div>
             <div class="case-card-footer">
@@ -2799,5 +2799,113 @@ window.runFullGuidedDemo = async function() {
     showToast('Guided demo encountered an issue. See console.', 'warning');
   } finally {
     if (btn) btn.disabled = false;
+  }
+};
+
+
+/**
+ * Opens Explainable Risk Score Breakdown Modal
+ * Exposes deterministic formula, mathematical weights, and contributing items.
+ */
+window.openCaseRiskBreakdown = async function(caseId) {
+  const apiBase = getApiBase();
+  showToast('Fetching explainable risk score breakdown...', 'info');
+  try {
+    const res = await fetch(`${apiBase}/cases/${caseId}/risk-score`);
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      showToast(`Failed to load risk score: ${json.error || 'Server error'}`, 'danger');
+      return;
+    }
+
+    const d = json.data;
+    let modal = document.getElementById('vexoraRiskBreakdownModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'vexoraRiskBreakdownModal';
+      modal.className = 'modal-overlay';
+      modal.style.zIndex = '9999';
+      document.body.appendChild(modal);
+    }
+
+    const rowsHtml = (d.breakdown || []).map(b => `
+      <tr>
+        <td style="padding:8px 12px; font-weight:600; color:var(--text-primary); border-bottom:1px solid var(--border-color);">
+          ${escapeHtml(b.category)}
+        </td>
+        <td style="padding:8px 12px; text-align:center; color:var(--text-muted); border-bottom:1px solid var(--border-color); font-family:monospace;">
+          ${b.weight_each} pts
+        </td>
+        <td style="padding:8px 12px; text-align:center; font-weight:700; color:var(--text-primary); border-bottom:1px solid var(--border-color);">
+          ${b.count}
+        </td>
+        <td style="padding:8px 12px; text-align:right; font-weight:800; color:var(--primary-accent); border-bottom:1px solid var(--border-color); font-family:monospace;">
+          ${b.subtotal} pts
+        </td>
+      </tr>
+    `).join('');
+
+    modal.innerHTML = `
+      <div class="modal-window" style="max-width: 620px; width:92%;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.5rem;">⚖️</span>
+            <div>
+              <h3 class="modal-title" style="margin:0; font-size:1.1rem;">Explainable Case Risk Score</h3>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Case: <strong>${escapeHtml(d.case_id)}</strong> (${escapeHtml(d.case_title || 'Inquiry')})</div>
+            </div>
+          </div>
+          <button class="modal-close-btn" onclick="document.getElementById('vexoraRiskBreakdownModal').classList.remove('active')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px;">
+          <!-- Score Banner -->
+          <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border:1px solid var(--border-color); border-radius:8px; padding:16px; margin-bottom:16px;">
+            <div>
+              <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Composite Risk Index</div>
+              <div style="font-size:2rem; font-weight:900; color:${d.risk_score >= 60 ? '#ef4444' : d.risk_score >= 35 ? '#f59e0b' : '#10b981'};">
+                ${d.risk_score} <span style="font-size:1rem; font-weight:600; color:var(--text-muted);">/ 100</span>
+              </div>
+              <div style="font-size:0.8rem; font-weight:700; color:var(--text-secondary);">${escapeHtml(d.risk_level)}</div>
+            </div>
+            <div style="text-align:right;">
+              <span class="pill-tag" style="background:#fef3c7; color:#92400e; font-weight:700; font-size:0.78rem; padding:4px 10px; border-radius:6px; border:1px solid #fde68a; display:inline-block;">
+                ⚠️ ${escapeHtml(d.disclaimer)}
+              </span>
+              <div style="font-size:0.72rem; color:var(--text-muted); margin-top:6px;">Raw Uncapped Points: ${d.raw_score} pts</div>
+            </div>
+          </div>
+
+          <!-- Formula Box -->
+          <div style="background:rgba(37,99,235,0.06); border:1px solid rgba(37,99,235,0.2); border-radius:6px; padding:10px 14px; margin-bottom:16px;">
+            <div style="font-size:0.72rem; font-weight:700; color:var(--primary-accent); text-transform:uppercase; margin-bottom:2px;">Deterministic Additive Formula</div>
+            <code style="font-size:0.8rem; color:var(--text-primary); word-break:break-all;">${escapeHtml(d.formula)}</code>
+          </div>
+
+          <!-- Weight Breakdown Table -->
+          <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:16px;">
+            <thead>
+              <tr style="background:var(--bg-surface);">
+                <th style="padding:8px 12px; text-align:left; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">Component</th>
+                <th style="padding:8px 12px; text-align:center; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">Weight</th>
+                <th style="padding:8px 12px; text-align:center; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">Hits</th>
+                <th style="padding:8px 12px; text-align:right; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+
+          <p style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5; margin:0; background:var(--bg-surface); padding:10px 14px; border-radius:6px; border-left:3px solid var(--primary-accent);">
+            ${escapeHtml(d.explanation)}
+          </p>
+        </div>
+      </div>
+    `;
+
+    modal.classList.add('active');
+  } catch (err) {
+    console.error('[Risk Breakdown Error]', err);
+    showToast('Failed to fetch risk score breakdown.', 'danger');
   }
 };

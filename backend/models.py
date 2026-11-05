@@ -292,13 +292,13 @@ def create_case(validated_data, custom_id=None, user="System"):
         (
             case_id,
             validated_data['title'],
-            validated_data['type'],
-            validated_data['priority'],
-            validated_data['status'],
-            validated_data['investigator'],
+            validated_data.get('type', 'General'),
+            validated_data.get('priority', 'Medium'),
+            validated_data.get('status', 'Active'),
+            validated_data.get('investigator', 'Lead Investigator'),
             owner_id,
             owner_username,
-            validated_data['description'],
+            validated_data.get('description', ''),
             now,
             now
         )
