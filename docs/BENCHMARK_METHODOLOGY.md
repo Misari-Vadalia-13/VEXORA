@@ -139,3 +139,4 @@ Processing errors (such as unreadable corrupted files or missing binaries) are *
 - An unparseable file is flagged as `PROCESSING_ERROR` and recorded in the audit trail.
 - It is never counted as an anomaly detection (which would artificially inflate True Positives).
 - Across the 20 benchmark test documents, VEXORA achieved **0 processing failures** (100% extraction pipeline yield).
+

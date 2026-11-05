@@ -102,3 +102,4 @@ Every AI-derived finding, explanation, and extraction is stamped with a mandator
 In the frontend UI:
 - AI-generated explanations are visually distinguished with purple/gold `[AI Assessed]` badges.
 - Disclaimers are displayed prominently alongside the innocent alternative hypothesis and recommended verification action.
+

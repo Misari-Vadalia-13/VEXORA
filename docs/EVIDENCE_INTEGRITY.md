@@ -76,3 +76,4 @@ Documents frequently undergo 90°, 180°, or 270° clockwise rotations during sc
 4. **Metadata Preservation:** The exact rotation angle is preserved in each page extraction dictionary (`'rotation': int(page.rotation)`), enabling dynamic frontend viewer canvases to render overlay highlights at the precise visual location.
 
 Tested and verified in `tests/test_integrity_custody.py` (`test_coordinate_transformation_under_rotation`).
+

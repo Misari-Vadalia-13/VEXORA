@@ -131,3 +131,4 @@ CASE-LEVEL CONTEXTUAL INTELLIGENCE (Multi-Document Cases, N=3)
 - [x] **Explainability with Safety:** AI explanations require grounded verbatim quotes and carry mandatory human-review disclaimers.
 - [x] **ISO/IEC 27037 Compliance:** SHA-256 evidence hashing and tamper-evident append-only SQLite hash chaining.
 - [x] **Clean Documentation:** All test counts, metrics, and architecture diagrams match the verified source code.
+

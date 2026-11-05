@@ -271,3 +271,4 @@ Database schema originally lacked hash pointer columns, and extraction dictionar
 | **Field Separation** | Downstream readers miss text | Preserve `full_text` backwards-compatible alias while establishing strict typed separation |
 
 **Audit Status:** APPROVED FOR IMMEDIATE EXECUTION.
+
